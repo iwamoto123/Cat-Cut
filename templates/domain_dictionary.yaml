@@ -1,0 +1,33 @@
+# Domain dictionary for transcript correction.
+#
+# This default file is intentionally generic. Add project-specific names,
+# product terms, industry vocabulary, and common STT mistakes per video.
+
+metadata:
+  name: default-japanese-general
+  description: Generic Japanese talk-video vocabulary
+
+context:
+  genre: 汎用トーク動画
+  likely_terms:
+    - テロップ
+    - カット
+    - 編集
+    - 動画
+    - 音声
+    - 収録
+    - 配信
+    - 視聴者
+    - コメント
+    - チャンネル
+
+proper_nouns: {}
+
+domain_terms:
+  キャットカット: Cat-Cut
+  キャット カット: Cat-Cut
+  テロップ作成: テロップ制作
+  宅浪: 自宅浪人（拓郎等に誤認識されやすい）
+
+common_misrecognitions:
+  難下: 難化

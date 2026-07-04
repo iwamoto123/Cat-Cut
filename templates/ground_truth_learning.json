@@ -1,0 +1,4219 @@
+{
+  "version": "1.0.0",
+  "updatedAt": "2026-05-15T03:31:21.280Z",
+  "examples": [
+    {
+      "id": "c29e5755-8660-41ad-b991-84143b8b792d",
+      "sourcePath": "/Users/takeshi/Downloads/gigafile-0823-11a542d0e51913dc67ba76b0a83361c5/宮本あきと 熊大志望の理由と受験期の話 テキスト.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260515_123001_宮本あきと_熊大志望の理由と受験期の話_書き出し_Vrew書き出し",
+      "stats": {
+        "entries": 251,
+        "firstStartMs": 0,
+        "lastEndMs": 565320,
+        "avgDurationMs": 2252,
+        "avgChars": 12
+      },
+      "notationRules": [],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 1000,
+          "chars": 10,
+          "lineCount": 2,
+          "text": "こんにちは\nこんにちは"
+        },
+        {
+          "startMs": 1000,
+          "endMs": 2000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "じゃあ自己紹介の方"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 4000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "よろしくお願いします"
+        },
+        {
+          "startMs": 4000,
+          "endMs": 7000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "はい 工学部材料・応用化学科2年生の"
+        },
+        {
+          "startMs": 7000,
+          "endMs": 8000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "宮本諒人です"
+        },
+        {
+          "startMs": 8000,
+          "endMs": 9000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "はい よろしくお願いします"
+        },
+        {
+          "startMs": 9000,
+          "endMs": 10000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "お願いします"
+        },
+        {
+          "startMs": 10000,
+          "endMs": 14000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "今熊大の2年で工学部の"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 17000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "化学系のコースってことですかね"
+        },
+        {
+          "startMs": 17000,
+          "endMs": 18000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "というところで"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 21000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "まずどうして熊大に行ったのか"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 22000,
+          "chars": 4,
+          "lineCount": 1,
+          "text": "というか"
+        },
+        {
+          "startMs": 22000,
+          "endMs": 24000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "なんで熊大のその学科に"
+        },
+        {
+          "startMs": 24000,
+          "endMs": 26000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "行くようにしたのかお聞きしても"
+        },
+        {
+          "startMs": 26000,
+          "endMs": 27000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "いいですか？"
+        },
+        {
+          "startMs": 27000,
+          "endMs": 31000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "はい 僕は本当は薬学部を目指していて"
+        },
+        {
+          "startMs": 31000,
+          "endMs": 34000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "３年生の途中あたりまでは"
+        },
+        {
+          "startMs": 34000,
+          "endMs": 36000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "ずっと薬学部を目指していたんですけど"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 38000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "どうしても成績が足りなくて"
+        },
+        {
+          "startMs": 38000,
+          "endMs": 42000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "学校の担任の先生に相談したときに"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "工学部のこの材料・応用化学科の"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 46000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "化学コースに行ったら"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "薬に携われるような"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 50000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "研究や仕事ができるって言われて"
+        },
+        {
+          "startMs": 50000,
+          "endMs": 53000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "それでこの学部にしようって思って"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 56000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "そのまま薬学部はさっき言った通り"
+        },
+        {
+          "startMs": 56000,
+          "endMs": 57000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "熊大目指してたんで"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 60000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "そのまま熊大の工学部の方に"
+        },
+        {
+          "startMs": 60000,
+          "endMs": 61000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "行きたいなってなりました"
+        },
+        {
+          "startMs": 61000,
+          "endMs": 65000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "その熊大の工学部の化学系のところから"
+        },
+        {
+          "startMs": 65000,
+          "endMs": 68000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "その薬学関係に行けるというか"
+        },
+        {
+          "startMs": 68000,
+          "endMs": 69000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "携われるんですか？"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 73000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "そうですね 僕もびっくりしました当時"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 74000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "めちゃくちゃすごいな"
+        },
+        {
+          "startMs": 74000,
+          "endMs": 76000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "薬にどうしても携わりたくて"
+        },
+        {
+          "startMs": 76000,
+          "endMs": 78000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "でもちょっと薬学足りない"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "成績的に足りないなと思って"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 82000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "そこを受けたというか"
+        },
+        {
+          "startMs": 82000,
+          "endMs": 84000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "そこに行ってるという感じで"
+        },
+        {
+          "startMs": 84000,
+          "endMs": 86000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "今化学系に行ってるから"
+        },
+        {
+          "startMs": 86000,
+          "endMs": 88000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "やっぱり化学三昧ですか？"
+        },
+        {
+          "startMs": 88000,
+          "endMs": 91000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "そうですね いろんな視点からの"
+        },
+        {
+          "startMs": 91000,
+          "endMs": 94000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "分析化学とか有機化学・無機化学"
+        },
+        {
+          "startMs": 94000,
+          "endMs": 95000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "という風に"
+        },
+        {
+          "startMs": 95000,
+          "endMs": 99000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "化学もいろいろ種類があってて"
+        },
+        {
+          "startMs": 99000,
+          "endMs": 101000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "ひたすら授業を受けてるっていうような"
+        },
+        {
+          "startMs": 101000,
+          "endMs": 102000,
+          "chars": 4,
+          "lineCount": 1,
+          "text": "感じです"
+        },
+        {
+          "startMs": 102000,
+          "endMs": 103000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "めちゃくちゃ化学について"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 107000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "頭に詰め込まれてるっていう状態で"
+        },
+        {
+          "startMs": 107000,
+          "endMs": 110000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "ちょっと聞いた情報なんですけど"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 111000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "最初全然熊大に受かるような"
+        },
+        {
+          "startMs": 111000,
+          "endMs": 112000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "成績じゃなかった"
+        },
+        {
+          "startMs": 112000,
+          "endMs": 116000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "っていう情報が届いてまして"
+        },
+        {
+          "startMs": 116000,
+          "endMs": 118000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "マーク何点上がったんですか？"
+        },
+        {
+          "startMs": 118000,
+          "endMs": 120000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "マークテストは最終的に"
+        },
+        {
+          "startMs": 120000,
+          "endMs": 123000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "350点ぐらい上がりましたね"
+        },
+        {
+          "startMs": 123000,
+          "endMs": 125000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "350点上がった人って"
+        },
+        {
+          "startMs": 125000,
+          "endMs": 127000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "もうほぼいないと思う"
+        },
+        {
+          "startMs": 127000,
+          "endMs": 129000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "何点から何点？"
+        },
+        {
+          "startMs": 129000,
+          "endMs": 134000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "340点から最後が690点でしたね"
+        },
+        {
+          "startMs": 134000,
+          "endMs": 138000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "じゃあ１年ぐらいで350点"
+        },
+        {
+          "startMs": 138000,
+          "endMs": 142000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "すごいね１年で350点"
+        },
+        {
+          "startMs": 142000,
+          "endMs": 143000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "１ヶ月あたり30点ぐらいずつ"
+        },
+        {
+          "startMs": 143000,
+          "endMs": 145000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "上げてるよねだいたい"
+        },
+        {
+          "startMs": 145000,
+          "endMs": 147000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "30点ずつぐらい毎月上げていって"
+        },
+        {
+          "startMs": 147000,
+          "endMs": 150000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "やっと350ぐらいだと思うから"
+        },
+        {
+          "startMs": 150000,
+          "endMs": 153000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "すごいなーって思うところなんですけど"
+        },
+        {
+          "startMs": 153000,
+          "endMs": 154000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "なんかそういったその"
+        },
+        {
+          "startMs": 154000,
+          "endMs": 157000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "受験期の話について聞きたいんですけど"
+        },
+        {
+          "startMs": 157000,
+          "endMs": 161000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "受験期の話伺ってもいいですか？"
+        },
+        {
+          "startMs": 161000,
+          "endMs": 165000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "はい 受験期は僕さっき言った通り"
+        },
+        {
+          "startMs": 165000,
+          "endMs": 167000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "めちゃくちゃ低くてそもそも"
+        },
+        {
+          "startMs": 167000,
+          "endMs": 170000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "340点台から500点に上げるまでは"
+        },
+        {
+          "startMs": 170000,
+          "endMs": 173000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "部活がだいたい6月ぐらいに終わって"
+        },
+        {
+          "startMs": 173000,
+          "endMs": 174000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "そっから本当に"
+        },
+        {
+          "startMs": 174000,
+          "endMs": 176000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "結構自分はスタートは切れた方かな"
+        },
+        {
+          "startMs": 176000,
+          "endMs": 177000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "と思ってて"
+        },
+        {
+          "startMs": 177000,
+          "endMs": 178000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "６月からバーンって"
+        },
+        {
+          "startMs": 178000,
+          "endMs": 181000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "いきなり勉強をやるようになって"
+        },
+        {
+          "startMs": 181000,
+          "endMs": 182000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "夏休み前までにはまぁ"
+        }
+      ],
+      "createdAt": "2026-05-15T03:31:21.280Z"
+    },
+    {
+      "id": "633e0b3e-5142-447b-9ad2-a2758f05c2f9",
+      "sourcePath": "/Users/takeshi/Downloads/gigafile-0823-11a542d0e51913dc67ba76b0a83361c5/ローカルメディ無料相談 メタ広告クリエイティブ.m4v_vrew テキスト.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260515_120445_ローカルメテ_ィ無料相談_メタ広告クリエイティフ_m4v_vrew_Vr",
+      "stats": {
+        "entries": 146,
+        "firstStartMs": 0,
+        "lastEndMs": 210800,
+        "avgDurationMs": 1444,
+        "avgChars": 11
+      },
+      "notationRules": [
+        {
+          "category": "notation",
+          "wrong": "ライン",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "Line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "url",
+          "correct": "URL"
+        },
+        {
+          "category": "notation",
+          "wrong": "Url",
+          "correct": "URL"
+        }
+      ],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 2000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "九州の地方の進学校に通う"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 3000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "高１・高２の"
+        },
+        {
+          "startMs": 3000,
+          "endMs": 5000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "医学科を目指すお子さんを持つ"
+        },
+        {
+          "startMs": 5000,
+          "endMs": 6000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "保護者の皆さん"
+        },
+        {
+          "startMs": 6000,
+          "endMs": 8000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "こんな悩みはありませんか？"
+        },
+        {
+          "startMs": 8000,
+          "endMs": 9000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "地元では進学校と"
+        },
+        {
+          "startMs": 9000,
+          "endMs": 10000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "言われているけど"
+        },
+        {
+          "startMs": 10000,
+          "endMs": 11000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "毎年医学科に合格するのは"
+        },
+        {
+          "startMs": 11000,
+          "endMs": 13000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "１桁人ぐらい"
+        },
+        {
+          "startMs": 13000,
+          "endMs": 14000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "今の学年の番数で"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 16000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "本当に医学科に間に合うか不安"
+        },
+        {
+          "startMs": 16000,
+          "endMs": 17000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "近くに医学科専門の"
+        },
+        {
+          "startMs": 17000,
+          "endMs": 18000,
+          "chars": 4,
+          "lineCount": 1,
+          "text": "塾が無く"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 20000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "今のお子さんの学習状況を"
+        },
+        {
+          "startMs": 20000,
+          "endMs": 21000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "相談できる相手がいない"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 23000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "今の塾は地元の塾で"
+        },
+        {
+          "startMs": 23000,
+          "endMs": 24000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "医学科に特化していない"
+        },
+        {
+          "startMs": 24000,
+          "endMs": 25000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "だから今の塾に"
+        },
+        {
+          "startMs": 25000,
+          "endMs": 27000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "任せきりでいいのか不安"
+        },
+        {
+          "startMs": 27000,
+          "endMs": 28000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "模試の成績を見ても"
+        },
+        {
+          "startMs": 28000,
+          "endMs": 29000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "よくわからない"
+        },
+        {
+          "startMs": 29000,
+          "endMs": 30000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "現役で医学科に合格する"
+        },
+        {
+          "startMs": 30000,
+          "endMs": 32000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "先輩と比較して"
+        },
+        {
+          "startMs": 32000,
+          "endMs": 33000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "今のペースで間に合うか"
+        },
+        {
+          "startMs": 33000,
+          "endMs": 34000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "判断してほしい"
+        },
+        {
+          "startMs": 34000,
+          "endMs": 36000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "医学科受験に対して"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 37000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "親ばかりが焦っていて"
+        },
+        {
+          "startMs": 37000,
+          "endMs": 39000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "子供に危機感がないから不安"
+        },
+        {
+          "startMs": 39000,
+          "endMs": 40000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "正直にお伝えします"
+        },
+        {
+          "startMs": 40000,
+          "endMs": 41000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "九州の国公立医学部の"
+        },
+        {
+          "startMs": 41000,
+          "endMs": 42000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "実質競争倍率は"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "熊大で4倍超えて"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 45000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "長崎大・宮大でも"
+        },
+        {
+          "startMs": 45000,
+          "endMs": 46000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "3.7倍を超える"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "全国の受験生が集まる"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 49000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "激戦が続いています"
+        },
+        {
+          "startMs": 49000,
+          "endMs": 50000,
+          "chars": 15,
+          "lineCount": 2,
+          "text": "保護者の方が\n一番わかっていると"
+        },
+        {
+          "startMs": 50000,
+          "endMs": 51000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "思いますが"
+        },
+        {
+          "startMs": 51000,
+          "endMs": 53000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "今の学年で上位にいても"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 54000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "先輩たちの学年で"
+        },
+        {
+          "startMs": 54000,
+          "endMs": 56000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "医学科に現役で入る順位に"
+        },
+        {
+          "startMs": 56000,
+          "endMs": 57000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "入っていない場合"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 58000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "また入っていたとしても"
+        },
+        {
+          "startMs": 58000,
+          "endMs": 60000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "現役で間に合うのかには"
+        },
+        {
+          "startMs": 60000,
+          "endMs": 61000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "かなり不安があります"
+        },
+        {
+          "startMs": 61000,
+          "endMs": 62000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "そして近くに"
+        },
+        {
+          "startMs": 62000,
+          "endMs": 64000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "医学科専門の塾がなければ"
+        },
+        {
+          "startMs": 64000,
+          "endMs": 65000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "お子様の今の位置を"
+        },
+        {
+          "startMs": 65000,
+          "endMs": 66000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "現役の医学科合格者と"
+        },
+        {
+          "startMs": 66000,
+          "endMs": 67000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "比較してくれる"
+        },
+        {
+          "startMs": 67000,
+          "endMs": 69000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "相手が誰もいないまま"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 70000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "月日が流れてしまいます"
+        },
+        {
+          "startMs": 70000,
+          "endMs": 71000,
+          "chars": 4,
+          "lineCount": 1,
+          "text": "その結果"
+        },
+        {
+          "startMs": 71000,
+          "endMs": 72000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "高3の夏や秋の模試で"
+        },
+        {
+          "startMs": 72000,
+          "endMs": 73000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "初めてお子さんの"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 75000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "志望校の判定を見て"
+        },
+        {
+          "startMs": 75000,
+          "endMs": 77000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "思っていたよりずっと足りない"
+        },
+        {
+          "startMs": 77000,
+          "endMs": 78000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "と気づく過程が"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "本当に多いのが現状です"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 81000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "その時になって"
+        },
+        {
+          "startMs": 81000,
+          "endMs": 83000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "もっと早く相談しておけばよかった"
+        },
+        {
+          "startMs": 83000,
+          "endMs": 85000,
+          "chars": 15,
+          "lineCount": 2,
+          "text": "と後悔しても\n高1・高2の時間は"
+        },
+        {
+          "startMs": 85000,
+          "endMs": 86000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "二度と戻ってきません"
+        },
+        {
+          "startMs": 86000,
+          "endMs": 87000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "では取り返しが"
+        },
+        {
+          "startMs": 87000,
+          "endMs": 89000,
+          "chars": 17,
+          "lineCount": 2,
+          "text": "つかなくなる前に\nどうすればいいのか"
+        },
+        {
+          "startMs": 89000,
+          "endMs": 90000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "答えは1つです"
+        },
+        {
+          "startMs": 90000,
+          "endMs": 91000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "九州内の医学部の"
+        },
+        {
+          "startMs": 91000,
+          "endMs": 93000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "合格実績が豊富な"
+        },
+        {
+          "startMs": 93000,
+          "endMs": 94000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "プロの講師に"
+        },
+        {
+          "startMs": 94000,
+          "endMs": 96000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "お子様の現状を一度話して"
+        },
+        {
+          "startMs": 96000,
+          "endMs": 97000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "今の位置と志望大学の"
+        },
+        {
+          "startMs": 97000,
+          "endMs": 99000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "医学科にある間のギャップを"
+        },
+        {
+          "startMs": 99000,
+          "endMs": 101000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "客観的に整理してもらうこと"
+        },
+        {
+          "startMs": 101000,
+          "endMs": 103000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "これが最初の一手になります"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 104000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "現役医学科合格者は"
+        },
+        {
+          "startMs": 104000,
+          "endMs": 105000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "高1・高2の時に"
+        },
+        {
+          "startMs": 105000,
+          "endMs": 107000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "何をどこまで仕上げていたのか"
+        },
+        {
+          "startMs": 107000,
+          "endMs": 109000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "お子様の今の成績は"
+        },
+        {
+          "startMs": 109000,
+          "endMs": 110000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "その合格者と比べて"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 111000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "どの位置にあるのか"
+        }
+      ],
+      "createdAt": "2026-05-15T03:06:15.942Z"
+    },
+    {
+      "id": "0a98cbbc-f9db-4098-a234-d3ccefad3f09",
+      "sourcePath": "/Users/takeshi/Downloads/生徒の声のシーン.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260514_180607_生徒の声のシーン",
+      "stats": {
+        "entries": 378,
+        "firstStartMs": 0,
+        "lastEndMs": 520800,
+        "avgDurationMs": 1378,
+        "avgChars": 18
+      },
+      "notationRules": [
+        {
+          "category": "notation",
+          "wrong": "ライン",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "Line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "Youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "ユーチューブ",
+          "correct": "YouTube"
+        }
+      ],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 1000,
+          "chars": 25,
+          "lineCount": 1,
+          "text": "今、東京科学大学(旧 東工大)の理工学系に通っている"
+        },
+        {
+          "startMs": 1000,
+          "endMs": 2000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "大学2年生です。"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 3000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "現役時、最初は集団の塾に通っていたんですけど"
+        },
+        {
+          "startMs": 3000,
+          "endMs": 5000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "塾の復習も、学校の勉強の復習も"
+        },
+        {
+          "startMs": 5000,
+          "endMs": 6000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "どっちも中途半端になるし"
+        },
+        {
+          "startMs": 6000,
+          "endMs": 7000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "集団の塾を一旦やめて"
+        },
+        {
+          "startMs": 7000,
+          "endMs": 9000,
+          "chars": 21,
+          "lineCount": 1,
+          "text": "学校の復習と独学に集中しようということでで"
+        },
+        {
+          "startMs": 9000,
+          "endMs": 12000,
+          "chars": 21,
+          "lineCount": 1,
+          "text": "高3の5〜6月くらいとか独学で勉強を始めて"
+        },
+        {
+          "startMs": 12000,
+          "endMs": 13000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "夏の予定とかも始まる前にすごい"
+        },
+        {
+          "startMs": 13000,
+          "endMs": 14000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "ちゃんと立ててたんですけど"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 16000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "参考書も何周してっていうのをすごい決めてたんですけど"
+        },
+        {
+          "startMs": 16000,
+          "endMs": 17000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "やっぱりだんだんずれ込んじゃうこととかもあったりして"
+        },
+        {
+          "startMs": 17000,
+          "endMs": 18000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "予定を立て直すとなった時に"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 19000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "独学だと結構"
+        },
+        {
+          "startMs": 19000,
+          "endMs": 21000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "相談できる相手もいなかったりして"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 23000,
+          "chars": 24,
+          "lineCount": 1,
+          "text": "ネットで調べた情報を信じてっていう感じだったので"
+        },
+        {
+          "startMs": 23000,
+          "endMs": 24000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "不安も結構大きかったっていう感じで"
+        },
+        {
+          "startMs": 24000,
+          "endMs": 26000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "モチベーションがうまく続かなかったり"
+        },
+        {
+          "startMs": 26000,
+          "endMs": 27000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "予定通りにいかなくて"
+        },
+        {
+          "startMs": 27000,
+          "endMs": 28000,
+          "chars": 24,
+          "lineCount": 1,
+          "text": "どうしようって悩んだりっていうのが夏休みでした。"
+        },
+        {
+          "startMs": 28000,
+          "endMs": 30000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "一人でやる不安みたいなのも感じながら"
+        },
+        {
+          "startMs": 30000,
+          "endMs": 32000,
+          "chars": 23,
+          "lineCount": 1,
+          "text": "ネットで塾とかが出してるYouTubeを見たり"
+        },
+        {
+          "startMs": 32000,
+          "endMs": 33000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "YouTube見てる中で"
+        },
+        {
+          "startMs": 33000,
+          "endMs": 35000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "白谷塾のチャンネルも見てたんですけど"
+        },
+        {
+          "startMs": 35000,
+          "endMs": 36000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "1週間予定やスケジュールのアドバイスを"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 37000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "いただくことができるっていうことで"
+        },
+        {
+          "startMs": 37000,
+          "endMs": 39000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "無料体験で参加した時に"
+        },
+        {
+          "startMs": 39000,
+          "endMs": 40000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "授業とか受けたりして"
+        },
+        {
+          "startMs": 40000,
+          "endMs": 41000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "先生たちの熱い熱とか"
+        },
+        {
+          "startMs": 41000,
+          "endMs": 42000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "チューターの先生との話の中で"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "やっぱり自分一人で進めるのが不安だなっていうところと"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 46000,
+          "chars": 24,
+          "lineCount": 1,
+          "text": "あと共通テストの点数を結構取りたかったんですけど"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 24,
+          "lineCount": 1,
+          "text": "そんなに二次との対策との両立がうまくできてなくて"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 49000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "点数伸び悩んでたので"
+        },
+        {
+          "startMs": 49000,
+          "endMs": 51000,
+          "chars": 23,
+          "lineCount": 1,
+          "text": "白谷塾って結構古文の動画がすごく伸びてたりとか"
+        },
+        {
+          "startMs": 51000,
+          "endMs": 52000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "共通テスト対策もすごい強いんじゃないか"
+        },
+        {
+          "startMs": 52000,
+          "endMs": 53000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "っていうところもあって"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 54000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "白谷塾に入塾したっていう形でした"
+        },
+        {
+          "startMs": 54000,
+          "endMs": 57000,
+          "chars": 27,
+          "lineCount": 1,
+          "text": "独学だと一人で進めるモチベーションが続かなかったりとか"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 58000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "予定立てるときに不安だったりしたので"
+        },
+        {
+          "startMs": 58000,
+          "endMs": 59000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "個人的にはオンラインという形で"
+        },
+        {
+          "startMs": 59000,
+          "endMs": 60000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "移動時間もほとんどなく"
+        },
+        {
+          "startMs": 60000,
+          "endMs": 62000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "ただ先生たちは本当に親身になってくれて"
+        },
+        {
+          "startMs": 62000,
+          "endMs": 64000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "集団の塾ってやっぱり人が多いので"
+        },
+        {
+          "startMs": 64000,
+          "endMs": 66000,
+          "chars": 26,
+          "lineCount": 2,
+          "text": "受講者が多いので\n一人ひとりに対して何かするってことは"
+        },
+        {
+          "startMs": 66000,
+          "endMs": 67000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "あまりないと思うんですけど"
+        },
+        {
+          "startMs": 67000,
+          "endMs": 68000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "本当にチューターの先生もだし"
+        },
+        {
+          "startMs": 68000,
+          "endMs": 69000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "教科専門の先生も"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 70000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "直前とかは私たちの"
+        },
+        {
+          "startMs": 70000,
+          "endMs": 71000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "苦手な分野とかを言ったら"
+        },
+        {
+          "startMs": 71000,
+          "endMs": 72000,
+          "chars": 14,
+          "lineCount": 2,
+          "text": "次の週は\nそれをやってくださる"
+        },
+        {
+          "startMs": 72000,
+          "endMs": 73000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "みたいな感じで進めてたので"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 75000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "私はには結構その形が合ってたかなと思っていて"
+        },
+        {
+          "startMs": 75000,
+          "endMs": 76000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "自分の特性というか"
+        },
+        {
+          "startMs": 76000,
+          "endMs": 77000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "性格というか"
+        },
+        {
+          "startMs": 77000,
+          "endMs": 78000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "そういう行動特性みたいなところから"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 24,
+          "lineCount": 1,
+          "text": "自分はどういう形で進めていくのが合っているのかな"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 83000,
+          "chars": 23,
+          "lineCount": 1,
+          "text": "っていうのを1回確認してみるといいかと思います"
+        },
+        {
+          "startMs": 83000,
+          "endMs": 84000,
+          "chars": 28,
+          "lineCount": 1,
+          "text": "私は岡山大学医学部医学科を目指している1浪目の浪人生です"
+        },
+        {
+          "startMs": 84000,
+          "endMs": 86000,
+          "chars": 28,
+          "lineCount": 1,
+          "text": "僕が白谷塾に入塾したのは高3になる前の3月だったのですが"
+        },
+        {
+          "startMs": 86000,
+          "endMs": 87000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "その頃はそれぞれの教科で"
+        },
+        {
+          "startMs": 87000,
+          "endMs": 89000,
+          "chars": 24,
+          "lineCount": 1,
+          "text": "何をすれば目標に近づくことができるのかわからずに"
+        },
+        {
+          "startMs": 89000,
+          "endMs": 90000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "勉強法に悩んでいました"
+        },
+        {
+          "startMs": 90000,
+          "endMs": 92000,
+          "chars": 29,
+          "lineCount": 2,
+          "text": "入塾した時には\n長文を読んでも全く意味がかからない状況でした"
+        },
+        {
+          "startMs": 92000,
+          "endMs": 93000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "それでもまず二次試験の長文ではなく"
+        },
+        {
+          "startMs": 93000,
+          "endMs": 94000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "共通テスト形式の英文を"
+        },
+        {
+          "startMs": 94000,
+          "endMs": 96000,
+          "chars": 25,
+          "lineCount": 2,
+          "text": "何回も読み\nチューターの先生がアドバイスをしてくれて"
+        },
+        {
+          "startMs": 96000,
+          "endMs": 97000,
+          "chars": 25,
+          "lineCount": 1,
+          "text": "共通テスト形式ではわからない単語や熟語がないように"
+        },
+        {
+          "startMs": 97000,
+          "endMs": 99000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "同じ文章を何度も精読、速読をし直しました"
+        },
+        {
+          "startMs": 99000,
+          "endMs": 100000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "次にまたこれもチューターの先生のアドバイスなんですが"
+        },
+        {
+          "startMs": 100000,
+          "endMs": 102000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "1日に丸々1回分の実践問題集を解いて"
+        },
+        {
+          "startMs": 102000,
+          "endMs": 103000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "本番と同じ状況に体を慣らしていきました。"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 105000,
+          "chars": 30,
+          "lineCount": 2,
+          "text": "そうすることで\n共通テスト本番では、９割を取ることができました"
+        },
+        {
+          "startMs": 105000,
+          "endMs": 106000,
+          "chars": 25,
+          "lineCount": 1,
+          "text": "同じように国語はテキストに載っているQRコードから"
+        },
+        {
+          "startMs": 106000,
+          "endMs": 108000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "岩本先生が解説してくれている動画を"
+        },
+        {
+          "startMs": 108000,
+          "endMs": 110000,
+          "chars": 33,
+          "lineCount": 2,
+          "text": "何度も見ることで\nどう解けば最短で解くことができるのかを学べました。"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 112000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "共通テスト本番では、国語が"
+        },
+        {
+          "startMs": 112000,
+          "endMs": 113000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "共通テストや二次試験、面接の前日まで"
+        },
+        {
+          "startMs": 113000,
+          "endMs": 114000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "通話で声をかけてもらったり、"
+        },
+        {
+          "startMs": 114000,
+          "endMs": 115000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "応援動画を送ってもらったりしたことが"
+        }
+      ],
+      "createdAt": "2026-05-14T09:08:17.847Z"
+    },
+    {
+      "id": "64b202e0-ffd7-4ba5-a28c-03f291c1fe25",
+      "sourcePath": "/Users/takeshi/Downloads/夏期講習.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260514_170949_夏期講習",
+      "stats": {
+        "entries": 83,
+        "firstStartMs": 0,
+        "lastEndMs": 159680,
+        "avgDurationMs": 1924,
+        "avgChars": 13
+      },
+      "notationRules": [
+        {
+          "category": "notation",
+          "wrong": "ライン",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "Line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "Youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "ユーチューブ",
+          "correct": "YouTube"
+        }
+      ],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 2000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "この夏\n志望校にぐっと近づくために"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 3000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "夏期講習を受けたいけど"
+        },
+        {
+          "startMs": 3000,
+          "endMs": 5000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "どこに申し込めばいいかわからない"
+        },
+        {
+          "startMs": 5000,
+          "endMs": 7000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "共通テスト模試の成績が悪い"
+        },
+        {
+          "startMs": 7000,
+          "endMs": 10000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "特に国語・英語などの文系科目が安定しない"
+        },
+        {
+          "startMs": 10000,
+          "endMs": 12000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "理系科目は一人で伸ばせるか不安"
+        },
+        {
+          "startMs": 12000,
+          "endMs": 14000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "だから夏休みで何とかしたいけど"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 16000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習は高額だし"
+        },
+        {
+          "startMs": 16000,
+          "endMs": 18000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "自分の勉強と両立できるか不安"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 19000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "そうなんです。"
+        },
+        {
+          "startMs": 19000,
+          "endMs": 20000,
+          "chars": 3,
+          "lineCount": 1,
+          "text": "実際に"
+        },
+        {
+          "startMs": 20000,
+          "endMs": 21000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "「とりあえず有名だから」"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 22000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "「友達が行ってるから」"
+        },
+        {
+          "startMs": 22000,
+          "endMs": 23000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "という理由で"
+        },
+        {
+          "startMs": 23000,
+          "endMs": 26000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習に申し込んだ方から"
+        },
+        {
+          "startMs": 26000,
+          "endMs": 28000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "雪だるま式に講座を取らされて"
+        },
+        {
+          "startMs": 28000,
+          "endMs": 29000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "1講座90分と長いし"
+        },
+        {
+          "startMs": 29000,
+          "endMs": 32000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "自分の勉強をする時間が取れなかった"
+        },
+        {
+          "startMs": 32000,
+          "endMs": 34000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "二次試験対策など難しい講座ばかりで"
+        },
+        {
+          "startMs": 34000,
+          "endMs": 36000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "共通テストの対策ができなかった"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 38000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "1コマあたりの金額も高額で"
+        },
+        {
+          "startMs": 38000,
+          "endMs": 40000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1ヶ月で数回しか受講できなかった"
+        },
+        {
+          "startMs": 40000,
+          "endMs": 42000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "特定の科目しか受講できずに"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "総合的に伸びるか不安"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 46000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "映像授業などを受けるだけで"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "個別で細かく勉強計画を立てたり"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 49000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "質問したりなど"
+        },
+        {
+          "startMs": 49000,
+          "endMs": 51000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "丁寧に手厚くフォローしてもらえなかった"
+        },
+        {
+          "startMs": 51000,
+          "endMs": 53000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "ここだけの話"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 54000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "そんな声をたくさん聞きます"
+        },
+        {
+          "startMs": 54000,
+          "endMs": 56000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "このままだと独学でも行き詰まる"
+        },
+        {
+          "startMs": 56000,
+          "endMs": 57000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "かといって"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 58000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "とりあえず大手予備校の"
+        },
+        {
+          "startMs": 58000,
+          "endMs": 61000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "夏期講習に申し込むのも危険"
+        },
+        {
+          "startMs": 61000,
+          "endMs": 62000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "じゃあどうすればいいの？"
+        },
+        {
+          "startMs": 62000,
+          "endMs": 63000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "答えは簡単です！"
+        },
+        {
+          "startMs": 63000,
+          "endMs": 64000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "受験は総合戦！"
+        },
+        {
+          "startMs": 64000,
+          "endMs": 66000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "特に国公立大学に受かりたければ"
+        },
+        {
+          "startMs": 66000,
+          "endMs": 67000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "わかりやすい授業も"
+        },
+        {
+          "startMs": 67000,
+          "endMs": 69000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "勉強計画も"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 70000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "進捗管理も個別指導も"
+        },
+        {
+          "startMs": 70000,
+          "endMs": 72000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "全部大事です！"
+        },
+        {
+          "startMs": 72000,
+          "endMs": 73000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "そんな塾あるの？って"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 75000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "実は\n出会った人から爆伸びしている"
+        },
+        {
+          "startMs": 75000,
+          "endMs": 76000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "知る人ぞ知る"
+        },
+        {
+          "startMs": 76000,
+          "endMs": 78000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も学生時代に通っていた塾があります！"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "それは創業17年で"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 82000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1000人以上を合格へ導いてきた"
+        },
+        {
+          "startMs": 82000,
+          "endMs": 84000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "白谷塾オンライン教室です"
+        },
+        {
+          "startMs": 84000,
+          "endMs": 87000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "YouTubeでも総登録者3万人を超える"
+        },
+        {
+          "startMs": 87000,
+          "endMs": 90000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "人気の白谷塾オンライン教室の夏期講習では"
+        },
+        {
+          "startMs": 90000,
+          "endMs": 92000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "なんとほぼ毎日授業！"
+        },
+        {
+          "startMs": 92000,
+          "endMs": 93000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "合計50講座を"
+        },
+        {
+          "startMs": 93000,
+          "endMs": 96000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "予備校の価格の10分の1以下で受講できます！"
+        },
+        {
+          "startMs": 96000,
+          "endMs": 98000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "さらに授業も要点だけを"
+        },
+        {
+          "startMs": 98000,
+          "endMs": 100000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "的確にリアルタイムで教えてくれる"
+        },
+        {
+          "startMs": 100000,
+          "endMs": 103000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "だから自分で見るだけの映像授業と全然違う"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 106000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "熟練の講師が自分だけの勉強計画を立ててくれる"
+        },
+        {
+          "startMs": 106000,
+          "endMs": 108000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "個別で担当チューターが"
+        },
+        {
+          "startMs": 108000,
+          "endMs": 110000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "一緒に立てた計画の進捗管理を"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 111000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "毎日してくれる"
+        },
+        {
+          "startMs": 111000,
+          "endMs": 114000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "個別指導で添削や小テストもしてくれる"
+        },
+        {
+          "startMs": 114000,
+          "endMs": 116000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "24時間質問対応可能"
+        },
+        {
+          "startMs": 116000,
+          "endMs": 118000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "という圧倒的な手厚さで"
+        },
+        {
+          "startMs": 118000,
+          "endMs": 119000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "あなたをサポートします！"
+        },
+        {
+          "startMs": 119000,
+          "endMs": 123000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も白谷塾で半年で150点以上伸ばして"
+        },
+        {
+          "startMs": 123000,
+          "endMs": 125000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "現役で名古屋大学物理学科に合格しました！"
+        },
+        {
+          "startMs": 125000,
+          "endMs": 128000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "夏期講習を受けた生徒はこう言っています。"
+        },
+        {
+          "startMs": 128000,
+          "endMs": 131000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "気になる方はこの動画下のボタンをタップしてください！"
+        },
+        {
+          "startMs": 131000,
+          "endMs": 133000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "さらに今ならLINE追加特典として"
+        },
+        {
+          "startMs": 133000,
+          "endMs": 136000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "こちらの10特典のテキストがもらえます！"
+        },
+        {
+          "startMs": 136000,
+          "endMs": 138000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "さらに夏期講習申込者には申込特典として"
+        },
+        {
+          "startMs": 138000,
+          "endMs": 141000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "数万円分の国語や数学のテキストを"
+        },
+        {
+          "startMs": 141000,
+          "endMs": 143000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "無料でご自宅にお届けします！"
+        },
+        {
+          "startMs": 143000,
+          "endMs": 144000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "夏期講習の締め切りは"
+        },
+        {
+          "startMs": 144000,
+          "endMs": 147000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "7/7日(月) 七夕の23:59"
+        },
+        {
+          "startMs": 147000,
+          "endMs": 149000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "先着30名に達した時点で"
+        },
+        {
+          "startMs": 149000,
+          "endMs": 151000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "申し込みをストップするので"
+        },
+        {
+          "startMs": 151000,
+          "endMs": 152000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "お早めにお申し込みください！"
+        },
+        {
+          "startMs": 152000,
+          "endMs": 154000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "どこよりも低価格で"
+        }
+      ],
+      "createdAt": "2026-05-14T08:23:25.540Z"
+    },
+    {
+      "id": "3d5fcb25-87f0-4169-bc91-eb3dd767f851",
+      "sourcePath": "/Users/takeshi/Downloads/夏期講習.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260514_170949_夏期講習",
+      "stats": {
+        "entries": 83,
+        "firstStartMs": 0,
+        "lastEndMs": 159680,
+        "avgDurationMs": 1924,
+        "avgChars": 13
+      },
+      "notationRules": [
+        {
+          "category": "notation",
+          "wrong": "ライン",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "Line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "Youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "ユーチューブ",
+          "correct": "YouTube"
+        }
+      ],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 2000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "この夏\n志望校にぐっと近づくために"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 3000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "夏期講習を受けたいけど"
+        },
+        {
+          "startMs": 3000,
+          "endMs": 5000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "どこに申し込めばいいかわからない"
+        },
+        {
+          "startMs": 5000,
+          "endMs": 7000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "共通テスト模試の成績が悪い"
+        },
+        {
+          "startMs": 7000,
+          "endMs": 10000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "特に国語・英語などの文系科目が安定しない"
+        },
+        {
+          "startMs": 10000,
+          "endMs": 12000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "理系科目は一人で伸ばせるか不安"
+        },
+        {
+          "startMs": 12000,
+          "endMs": 14000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "だから夏休みで何とかしたいけど"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 16000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習は高額だし"
+        },
+        {
+          "startMs": 16000,
+          "endMs": 18000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "自分の勉強と両立できるか不安"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 19000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "そうなんです。"
+        },
+        {
+          "startMs": 19000,
+          "endMs": 20000,
+          "chars": 3,
+          "lineCount": 1,
+          "text": "実際に"
+        },
+        {
+          "startMs": 20000,
+          "endMs": 21000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "「とりあえず有名だから」"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 22000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "「友達が行ってるから」"
+        },
+        {
+          "startMs": 22000,
+          "endMs": 23000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "という理由で"
+        },
+        {
+          "startMs": 23000,
+          "endMs": 26000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習に申し込んだ方から"
+        },
+        {
+          "startMs": 26000,
+          "endMs": 28000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "雪だるま式に講座を取らされて"
+        },
+        {
+          "startMs": 28000,
+          "endMs": 29000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "1講座90分と長いし"
+        },
+        {
+          "startMs": 29000,
+          "endMs": 32000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "自分の勉強をする時間が取れなかった"
+        },
+        {
+          "startMs": 32000,
+          "endMs": 34000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "二次試験対策など難しい講座ばかりで"
+        },
+        {
+          "startMs": 34000,
+          "endMs": 36000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "共通テストの対策ができなかった"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 38000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "1コマあたりの金額も高額で"
+        },
+        {
+          "startMs": 38000,
+          "endMs": 40000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1ヶ月で数回しか受講できなかった"
+        },
+        {
+          "startMs": 40000,
+          "endMs": 42000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "特定の科目しか受講できずに"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "総合的に伸びるか不安"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 46000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "映像授業などを受けるだけで"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "個別で細かく勉強計画を立てたり"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 49000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "質問したりなど"
+        },
+        {
+          "startMs": 49000,
+          "endMs": 51000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "丁寧に手厚くフォローしてもらえなかった"
+        },
+        {
+          "startMs": 51000,
+          "endMs": 53000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "ここだけの話"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 54000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "そんな声をたくさん聞きます"
+        },
+        {
+          "startMs": 54000,
+          "endMs": 56000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "このままだと独学でも行き詰まる"
+        },
+        {
+          "startMs": 56000,
+          "endMs": 57000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "かといって"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 58000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "とりあえず大手予備校の"
+        },
+        {
+          "startMs": 58000,
+          "endMs": 61000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "夏期講習に申し込むのも危険"
+        },
+        {
+          "startMs": 61000,
+          "endMs": 62000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "じゃあどうすればいいの？"
+        },
+        {
+          "startMs": 62000,
+          "endMs": 63000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "答えは簡単です！"
+        },
+        {
+          "startMs": 63000,
+          "endMs": 64000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "受験は総合戦！"
+        },
+        {
+          "startMs": 64000,
+          "endMs": 66000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "特に国公立大学に受かりたければ"
+        },
+        {
+          "startMs": 66000,
+          "endMs": 67000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "わかりやすい授業も"
+        },
+        {
+          "startMs": 67000,
+          "endMs": 69000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "勉強計画も"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 70000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "進捗管理も個別指導も"
+        },
+        {
+          "startMs": 70000,
+          "endMs": 72000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "全部大事です！"
+        },
+        {
+          "startMs": 72000,
+          "endMs": 73000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "そんな塾あるの？って"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 75000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "実は\n出会った人から爆伸びしている"
+        },
+        {
+          "startMs": 75000,
+          "endMs": 76000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "知る人ぞ知る"
+        },
+        {
+          "startMs": 76000,
+          "endMs": 78000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も学生時代に通っていた塾があります！"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "それは創業17年で"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 82000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1000人以上を合格へ導いてきた"
+        },
+        {
+          "startMs": 82000,
+          "endMs": 84000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "白谷塾オンライン教室です"
+        },
+        {
+          "startMs": 84000,
+          "endMs": 87000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "YouTubeでも総登録者3万人を超える"
+        },
+        {
+          "startMs": 87000,
+          "endMs": 90000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "人気の白谷塾オンライン教室の夏期講習では"
+        },
+        {
+          "startMs": 90000,
+          "endMs": 92000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "なんとほぼ毎日授業！"
+        },
+        {
+          "startMs": 92000,
+          "endMs": 93000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "合計50講座を"
+        },
+        {
+          "startMs": 93000,
+          "endMs": 96000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "予備校の価格の10分の1以下で受講できます！"
+        },
+        {
+          "startMs": 96000,
+          "endMs": 98000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "さらに授業も要点だけを"
+        },
+        {
+          "startMs": 98000,
+          "endMs": 100000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "的確にリアルタイムで教えてくれる"
+        },
+        {
+          "startMs": 100000,
+          "endMs": 103000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "だから自分で見るだけの映像授業と全然違う"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 106000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "熟練の講師が自分だけの勉強計画を立ててくれる"
+        },
+        {
+          "startMs": 106000,
+          "endMs": 108000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "個別で担当チューターが"
+        },
+        {
+          "startMs": 108000,
+          "endMs": 110000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "一緒に立てた計画の進捗管理を"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 111000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "毎日してくれる"
+        },
+        {
+          "startMs": 111000,
+          "endMs": 114000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "個別指導で添削や小テストもしてくれる"
+        },
+        {
+          "startMs": 114000,
+          "endMs": 116000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "24時間質問対応可能"
+        },
+        {
+          "startMs": 116000,
+          "endMs": 118000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "という圧倒的な手厚さで"
+        },
+        {
+          "startMs": 118000,
+          "endMs": 119000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "あなたをサポートします！"
+        },
+        {
+          "startMs": 119000,
+          "endMs": 123000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も白谷塾で半年で150点以上伸ばして"
+        },
+        {
+          "startMs": 123000,
+          "endMs": 125000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "現役で名古屋大学物理学科に合格しました！"
+        },
+        {
+          "startMs": 125000,
+          "endMs": 128000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "夏期講習を受けた生徒はこう言っています。"
+        },
+        {
+          "startMs": 128000,
+          "endMs": 131000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "気になる方はこの動画下のボタンをタップしてください！"
+        },
+        {
+          "startMs": 131000,
+          "endMs": 133000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "さらに今ならLINE追加特典として"
+        },
+        {
+          "startMs": 133000,
+          "endMs": 136000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "こちらの10特典のテキストがもらえます！"
+        },
+        {
+          "startMs": 136000,
+          "endMs": 138000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "さらに夏期講習申込者には申込特典として"
+        },
+        {
+          "startMs": 138000,
+          "endMs": 141000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "数万円分の国語や数学のテキストを"
+        },
+        {
+          "startMs": 141000,
+          "endMs": 143000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "無料でご自宅にお届けします！"
+        },
+        {
+          "startMs": 143000,
+          "endMs": 144000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "夏期講習の締め切りは"
+        },
+        {
+          "startMs": 144000,
+          "endMs": 147000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "7/7日(月) 七夕の23:59"
+        },
+        {
+          "startMs": 147000,
+          "endMs": 149000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "先着30名に達した時点で"
+        },
+        {
+          "startMs": 149000,
+          "endMs": 151000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "申し込みをストップするので"
+        },
+        {
+          "startMs": 151000,
+          "endMs": 152000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "お早めにお申し込みください！"
+        },
+        {
+          "startMs": 152000,
+          "endMs": 154000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "どこよりも低価格で"
+        }
+      ],
+      "createdAt": "2026-05-14T08:23:15.798Z"
+    },
+    {
+      "id": "2f53b3f0-9038-40bf-b270-6544e2e3051b",
+      "sourcePath": "/Users/takeshi/Downloads/夏期講習.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260514_170949_夏期講習",
+      "stats": {
+        "entries": 83,
+        "firstStartMs": 0,
+        "lastEndMs": 159680,
+        "avgDurationMs": 1924,
+        "avgChars": 13
+      },
+      "notationRules": [
+        {
+          "category": "notation",
+          "wrong": "ライン",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "Line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "Youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "ユーチューブ",
+          "correct": "YouTube"
+        }
+      ],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 2000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "この夏\n志望校にぐっと近づくために"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 3000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "夏期講習を受けたいけど"
+        },
+        {
+          "startMs": 3000,
+          "endMs": 5000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "どこに申し込めばいいかわからない"
+        },
+        {
+          "startMs": 5000,
+          "endMs": 7000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "共通テスト模試の成績が悪い"
+        },
+        {
+          "startMs": 7000,
+          "endMs": 10000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "特に国語・英語などの文系科目が安定しない"
+        },
+        {
+          "startMs": 10000,
+          "endMs": 12000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "理系科目は一人で伸ばせるか不安"
+        },
+        {
+          "startMs": 12000,
+          "endMs": 14000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "だから夏休みで何とかしたいけど"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 16000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習は高額だし"
+        },
+        {
+          "startMs": 16000,
+          "endMs": 18000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "自分の勉強と両立できるか不安"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 19000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "そうなんです。"
+        },
+        {
+          "startMs": 19000,
+          "endMs": 20000,
+          "chars": 3,
+          "lineCount": 1,
+          "text": "実際に"
+        },
+        {
+          "startMs": 20000,
+          "endMs": 21000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "「とりあえず有名だから」"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 22000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "「友達が行ってるから」"
+        },
+        {
+          "startMs": 22000,
+          "endMs": 23000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "という理由で"
+        },
+        {
+          "startMs": 23000,
+          "endMs": 26000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習に申し込んだ方から"
+        },
+        {
+          "startMs": 26000,
+          "endMs": 28000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "雪だるま式に講座を取らされて"
+        },
+        {
+          "startMs": 28000,
+          "endMs": 29000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "1講座90分と長いし"
+        },
+        {
+          "startMs": 29000,
+          "endMs": 32000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "自分の勉強をする時間が取れなかった"
+        },
+        {
+          "startMs": 32000,
+          "endMs": 34000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "二次試験対策など難しい講座ばかりで"
+        },
+        {
+          "startMs": 34000,
+          "endMs": 36000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "共通テストの対策ができなかった"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 38000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "1コマあたりの金額も高額で"
+        },
+        {
+          "startMs": 38000,
+          "endMs": 40000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1ヶ月で数回しか受講できなかった"
+        },
+        {
+          "startMs": 40000,
+          "endMs": 42000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "特定の科目しか受講できずに"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "総合的に伸びるか不安"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 46000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "映像授業などを受けるだけで"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "個別で細かく勉強計画を立てたり"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 49000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "質問したりなど"
+        },
+        {
+          "startMs": 49000,
+          "endMs": 51000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "丁寧に手厚くフォローしてもらえなかった"
+        },
+        {
+          "startMs": 51000,
+          "endMs": 53000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "ここだけの話"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 54000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "そんな声をたくさん聞きます"
+        },
+        {
+          "startMs": 54000,
+          "endMs": 56000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "このままだと独学でも行き詰まる"
+        },
+        {
+          "startMs": 56000,
+          "endMs": 57000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "かといって"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 58000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "とりあえず大手予備校の"
+        },
+        {
+          "startMs": 58000,
+          "endMs": 61000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "夏期講習に申し込むのも危険"
+        },
+        {
+          "startMs": 61000,
+          "endMs": 62000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "じゃあどうすればいいの？"
+        },
+        {
+          "startMs": 62000,
+          "endMs": 63000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "答えは簡単です！"
+        },
+        {
+          "startMs": 63000,
+          "endMs": 64000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "受験は総合戦！"
+        },
+        {
+          "startMs": 64000,
+          "endMs": 66000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "特に国公立大学に受かりたければ"
+        },
+        {
+          "startMs": 66000,
+          "endMs": 67000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "わかりやすい授業も"
+        },
+        {
+          "startMs": 67000,
+          "endMs": 69000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "勉強計画も"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 70000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "進捗管理も個別指導も"
+        },
+        {
+          "startMs": 70000,
+          "endMs": 72000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "全部大事です！"
+        },
+        {
+          "startMs": 72000,
+          "endMs": 73000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "そんな塾あるの？って"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 75000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "実は\n出会った人から爆伸びしている"
+        },
+        {
+          "startMs": 75000,
+          "endMs": 76000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "知る人ぞ知る"
+        },
+        {
+          "startMs": 76000,
+          "endMs": 78000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も学生時代に通っていた塾があります！"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "それは創業17年で"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 82000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1000人以上を合格へ導いてきた"
+        },
+        {
+          "startMs": 82000,
+          "endMs": 84000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "白谷塾オンライン教室です"
+        },
+        {
+          "startMs": 84000,
+          "endMs": 87000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "YouTubeでも総登録者3万人を超える"
+        },
+        {
+          "startMs": 87000,
+          "endMs": 90000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "人気の白谷塾オンライン教室の夏期講習では"
+        },
+        {
+          "startMs": 90000,
+          "endMs": 92000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "なんとほぼ毎日授業！"
+        },
+        {
+          "startMs": 92000,
+          "endMs": 93000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "合計50講座を"
+        },
+        {
+          "startMs": 93000,
+          "endMs": 96000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "予備校の価格の10分の1以下で受講できます！"
+        },
+        {
+          "startMs": 96000,
+          "endMs": 98000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "さらに授業も要点だけを"
+        },
+        {
+          "startMs": 98000,
+          "endMs": 100000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "的確にリアルタイムで教えてくれる"
+        },
+        {
+          "startMs": 100000,
+          "endMs": 103000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "だから自分で見るだけの映像授業と全然違う"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 106000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "熟練の講師が自分だけの勉強計画を立ててくれる"
+        },
+        {
+          "startMs": 106000,
+          "endMs": 108000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "個別で担当チューターが"
+        },
+        {
+          "startMs": 108000,
+          "endMs": 110000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "一緒に立てた計画の進捗管理を"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 111000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "毎日してくれる"
+        },
+        {
+          "startMs": 111000,
+          "endMs": 114000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "個別指導で添削や小テストもしてくれる"
+        },
+        {
+          "startMs": 114000,
+          "endMs": 116000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "24時間質問対応可能"
+        },
+        {
+          "startMs": 116000,
+          "endMs": 118000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "という圧倒的な手厚さで"
+        },
+        {
+          "startMs": 118000,
+          "endMs": 119000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "あなたをサポートします！"
+        },
+        {
+          "startMs": 119000,
+          "endMs": 123000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も白谷塾で半年で150点以上伸ばして"
+        },
+        {
+          "startMs": 123000,
+          "endMs": 125000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "現役で名古屋大学物理学科に合格しました！"
+        },
+        {
+          "startMs": 125000,
+          "endMs": 128000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "夏期講習を受けた生徒はこう言っています。"
+        },
+        {
+          "startMs": 128000,
+          "endMs": 131000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "気になる方はこの動画下のボタンをタップしてください！"
+        },
+        {
+          "startMs": 131000,
+          "endMs": 133000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "さらに今ならLINE追加特典として"
+        },
+        {
+          "startMs": 133000,
+          "endMs": 136000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "こちらの10特典のテキストがもらえます！"
+        },
+        {
+          "startMs": 136000,
+          "endMs": 138000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "さらに夏期講習申込者には申込特典として"
+        },
+        {
+          "startMs": 138000,
+          "endMs": 141000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "数万円分の国語や数学のテキストを"
+        },
+        {
+          "startMs": 141000,
+          "endMs": 143000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "無料でご自宅にお届けします！"
+        },
+        {
+          "startMs": 143000,
+          "endMs": 144000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "夏期講習の締め切りは"
+        },
+        {
+          "startMs": 144000,
+          "endMs": 147000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "7/7日(月) 七夕の23:59"
+        },
+        {
+          "startMs": 147000,
+          "endMs": 149000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "先着30名に達した時点で"
+        },
+        {
+          "startMs": 149000,
+          "endMs": 151000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "申し込みをストップするので"
+        },
+        {
+          "startMs": 151000,
+          "endMs": 152000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "お早めにお申し込みください！"
+        },
+        {
+          "startMs": 152000,
+          "endMs": 154000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "どこよりも低価格で"
+        }
+      ],
+      "createdAt": "2026-05-14T08:11:51.473Z"
+    },
+    {
+      "id": "dc235f57-0b7f-4b91-8302-49882e417761",
+      "sourcePath": "/Users/takeshi/Downloads/夏期講習.txt",
+      "runDir": "/Users/takeshi/Desktop/Cat-Cut/runs/20260514_163021_夏期講習",
+      "stats": {
+        "entries": 83,
+        "firstStartMs": 0,
+        "lastEndMs": 159680,
+        "avgDurationMs": 1924,
+        "avgChars": 13
+      },
+      "notationRules": [
+        {
+          "category": "notation",
+          "wrong": "ライン",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "Line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "line",
+          "correct": "LINE"
+        },
+        {
+          "category": "notation",
+          "wrong": "youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "Youtube",
+          "correct": "YouTube"
+        },
+        {
+          "category": "notation",
+          "wrong": "ユーチューブ",
+          "correct": "YouTube"
+        }
+      ],
+      "timingExamples": [
+        {
+          "startMs": 0,
+          "endMs": 2000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "この夏\n志望校にぐっと近づくために"
+        },
+        {
+          "startMs": 2000,
+          "endMs": 3000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "夏期講習を受けたいけど"
+        },
+        {
+          "startMs": 3000,
+          "endMs": 5000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "どこに申し込めばいいかわからない"
+        },
+        {
+          "startMs": 5000,
+          "endMs": 7000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "共通テスト模試の成績が悪い"
+        },
+        {
+          "startMs": 7000,
+          "endMs": 10000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "特に国語・英語などの文系科目が安定しない"
+        },
+        {
+          "startMs": 10000,
+          "endMs": 12000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "理系科目は一人で伸ばせるか不安"
+        },
+        {
+          "startMs": 12000,
+          "endMs": 14000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "だから夏休みで何とかしたいけど"
+        },
+        {
+          "startMs": 14000,
+          "endMs": 16000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習は高額だし"
+        },
+        {
+          "startMs": 16000,
+          "endMs": 18000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "自分の勉強と両立できるか不安"
+        },
+        {
+          "startMs": 18000,
+          "endMs": 19000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "そうなんです。"
+        },
+        {
+          "startMs": 19000,
+          "endMs": 20000,
+          "chars": 3,
+          "lineCount": 1,
+          "text": "実際に"
+        },
+        {
+          "startMs": 20000,
+          "endMs": 21000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "「とりあえず有名だから」"
+        },
+        {
+          "startMs": 21000,
+          "endMs": 22000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "「友達が行ってるから」"
+        },
+        {
+          "startMs": 22000,
+          "endMs": 23000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "という理由で"
+        },
+        {
+          "startMs": 23000,
+          "endMs": 26000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "大手予備校の夏期講習に申し込んだ方から"
+        },
+        {
+          "startMs": 26000,
+          "endMs": 28000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "雪だるま式に講座を取らされて"
+        },
+        {
+          "startMs": 28000,
+          "endMs": 29000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "1講座90分と長いし"
+        },
+        {
+          "startMs": 29000,
+          "endMs": 32000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "自分の勉強をする時間が取れなかった"
+        },
+        {
+          "startMs": 32000,
+          "endMs": 34000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "二次試験対策など難しい講座ばかりで"
+        },
+        {
+          "startMs": 34000,
+          "endMs": 36000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "共通テストの対策ができなかった"
+        },
+        {
+          "startMs": 36000,
+          "endMs": 38000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "1コマあたりの金額も高額で"
+        },
+        {
+          "startMs": 38000,
+          "endMs": 40000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1ヶ月で数回しか受講できなかった"
+        },
+        {
+          "startMs": 40000,
+          "endMs": 42000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "特定の科目しか受講できずに"
+        },
+        {
+          "startMs": 42000,
+          "endMs": 44000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "総合的に伸びるか不安"
+        },
+        {
+          "startMs": 44000,
+          "endMs": 46000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "映像授業などを受けるだけで"
+        },
+        {
+          "startMs": 46000,
+          "endMs": 48000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "個別で細かく勉強計画を立てたり"
+        },
+        {
+          "startMs": 48000,
+          "endMs": 49000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "質問したりなど"
+        },
+        {
+          "startMs": 49000,
+          "endMs": 51000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "丁寧に手厚くフォローしてもらえなかった"
+        },
+        {
+          "startMs": 51000,
+          "endMs": 53000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "ここだけの話"
+        },
+        {
+          "startMs": 53000,
+          "endMs": 54000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "そんな声をたくさん聞きます"
+        },
+        {
+          "startMs": 54000,
+          "endMs": 56000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "このままだと独学でも行き詰まる"
+        },
+        {
+          "startMs": 56000,
+          "endMs": 57000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "かといって"
+        },
+        {
+          "startMs": 57000,
+          "endMs": 58000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "とりあえず大手予備校の"
+        },
+        {
+          "startMs": 58000,
+          "endMs": 61000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "夏期講習に申し込むのも危険"
+        },
+        {
+          "startMs": 61000,
+          "endMs": 62000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "じゃあどうすればいいの？"
+        },
+        {
+          "startMs": 62000,
+          "endMs": 63000,
+          "chars": 8,
+          "lineCount": 1,
+          "text": "答えは簡単です！"
+        },
+        {
+          "startMs": 63000,
+          "endMs": 64000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "受験は総合戦！"
+        },
+        {
+          "startMs": 64000,
+          "endMs": 66000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "特に国公立大学に受かりたければ"
+        },
+        {
+          "startMs": 66000,
+          "endMs": 67000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "わかりやすい授業も"
+        },
+        {
+          "startMs": 67000,
+          "endMs": 69000,
+          "chars": 5,
+          "lineCount": 1,
+          "text": "勉強計画も"
+        },
+        {
+          "startMs": 69000,
+          "endMs": 70000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "進捗管理も個別指導も"
+        },
+        {
+          "startMs": 70000,
+          "endMs": 72000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "全部大事です！"
+        },
+        {
+          "startMs": 72000,
+          "endMs": 73000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "そんな塾あるの？って"
+        },
+        {
+          "startMs": 73000,
+          "endMs": 75000,
+          "chars": 16,
+          "lineCount": 2,
+          "text": "実は\n出会った人から爆伸びしている"
+        },
+        {
+          "startMs": 75000,
+          "endMs": 76000,
+          "chars": 6,
+          "lineCount": 1,
+          "text": "知る人ぞ知る"
+        },
+        {
+          "startMs": 76000,
+          "endMs": 78000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も学生時代に通っていた塾があります！"
+        },
+        {
+          "startMs": 78000,
+          "endMs": 80000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "それは創業17年で"
+        },
+        {
+          "startMs": 80000,
+          "endMs": 82000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "1000人以上を合格へ導いてきた"
+        },
+        {
+          "startMs": 82000,
+          "endMs": 84000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "白谷塾オンライン教室です"
+        },
+        {
+          "startMs": 84000,
+          "endMs": 87000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "YouTubeでも総登録者3万人を超える"
+        },
+        {
+          "startMs": 87000,
+          "endMs": 90000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "人気の白谷塾オンライン教室の夏期講習では"
+        },
+        {
+          "startMs": 90000,
+          "endMs": 92000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "なんとほぼ毎日授業！"
+        },
+        {
+          "startMs": 92000,
+          "endMs": 93000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "合計50講座を"
+        },
+        {
+          "startMs": 93000,
+          "endMs": 96000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "予備校の価格の10分の1以下で受講できます！"
+        },
+        {
+          "startMs": 96000,
+          "endMs": 98000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "さらに授業も要点だけを"
+        },
+        {
+          "startMs": 98000,
+          "endMs": 100000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "的確にリアルタイムで教えてくれる"
+        },
+        {
+          "startMs": 100000,
+          "endMs": 103000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "だから自分で見るだけの映像授業と全然違う"
+        },
+        {
+          "startMs": 103000,
+          "endMs": 106000,
+          "chars": 22,
+          "lineCount": 1,
+          "text": "熟練の講師が自分だけの勉強計画を立ててくれる"
+        },
+        {
+          "startMs": 106000,
+          "endMs": 108000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "個別で担当チューターが"
+        },
+        {
+          "startMs": 108000,
+          "endMs": 110000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "一緒に立てた計画の進捗管理を"
+        },
+        {
+          "startMs": 110000,
+          "endMs": 111000,
+          "chars": 7,
+          "lineCount": 1,
+          "text": "毎日してくれる"
+        },
+        {
+          "startMs": 111000,
+          "endMs": 114000,
+          "chars": 18,
+          "lineCount": 1,
+          "text": "個別指導で添削や小テストもしてくれる"
+        },
+        {
+          "startMs": 114000,
+          "endMs": 116000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "24時間質問対応可能"
+        },
+        {
+          "startMs": 116000,
+          "endMs": 118000,
+          "chars": 11,
+          "lineCount": 1,
+          "text": "という圧倒的な手厚さで"
+        },
+        {
+          "startMs": 118000,
+          "endMs": 119000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "あなたをサポートします！"
+        },
+        {
+          "startMs": 119000,
+          "endMs": 123000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "私も白谷塾で半年で150点以上伸ばして"
+        },
+        {
+          "startMs": 123000,
+          "endMs": 125000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "現役で名古屋大学物理学科に合格しました！"
+        },
+        {
+          "startMs": 125000,
+          "endMs": 128000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "夏期講習を受けた生徒はこう言っています。"
+        },
+        {
+          "startMs": 128000,
+          "endMs": 131000,
+          "chars": 26,
+          "lineCount": 1,
+          "text": "気になる方はこの動画下のボタンをタップしてください！"
+        },
+        {
+          "startMs": 131000,
+          "endMs": 133000,
+          "chars": 17,
+          "lineCount": 1,
+          "text": "さらに今ならLINE追加特典として"
+        },
+        {
+          "startMs": 133000,
+          "endMs": 136000,
+          "chars": 20,
+          "lineCount": 1,
+          "text": "こちらの10特典のテキストがもらえます！"
+        },
+        {
+          "startMs": 136000,
+          "endMs": 138000,
+          "chars": 19,
+          "lineCount": 1,
+          "text": "さらに夏期講習申込者には申込特典として"
+        },
+        {
+          "startMs": 138000,
+          "endMs": 141000,
+          "chars": 16,
+          "lineCount": 1,
+          "text": "数万円分の国語や数学のテキストを"
+        },
+        {
+          "startMs": 141000,
+          "endMs": 143000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "無料でご自宅にお届けします！"
+        },
+        {
+          "startMs": 143000,
+          "endMs": 144000,
+          "chars": 10,
+          "lineCount": 1,
+          "text": "夏期講習の締め切りは"
+        },
+        {
+          "startMs": 144000,
+          "endMs": 147000,
+          "chars": 15,
+          "lineCount": 1,
+          "text": "7/7日(月) 七夕の23:59"
+        },
+        {
+          "startMs": 147000,
+          "endMs": 149000,
+          "chars": 12,
+          "lineCount": 1,
+          "text": "先着30名に達した時点で"
+        },
+        {
+          "startMs": 149000,
+          "endMs": 151000,
+          "chars": 13,
+          "lineCount": 1,
+          "text": "申し込みをストップするので"
+        },
+        {
+          "startMs": 151000,
+          "endMs": 152000,
+          "chars": 14,
+          "lineCount": 1,
+          "text": "お早めにお申し込みください！"
+        },
+        {
+          "startMs": 152000,
+          "endMs": 154000,
+          "chars": 9,
+          "lineCount": 1,
+          "text": "どこよりも低価格で"
+        }
+      ],
+      "createdAt": "2026-05-14T07:32:25.687Z"
+    }
+  ]
+}

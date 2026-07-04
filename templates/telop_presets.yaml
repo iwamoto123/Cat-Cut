@@ -1,0 +1,703 @@
+# テロッププリセット定義
+#
+# 各プリセットは Telop.tsx が読み込み、ページ単位で適用される。
+# composition.json の voice_data.cuts[].telops[].style に preset 名を指定する。
+# style 未指定なら "default" が使われる。
+#
+# パラメーター:
+#   font_family         : CSS font-family 文字列
+#   font_size           : 数値 (px)
+#   font_weight         : 数値 (100-900)
+#   letter_spacing      : 文字列 (CSS, 例: "0.02em")
+#   line_height         : 数値
+#   fill                : 塗りつぶし
+#     type              : "solid" | "gradient"
+#     color             : ソリッド時の色 (hex)
+#     gradient_from     : グラデ開始色
+#     gradient_to       : グラデ終了色
+#     gradient_direction: "vertical" | "horizontal" | "diagonal"
+#   inner_stroke        : 内縁取り (オプション)
+#     color             : 色
+#     width             : 太さ (px)
+#   outer_stroke        : 外縁取り (オプション)
+#     color             : 色
+#     width             : 太さ (px) ※inner_stroke より大きく
+#   drop_shadow         : 影 (CSS の filter: drop-shadow() 文字列、null で無効)
+#   y_position_offset   : 縦位置オフセット (yaml の telop_y からの相対調整, -0.1〜0.1, 0=変更なし)
+
+presets:
+  # ----- 標準テロップ (青グラデ + 多重縁取り) -----
+  default:
+    description: "標準テロップ。青縦グラデ+白枠+濃紺枠"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill:
+      type: gradient
+      gradient_from: "#7BB8DC"
+      gradient_to: "#1E5DA8"
+      gradient_direction: vertical
+    inner_stroke:
+      color: "#FFFFFF"
+      width: 10
+    outer_stroke:
+      color: "#1E3A5F"
+      width: 18
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- 強調 (派手・大きい) -----
+  highlight:
+    description: "重要な発言・数字・結論を強調する大きめテロップ。黄→オレンジ"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Arial Black", "Meiryo", sans-serif'
+    font_size: 96
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill:
+      type: gradient
+      gradient_from: "#FFD93D"
+      gradient_to: "#FF6B35"
+      gradient_direction: vertical
+    inner_stroke:
+      color: "#FFFFFF"
+      width: 12
+    outer_stroke:
+      color: "#7A2A00"
+      width: 24
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05  # 強調なので少し上に
+
+  # ----- シンプル (補助情報・引用など) -----
+  simple:
+    description: "シンプルな白文字+黒縁。地味なナレーションや補助テロップ向け"
+    font_family: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill:
+      type: solid
+      color: "#FFFFFF"
+    inner_stroke:
+      color: "#000000"
+      width: 8
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 3px 5px rgba(0,0,0,0.5))"
+    y_position_offset: 0
+
+  # ----- 落ち着き (説明・整理) -----
+  calm:
+    description: "落ち着いた説明・整理向け。淡い水色グラデ+白枠+深い青枠"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 66
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill:
+      type: gradient
+      gradient_from: "#D9F3FF"
+      gradient_to: "#5E91B8"
+      gradient_direction: vertical
+    inner_stroke:
+      color: "#FFFFFF"
+      width: 9
+    outer_stroke:
+      color: "#1C3D57"
+      width: 17
+    drop_shadow: "drop-shadow(0px 3px 6px rgba(0,0,0,0.35))"
+    y_position_offset: 0
+
+  # ----- 警告/注意 (赤系) -----
+  warning:
+    description: "注意喚起・否定的な発言を強調。赤グラデ+白枠"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Arial Black", "Meiryo", sans-serif'
+    font_size: 80
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill:
+      type: gradient
+      gradient_from: "#FF6B6B"
+      gradient_to: "#C92A2A"
+      gradient_direction: vertical
+    inner_stroke:
+      color: "#FFFFFF"
+      width: 10
+    outer_stroke:
+      color: "#5C0A0A"
+      width: 20
+    drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.5))"
+    y_position_offset: 0
+
+  # ===========================================================================
+  # 改善8-B-2: カラーウェイ×用途プリセット群(共通デザイン式)
+  #
+  # 全プリセット共通構造:
+  #   font_family: Zen Kaku Gothic Antique 900 (フォールバック Hiragino Sans 等)
+  #   fill: 縦グラデ(明るい色→深い色)
+  #   inner_stroke: 白 8〜10px
+  #   outer_stroke: 塗りと同系の濃色 16〜20px (innerより必ず太い)
+  #   drop_shadow あり
+  # 命名規則: "<カラーウェイ>_<用途>"。用途は standard(標準)/emphasis(強調大)/subtle(控えめ小)/
+  # band(帯背景バリエーション、standardと同サイズ+半透明黒帯)。カラーウェイ12種×用途3種+帯6種=42種。
+  # フラット単色1重縁のプリセットはここには作らない。
+  # ===========================================================================
+
+  # ----- ブルー (白谷塾青。defaultと同系色の独立カラーウェイファミリー) -----
+  blue_standard:
+    description: "ブルー・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#7BB8DC", gradient_to: "#1E5DA8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#1E3A5F", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  blue_emphasis:
+    description: "ブルー・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#7BB8DC", gradient_to: "#1E5DA8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#1E3A5F", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  blue_subtle:
+    description: "ブルー・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#7BB8DC", gradient_to: "#1E5DA8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#1E3A5F", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  blue_band:
+    description: "ブルー・帯背景"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#7BB8DC", gradient_to: "#1E5DA8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#1E3A5F", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    background: { color: "rgba(17, 17, 17, 0.62)" }
+    y_position_offset: 0
+
+  # ----- オレンジ (明#FFB347→深#E86A17、外縁焦茶) -----
+  orange_standard:
+    description: "オレンジ・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFB347", gradient_to: "#E86A17", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#6B3410", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  orange_emphasis:
+    description: "オレンジ・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#FFB347", gradient_to: "#E86A17", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#6B3410", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  orange_subtle:
+    description: "オレンジ・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFB347", gradient_to: "#E86A17", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#6B3410", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  orange_band:
+    description: "オレンジ・帯背景"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFB347", gradient_to: "#E86A17", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#6B3410", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    background: { color: "rgba(17, 17, 17, 0.62)" }
+    y_position_offset: 0
+
+  # ----- レッド -----
+  red_standard:
+    description: "レッド・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FF7A7A", gradient_to: "#C92A2A", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#5C0A0A", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  red_emphasis:
+    description: "レッド・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#FF7A7A", gradient_to: "#C92A2A", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#5C0A0A", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  red_subtle:
+    description: "レッド・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FF7A7A", gradient_to: "#C92A2A", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#5C0A0A", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  red_band:
+    description: "レッド・帯背景"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FF7A7A", gradient_to: "#C92A2A", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#5C0A0A", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    background: { color: "rgba(17, 17, 17, 0.62)" }
+    y_position_offset: 0
+
+  # ----- グリーン -----
+  green_standard:
+    description: "グリーン・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#A0E7A0", gradient_to: "#2F8F4F", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#1A4D2E", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  green_emphasis:
+    description: "グリーン・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#A0E7A0", gradient_to: "#2F8F4F", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#1A4D2E", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  green_subtle:
+    description: "グリーン・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#A0E7A0", gradient_to: "#2F8F4F", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#1A4D2E", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  green_band:
+    description: "グリーン・帯背景"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#A0E7A0", gradient_to: "#2F8F4F", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#1A4D2E", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    background: { color: "rgba(17, 17, 17, 0.62)" }
+    y_position_offset: 0
+
+  # ----- パープル -----
+  purple_standard:
+    description: "パープル・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#D9AFFF", gradient_to: "#7B1FA2", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#3B0764", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  purple_emphasis:
+    description: "パープル・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#D9AFFF", gradient_to: "#7B1FA2", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#3B0764", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  purple_subtle:
+    description: "パープル・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#D9AFFF", gradient_to: "#7B1FA2", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#3B0764", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- ピンク -----
+  pink_standard:
+    description: "ピンク・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFB6D9", gradient_to: "#E0529B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#7A1F51", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  pink_emphasis:
+    description: "ピンク・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#FFB6D9", gradient_to: "#E0529B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#7A1F51", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  pink_subtle:
+    description: "ピンク・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFB6D9", gradient_to: "#E0529B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#7A1F51", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  pink_band:
+    description: "ピンク・帯背景"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFB6D9", gradient_to: "#E0529B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#7A1F51", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    background: { color: "rgba(17, 17, 17, 0.62)" }
+    y_position_offset: 0
+
+  # ----- 金黄(ゴールド) -----
+  gold_standard:
+    description: "金黄・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFE9A8", gradient_to: "#C9A227", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#6B4E00", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  gold_emphasis:
+    description: "金黄・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#FFE9A8", gradient_to: "#C9A227", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#6B4E00", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  gold_subtle:
+    description: "金黄・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFE9A8", gradient_to: "#C9A227", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#6B4E00", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  gold_band:
+    description: "金黄・帯背景"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFE9A8", gradient_to: "#C9A227", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#6B4E00", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    background: { color: "rgba(17, 17, 17, 0.62)" }
+    y_position_offset: 0
+
+  # ----- 白 (黒外縁) -----
+  white_standard:
+    description: "白・標準(黒外縁)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFFFFF", gradient_to: "#E8E8E8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#000000", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  white_emphasis:
+    description: "白・強調大(黒外縁)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#FFFFFF", gradient_to: "#E8E8E8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#000000", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  white_subtle:
+    description: "白・控えめ小(黒外縁)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#FFFFFF", gradient_to: "#E8E8E8", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#000000", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- 黒 (白内縁+グレー外縁) -----
+  black_standard:
+    description: "黒・標準(白内縁+グレー外縁)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#4A4A4A", gradient_to: "#050505", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#4D4D4D", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  black_emphasis:
+    description: "黒・強調大(白内縁+グレー外縁)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#4A4A4A", gradient_to: "#050505", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#4D4D4D", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  black_subtle:
+    description: "黒・控えめ小(白内縁+グレー外縁)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#4A4A4A", gradient_to: "#050505", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#4D4D4D", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- 水色(サイアン) -----
+  cyan_standard:
+    description: "水色・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#B8F2FF", gradient_to: "#1CA9C9", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#0B4A57", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  cyan_emphasis:
+    description: "水色・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#B8F2FF", gradient_to: "#1CA9C9", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#0B4A57", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  cyan_subtle:
+    description: "水色・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#B8F2FF", gradient_to: "#1CA9C9", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#0B4A57", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- ネイビー -----
+  navy_standard:
+    description: "ネイビー・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#6E8CB8", gradient_to: "#16223D", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#0A0F1A", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  navy_emphasis:
+    description: "ネイビー・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#6E8CB8", gradient_to: "#16223D", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#0A0F1A", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  navy_subtle:
+    description: "ネイビー・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#6E8CB8", gradient_to: "#16223D", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#0A0F1A", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- 茶(ブラウン) -----
+  brown_standard:
+    description: "茶・標準"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#D8A46B", gradient_to: "#8B5A2B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#4A2E12", width: 18 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+  brown_emphasis:
+    description: "茶・強調大"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 94
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#D8A46B", gradient_to: "#8B5A2B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 10 }
+    outer_stroke: { color: "#4A2E12", width: 20 }
+    drop_shadow: "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))"
+    y_position_offset: -0.05
+  brown_subtle:
+    description: "茶・控えめ小"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 56
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill: { type: gradient, gradient_from: "#D8A46B", gradient_to: "#8B5A2B", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 9 }
+    outer_stroke: { color: "#4A2E12", width: 16 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+
+  # ----- 質問・ホスト発言 (グリーン系) -----
+  question:
+    description: "ホスト/インタビュアーの問いかけ。緑グラデで穏やかに"
+    font_family: '"Hiragino Maru Gothic ProN", "Zen Kaku Gothic Antique", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 68
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.4
+    fill:
+      type: gradient
+      gradient_from: "#A0E7A0"
+      gradient_to: "#2F8F4F"
+      gradient_direction: vertical
+    inner_stroke:
+      color: "#FFFFFF"
+      width: 10
+    outer_stroke:
+      color: "#1A4D2E"
+      width: 18
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0

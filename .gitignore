@@ -1,0 +1,22 @@
+# 依存・ビルド
+.venv/
+node_modules/
+dist/
+desktop/dist/
+remotion/node_modules/
+
+# 実行データ・秘密情報
+runs/
+.env
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# OS / IDE
+.DS_Store
+*.log
+.cursor/
