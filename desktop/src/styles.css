@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Caveat:wght@400;700&family=DotGothic16&family=Hina+Mincho&family=Klee+One:wght@400;600&family=M+PLUS+Rounded+1c:wght@400;700;800;900&family=Mochiy+Pop+One&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Reggae+One&family=RocknRoll+One&family=Shippori+Mincho:wght@400;700;800&family=Train+One&family=Zen+Kaku+Gothic+Antique:wght@400;700;900&family=Zen+Maru+Gothic:wght@400;700;900&display=swap");
+/* フェーズT2.5-3: Shippori Mincho B1(明朝プリセット)・Dela Gothic One(極太)・Yuji Syuku(毛筆 op_brush)を追加。
+   オフライン時はimportが失敗してもプリセットのfont-familyフォールバック(ヒラギノ明朝等のシステムフォント)で描画される。 */
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Caveat:wght@400;700&family=Dela+Gothic+One&family=DotGothic16&family=Hina+Mincho&family=Klee+One:wght@400;600&family=M+PLUS+Rounded+1c:wght@400;700;800;900&family=Mochiy+Pop+One&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Reggae+One&family=RocknRoll+One&family=Shippori+Mincho:wght@400;700;800&family=Shippori+Mincho+B1:wght@400;700;800&family=Train+One&family=Yuji+Syuku&family=Zen+Kaku+Gothic+Antique:wght@400;700;900&family=Zen+Maru+Gothic:wght@400;700;900&display=swap");
 
 :root {
   color: #1f2328;
@@ -3301,6 +3303,14 @@ textarea:focus {
   color: #205dcf;
 }
 
+.sceneAiUsageSummary {
+  flex: 1 1 100%;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: #667085;
+}
+
 .sceneInspectionCopyButton {
   display: inline-flex;
   align-items: center;
@@ -3800,6 +3810,88 @@ textarea:focus {
   color: #205dcf;
 }
 
+/* フェーズT2.5-4: typeバッジのドロップダウン(種類10種+プリセット個別指定) */
+.sceneDirectedTypeMenu {
+  max-height: 420px;
+  overflow-y: auto;
+  min-width: 200px;
+}
+
+.sceneDirectedMenuCaption {
+  padding: 6px 8px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #98a2b3;
+  letter-spacing: 0.04em;
+}
+
+/* フェーズT2.5-4: 設定「テロップデザイン」(シーンの種類→プリセット割り当て) */
+.telopTypeMappingModal {
+  width: min(680px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.28);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.telopTypeMappingList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.telopTypeMappingRow {
+  display: grid;
+  grid-template-columns: 170px 1fr 190px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+}
+
+.telopTypeMappingName {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1d2939;
+}
+
+.telopTypeMappingDescription {
+  font-size: 11px;
+  color: #667085;
+}
+
+.telopTypeMappingSelect {
+  height: 32px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 0 8px;
+  font-size: 12px;
+  background: #ffffff;
+}
+
+.telopTypeMappingPreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 8px;
+  background: #1f242e;
+  padding: 4px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.telopTypeMappingPreviewMissing {
+  color: #98a2b3;
+  font-size: 11px;
+}
+
 /* --- T-3(スタイルスウォッチ+パレット) --- */
 .sceneTelopInputRow {
   display: flex;
@@ -4066,6 +4158,24 @@ textarea:focus {
 .sceneSuspicionDetail {
   color: #98a2b3;
   font-size: 11px;
+}
+
+/* 改善21-B: AI校正未実行項目内の「⚙API設定を開く」ボタン */
+.sceneSuspicionActionButton {
+  flex: 0 0 auto;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sceneSuspicionActionButton:hover {
+  border-color: #458bc3;
+  color: #2e6a9e;
 }
 
 .sceneNavBar {

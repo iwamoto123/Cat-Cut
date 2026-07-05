@@ -40,7 +40,132 @@ GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_TIMEOUT = 300.0
 RETRY_DELAY_SEC = 2.0
 
+# エラー本文をログ・JSONへ含める際の上限文字数(改善21-A)。
+ERROR_DETAIL_MAX_CHARS = 500
+
 T = TypeVar("T")
+
+# 概算単価（USD / 100万トークン・目安）。実際の請求は各プロバイダのダッシュボードで確認すること。
+# claude-sonnet系: in $3.0 / out $15.0
+# gpt-*-mini系: in $0.15 / out $0.60
+# gemini-*-flash系: in $0.10 / out $0.40
+
+_usage_tracker: dict[str, Any] = {
+    "calls": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "provider": "",
+    "model": "",
+}
+
+
+def reset_usage_tracking() -> None:
+    """累積トークン使用量トラッカーをクリアする。"""
+    _usage_tracker["calls"] = 0
+    _usage_tracker["input_tokens"] = 0
+    _usage_tracker["output_tokens"] = 0
+    _usage_tracker["provider"] = ""
+    _usage_tracker["model"] = ""
+
+
+def record_usage(
+    provider: str,
+    model: str,
+    input_tokens: Optional[int],
+    output_tokens: Optional[int],
+) -> None:
+    """LLM呼び出し1回分の使用量を累積する（内部用）。"""
+    _usage_tracker["calls"] += 1
+    _usage_tracker["provider"] = provider
+    _usage_tracker["model"] = model
+    if input_tokens is not None:
+        _usage_tracker["input_tokens"] += input_tokens
+    if output_tokens is not None:
+        _usage_tracker["output_tokens"] += output_tokens
+
+
+def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> Optional[float]:
+    """モデル名プレフィックスから概算コスト(USD)を返す。未知モデルは None。"""
+    model_lower = model.lower()
+    in_rate: Optional[float] = None
+    out_rate: Optional[float] = None
+
+    if model_lower.startswith("claude-sonnet"):
+        in_rate, out_rate = 3.0, 15.0
+    elif model_lower.startswith("gpt-") and "-mini" in model_lower:
+        in_rate, out_rate = 0.15, 0.60
+    elif model_lower.startswith("gemini-") and "flash" in model_lower:
+        in_rate, out_rate = 0.10, 0.40
+
+    if in_rate is None or out_rate is None:
+        return None
+    return (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
+
+
+def get_usage_summary() -> Optional[dict[str, Any]]:
+    """累積使用量サマリを返す。呼び出し0回なら None。"""
+    if _usage_tracker["calls"] == 0:
+        return None
+    model = str(_usage_tracker["model"])
+    input_tokens = int(_usage_tracker["input_tokens"])
+    output_tokens = int(_usage_tracker["output_tokens"])
+    return {
+        "calls": int(_usage_tracker["calls"]),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimated_cost_usd": estimate_cost_usd(model, input_tokens, output_tokens),
+        "provider": str(_usage_tracker["provider"]),
+        "model": model,
+    }
+
+
+def extract_anthropic_usage(data: dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """Anthropic API レスポンスからトークン使用量を取り出す。"""
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return None, None
+    inp = usage.get("input_tokens")
+    out = usage.get("output_tokens")
+    if isinstance(inp, int) and isinstance(out, int):
+        return inp, out
+    return None, None
+
+
+def extract_openai_usage(data: dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """OpenAI API レスポンスからトークン使用量を取り出す。"""
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return None, None
+    inp = usage.get("prompt_tokens")
+    out = usage.get("completion_tokens")
+    if isinstance(inp, int) and isinstance(out, int):
+        return inp, out
+    return None, None
+
+
+def extract_gemini_usage(data: dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """Gemini API レスポンスからトークン使用量を取り出す。"""
+    meta = data.get("usageMetadata")
+    if not isinstance(meta, dict):
+        return None, None
+    inp = meta.get("promptTokenCount")
+    out = meta.get("candidatesTokenCount")
+    if isinstance(inp, int) and isinstance(out, int):
+        return inp, out
+    return None, None
+
+
+def print_usage_summary(prefix: str = "  AI usage:") -> None:
+    """stdout に使用量サマリを出力する。"""
+    usage = get_usage_summary()
+    if not usage:
+        return
+    cost = usage.get("estimated_cost_usd")
+    cost_str = f"est ${cost:.2f}" if cost is not None else "est n/a"
+    print(
+        f"{prefix} {usage['calls']} calls, "
+        f"in={usage['input_tokens']} out={usage['output_tokens']} tokens, {cost_str}"
+    )
 
 
 def find_env_key(env_var: str, repo_root: Path) -> str:
@@ -176,9 +301,102 @@ def call_llm_json(
         return llm(provider, api_key, model, prompt + JSON_PARSE_RETRY_SUFFIX)
 
 
+def truncate_error_detail(text: str, max_chars: int = ERROR_DETAIL_MAX_CHARS) -> str:
+    """エラー本文をログ・JSON出力用に先頭 max_chars 文字へ丸める。"""
+    normalized = str(text or "").strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[:max_chars] + "…"
+
+
+def _raise_with_response_body(exc: Exception) -> None:
+    """HTTPStatusError をレスポンス本文(先頭500字)入りメッセージで再raiseする(改善21-A)。
+
+    型は httpx.HTTPStatusError のまま保つので、_is_retryable_error / classify_llm_error /
+    call_claude の thinking フォールバック(400判定)は従来どおり動作する。
+    """
+    import httpx
+
+    if not isinstance(exc, httpx.HTTPStatusError):
+        raise exc
+    try:
+        body = truncate_error_detail(exc.response.text)
+    except Exception:  # noqa: BLE001 - 本文が読めなくても元エラーは損なわない
+        body = ""
+    if body and body not in str(exc):
+        raise httpx.HTTPStatusError(
+            f"{exc} | response body: {body}",
+            request=exc.request,
+            response=exc.response,
+        ) from None
+    raise exc
+
+
+# billing/auth はリトライ・残チャンク続行が無意味な致命エラー(改善21-A)。
+FATAL_LLM_ERROR_KINDS = frozenset({"billing", "auth"})
+
+_BILLING_PATTERNS = ("credit balance", "insufficient_quota", "billing")
+_AUTH_PATTERNS = (
+    "invalid x-api-key",
+    "api key not valid",
+    "invalid api key",
+    "incorrect api key",
+    "authentication_error",
+    "permission_error",
+)
+_OVERLOADED_PATTERNS = ("overloaded",)
+
+
+def classify_llm_error(exc: Exception) -> str:
+    """LLM API呼び出しの例外を分類する(改善21-A)。
+
+    戻り値: "billing" / "auth" / "rate_limit" / "overloaded" / "timeout" / "other"
+    """
+    import httpx
+
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+
+    message = str(exc).lower()
+    status: Optional[int] = None
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        # _raise_with_response_body を経由しない生の例外でも本文を判定対象にする
+        try:
+            message += " " + exc.response.text[:500].lower()
+        except Exception:  # noqa: BLE001
+            pass
+
+    if any(pattern in message for pattern in _BILLING_PATTERNS):
+        return "billing"
+    if status in (401, 403) or any(pattern in message for pattern in _AUTH_PATTERNS):
+        return "auth"
+    if status == 429:
+        return "rate_limit"
+    if status in (503, 529) or any(pattern in message for pattern in _OVERLOADED_PATTERNS):
+        return "overloaded"
+    return "other"
+
+
+def summarize_error_kinds(kinds: list[str]) -> str:
+    """複数チャンクの error_kind から代表値(最頻・同数なら先に出た方)を返す。"""
+    if not kinds:
+        return "other"
+    counts: dict[str, int] = {}
+    for kind in kinds:
+        counts[kind] = counts.get(kind, 0) + 1
+    best = kinds[0]
+    for kind in counts:
+        if counts[kind] > counts[best]:
+            best = kind
+    return best
+
+
 def _is_retryable_error(exc: Exception) -> bool:
     import httpx
 
+    if classify_llm_error(exc) in FATAL_LLM_ERROR_KINDS:
+        return False
     if isinstance(exc, httpx.TimeoutException):
         return True
     if isinstance(exc, httpx.ConnectError):
@@ -216,8 +434,14 @@ def call_claude(api_key: str, model: str, prompt: str, timeout: float = DEFAULT_
             json=payload,
             timeout=timeout,
         )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_with_response_body(exc)
+        data = response.json()
+        inp, out = extract_anthropic_usage(data)
+        record_usage("anthropic", model, inp, out)
+        return data
 
     def _post() -> dict[str, Any]:
         # thinking系モデル(claude-sonnet-5等)は既定で内部思考にmax_tokensを使い切り、
@@ -270,8 +494,13 @@ def call_openai(api_key: str, model: str, prompt: str, timeout: float = DEFAULT_
             },
             timeout=timeout,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_with_response_body(exc)
         data = response.json()
+        inp, out = extract_openai_usage(data)
+        record_usage("openai", model, inp, out)
         choices = data.get("choices") or []
         if not choices:
             raise ValueError("OpenAI response has no choices")
@@ -298,8 +527,13 @@ def call_gemini(api_key: str, model: str, prompt: str, timeout: float = DEFAULT_
             },
             timeout=timeout,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_with_response_body(exc)
         data = response.json()
+        inp, out = extract_gemini_usage(data)
+        record_usage("gemini", model, inp, out)
         candidates = data.get("candidates") or []
         if not candidates:
             raise ValueError("Gemini response has no candidates")

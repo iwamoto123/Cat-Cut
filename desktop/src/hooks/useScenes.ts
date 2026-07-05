@@ -10,6 +10,8 @@ import {
   type TelopOccurrenceTarget,
   setChipDeleted,
   setChipsDeleted,
+  setSceneDirectedStyle,
+  setSceneDirectedType,
   setSceneEmotionTag,
   setSceneStyleOverride,
   setSceneTelopText,
@@ -63,6 +65,16 @@ export function useScenes(initialScenes: Scene[] = []) {
   /** T-3: スウォッチ→パレットからの個別スタイルオーバーライド設定/解除(null=解除)。 */
   const setStyleOverride = (sceneId: string, styleId: string | null) => {
     history.setPresent((current) => setSceneStyleOverride(current, sceneId, styleId));
+  };
+
+  /** フェーズT2(directedモード): プリセットの個別上書き(null=解除してマッピング解決へ戻す)。 */
+  const setDirectedStyle = (sceneId: string, styleId: string | null) => {
+    history.setPresent((current) => setSceneDirectedStyle(current, sceneId, styleId));
+  };
+
+  /** フェーズT2.5-4(directedモード): typeバッジからのシーン種類変更(個別上書きは解除)。 */
+  const setDirectedType = (sceneId: string, typeId: string) => {
+    history.setPresent((current) => setSceneDirectedType(current, sceneId, typeId));
   };
 
   /** T-3: 「このスタイルを同じ感情の全シーンに適用」。1回の呼び出し=1つのUndo操作。 */
@@ -121,6 +133,8 @@ export function useScenes(initialScenes: Scene[] = []) {
     setTelopText,
     setEmotionTag,
     setStyleOverride,
+    setDirectedStyle,
+    setDirectedType,
     applyStyleToEmotionGroup,
     replaceSelectedTelopOccurrences,
     splitAtWord,

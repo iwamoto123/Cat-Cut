@@ -16,6 +16,9 @@ _QUESTION_EXCLAM_COMMA_RE = re.compile(r"([？！])[、，]+")
 # 改善16-C: STTローマ字アーティファクト (かな/漢字直後の desu/masu)
 _ROMAJI_DESU_RE = re.compile(r"([ぁ-んァ-ヶー一-龠])(desu)(?=$|[、。，．,.])", re.IGNORECASE)
 _ROMAJI_MASU_RE = re.compile(r"([ぁ-んァ-ヶー一-龠])(masu)(?=$|[、。，．,.])", re.IGNORECASE)
+# 改善17-B: 行末の読点+フィラー断片 (長い順にマッチ)
+_TRAILING_FILLER_FRAGMENTS = ("まあ", "ま", "ね")
+_TRAILING_COMMA_CHARS = "、，"
 
 
 def normalize_romaji_stt_artifacts(text: str) -> str:
@@ -38,9 +41,20 @@ def clean_telop_commas(text: str) -> str:
     return text
 
 
+def strip_trailing_filler_fragments(line: str) -> str:
+    """行末の「、ね」「、ま」「、まあ」等のフィラー断片を除去する。"""
+    for fragment in _TRAILING_FILLER_FRAGMENTS:
+        for comma in _TRAILING_COMMA_CHARS:
+            suffix = comma + fragment
+            if line.endswith(suffix):
+                return line[: -len(suffix)]
+    return line
+
+
 def clean_telop_line(line: str) -> str:
-    """行単位: 「？、」「！、」を正規化し、行末の読点(、，)を除去する。"""
+    """行単位: 「？、」「！、」を正規化し、行末フィラー・読点(、，)を除去する。"""
     line = _QUESTION_EXCLAM_COMMA_RE.sub(r"\1", line)
+    line = strip_trailing_filler_fragments(line)
     line = _TRAILING_COMMA_RE.sub("", line)
     return line
 

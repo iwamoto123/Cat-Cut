@@ -12,26 +12,37 @@ test("buildAiReviewBanner: キー未設定相当(reason=no AI provider key set)�
   );
 });
 
-test("buildAiReviewBanner: パス1失敗で強い警告バナー", () => {
+// 改善21-B: 完全失敗の詳細説明は要確認キュー先頭項目に移し、バナーは簡潔な1行に短縮。
+
+test("buildAiReviewBanner: billing失敗は「残高不足」の簡潔な1行バナー", () => {
   const banner = buildAiReviewBanner({
     transcriptRefineFailed: true,
-    transcriptRefineFailureReason: "api_error: The read operation timed out",
+    transcriptErrorKind: "billing",
   });
   assert.ok(banner);
   assert.equal(banner?.severity, "error");
-  assert.match(banner?.message || "", /AI校正が実行できませんでした/);
-  assert.match(banner?.message || "", /未校正です/);
-  assert.match(banner?.message || "", /timed out/);
+  assert.match(banner?.message || "", /AI校正未実行/);
+  assert.match(banner?.message || "", /残高不足/);
+  assert.match(banner?.message || "", /要確認リスト参照/);
+  assert.ok((banner?.message || "").length < 80, "簡潔な1行に収まる");
 });
 
-test("buildAiReviewBanner: パス2失敗で強い警告バナー", () => {
+test("buildAiReviewBanner: auth失敗は「APIキー無効」表示", () => {
   const banner = buildAiReviewBanner({
     telopRefineFailed: true,
-    telopRefineFailureReason: "api_error: connection reset",
+    telopErrorKind: "auth",
   });
-  assert.ok(banner);
   assert.equal(banner?.severity, "error");
-  assert.match(banner?.message || "", /パス2/);
+  assert.match(banner?.message || "", /APIキー無効/);
+});
+
+test("buildAiReviewBanner: error_kindが無い旧runは「エラー」(other)にフォールバック", () => {
+  const banner = buildAiReviewBanner({
+    transcriptRefineFailed: true,
+    transcriptRefineFailureReason: "api_error: all 8 chunks failed",
+  });
+  assert.equal(banner?.severity, "error");
+  assert.match(banner?.message || "", /AI校正未実行（エラー）/);
 });
 
 test("buildAiReviewBanner: 部分失敗は弱い警告", () => {
@@ -48,8 +59,9 @@ test("buildAiReviewBanner: 部分失敗は弱い警告", () => {
 test("buildAiReviewBanner: 完全失敗が部分失敗より優先", () => {
   const banner = buildAiReviewBanner({
     transcriptRefineFailed: true,
-    transcriptRefineFailureReason: "api_error: boom",
+    transcriptErrorKind: "timeout",
     transcriptFailedChunks: 2,
   });
   assert.equal(banner?.severity, "error");
+  assert.match(banner?.message || "", /タイムアウト/);
 });

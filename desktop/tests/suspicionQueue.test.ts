@@ -4,6 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  aiFailureMessage,
+  buildAiFailureSuspicion,
   buildAiReviewSuspicions,
   buildBoundaryOverrunSuspicions,
   buildFillerSuspicions,
@@ -12,7 +14,10 @@ import {
   buildShortCutSuspicions,
   buildSuspicionQueue,
   buildTelopReviewSuspicions,
+  buildWordSplitSuspicions,
+  COMMON_KATAKANA_WORDS,
   hasMeaningfulConfidenceVariance,
+  normalizeAiFailureErrorKind,
   type AiReviewInput,
   type SuspicionTelopFinding,
 } from "../src/lib/suspicionQueue.ts";
@@ -139,27 +144,28 @@ test("buildProperNounSuspicions: telop_reviewの対象外type(filler_only等)は
 });
 
 test("buildProperNounSuspicions: カタカナ3文字以上の連続を辞書未登録ならmediumでフラグする", () => {
+  // 改善21-C: 一般語除外リストに載っていない固有名詞らしき語(シラタニ)を使う。
   const testWords: TranscriptWord[] = [
-    { id: "w1", text: "コ", startMs: 0, endMs: 100 },
-    { id: "w2", text: "ン", startMs: 100, endMs: 200 },
-    { id: "w3", text: "サ", startMs: 200, endMs: 300 },
-    { id: "w4", text: "ル", startMs: 300, endMs: 400 },
+    { id: "w1", text: "シ", startMs: 0, endMs: 100 },
+    { id: "w2", text: "ラ", startMs: 100, endMs: 200 },
+    { id: "w3", text: "タ", startMs: 200, endMs: 300 },
+    { id: "w4", text: "ニ", startMs: 300, endMs: 400 },
   ];
   const items = buildProperNounSuspicions(testWords, [], [{ startMs: 0, endMs: 400 }]);
   assert.equal(items.length, 1);
   assert.equal(items[0].severity, "medium");
-  assert.equal(items[0].text, "コンサル");
+  assert.equal(items[0].text, "シラタニ");
 });
 
 test("buildProperNounSuspicions: ユーザー辞書に登録済みのカタカナ語はフラグしない", () => {
   const testWords: TranscriptWord[] = [
-    { id: "w1", text: "コ", startMs: 0, endMs: 100 },
-    { id: "w2", text: "ン", startMs: 100, endMs: 200 },
-    { id: "w3", text: "サ", startMs: 200, endMs: 300 },
-    { id: "w4", text: "ル", startMs: 300, endMs: 400 },
+    { id: "w1", text: "シ", startMs: 0, endMs: 100 },
+    { id: "w2", text: "ラ", startMs: 100, endMs: 200 },
+    { id: "w3", text: "タ", startMs: 200, endMs: 300 },
+    { id: "w4", text: "ニ", startMs: 300, endMs: 400 },
   ];
   const items = buildProperNounSuspicions(testWords, [], [{ startMs: 0, endMs: 400 }], {
-    knownDictionary: [{ wrong: "コンサル", correct: "コンサル" }],
+    knownDictionary: [{ wrong: "シラタニ", correct: "シラタニ" }],
   });
   assert.equal(items.length, 0);
 });
@@ -306,19 +312,19 @@ test("runs/20260428_test の実データから疑義キューが生成される(
   // このrunのfillers.jsonは空(total_fillers:0)のため、フィラー検出も0件。
   assert.equal(fillerItems.length, 0);
   // このrunのテキストには「カット」(2箇所)「テスト」(1箇所)というカタカナ語(いずれも3文字)が
-  // 含まれ、ユーザー辞書に未登録のため固有名詞ヒューリスティックが3件ヒットする(実用的な検出例)。
-  assert.equal(properNounItems.length, 3);
+  // 含まれる。改善21-Cで「テスト」は一般語除外リスト入りしたため、「カット」の2件のみヒットする。
+  assert.equal(properNounItems.length, 2);
   assert.deepEqual(
     properNounItems.map((item) => item.text),
-    ["カット", "カット", "テスト"],
+    ["カット", "カット"],
   );
   // 境界はみ出し(>80ms)が3件存在することを確認済み(手動検算、改善2でも維持)。
   assert.equal(boundaryOverrunItems.length, 3);
   // keep_segmentsは全て700ms以上のため短いカットは検出されない。
   assert.equal(shortCutItems.length, 0);
 
-  // 受け入れ条件: 全52単語ヒットのような実用性のない状態にはならない(52件 -> 6件)。
-  assert.equal(items.length, 6, "要確認件数が実用的な少数になっているはず");
+  // 受け入れ条件: 全52単語ヒットのような実用性のない状態にはならない(52件 -> 5件)。
+  assert.equal(items.length, 5, "要確認件数が実用的な少数になっているはず");
 });
 
 // --- 改善13: AIモード ---
@@ -418,4 +424,249 @@ test("buildSuspicionQueue: aiReview.enabled=false の場合は従来どおり", 
   });
   assert.equal(items.some((item) => item.type === "filler"), true);
   assert.equal(items.some((item) => item.type === "ai_review"), false);
+});
+
+test("buildWordSplitSuspicions: word_split_flags を high 疑義として生成", () => {
+  const words: TranscriptWord[] = [
+    { id: "w-head", text: "ト", startMs: 1377148, endMs: 1377200 },
+  ];
+  const items = buildWordSplitSuspicions(
+    [
+      {
+        prev_end_ms: 1372737,
+        next_start_ms: 1377148,
+        tail_text: "この部分をボル",
+        head_text: "トマン定数と",
+        gap_ms: 4411,
+      },
+    ],
+    words,
+  );
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, "word_split");
+  assert.equal(items[0].severity, "high");
+  assert.equal(items[0].label, "カット境界の単語分断の疑い");
+  assert.equal(items[0].wordIds[0], "w-head");
+});
+
+test("buildSuspicionQueue: wordSplitFlags 未指定でも壊れない", () => {
+  const items = buildSuspicionQueue({
+    words: [{ id: "w1", text: "あ", startMs: 0, endMs: 100 }],
+    keepSegments: [{ startMs: 0, endMs: 200 }],
+  });
+  assert.equal(items.some((item) => item.type === "word_split"), false);
+});
+
+// --- 改善21-B: AI校正失敗を要確認キューの先頭項目に統合 ---
+
+test("normalizeAiFailureErrorKind: 既知の分類はそのまま、未知・空はotherにフォールバック", () => {
+  assert.equal(normalizeAiFailureErrorKind("billing"), "billing");
+  assert.equal(normalizeAiFailureErrorKind("auth"), "auth");
+  assert.equal(normalizeAiFailureErrorKind("rate_limit"), "rate_limit");
+  assert.equal(normalizeAiFailureErrorKind("overloaded"), "overloaded");
+  assert.equal(normalizeAiFailureErrorKind("timeout"), "timeout");
+  assert.equal(normalizeAiFailureErrorKind(""), "other");
+  assert.equal(normalizeAiFailureErrorKind(undefined), "other");
+  assert.equal(normalizeAiFailureErrorKind("unknown_kind"), "other");
+});
+
+test("aiFailureMessage: billingはプロバイダ名入りのチャージ・切替案内", () => {
+  const message = aiFailureMessage("billing", "anthropic", "");
+  assert.match(message.action, /Anthropic/);
+  assert.match(message.action, /クレジット残高が不足/);
+  assert.match(message.action, /⚙API設定/);
+  assert.match(message.action, /Geminiは無料枠あり/);
+  assert.match(message.action, /再解析/);
+});
+
+test("aiFailureMessage: authはAPIキー確認の案内", () => {
+  const message = aiFailureMessage("auth", "openai", "");
+  assert.match(message.action, /APIキーが無効/);
+  assert.match(message.action, /⚙API設定/);
+});
+
+test("aiFailureMessage: rate_limit/overloadedは待って再解析の案内", () => {
+  for (const kind of ["rate_limit", "overloaded"] as const) {
+    const message = aiFailureMessage(kind, "anthropic", "");
+    assert.match(message.action, /混雑・制限中/);
+    assert.match(message.action, /しばらく待ってから再解析/);
+  }
+});
+
+test("aiFailureMessage: timeout/otherは再試行案内+error_detail要約", () => {
+  const message = aiFailureMessage("other", "anthropic", "HTTPStatusError: boom " + "x".repeat(300));
+  assert.match(message.action, /再解析で再試行/);
+  assert.match(message.action, /詳細: HTTPStatusError: boom/);
+  assert.ok(message.action.length < 260, "error_detailは要約される");
+});
+
+test("buildAiFailureSuspicion: 失敗が無ければnull", () => {
+  assert.equal(buildAiFailureSuspicion(undefined), null);
+  assert.equal(buildAiFailureSuspicion({ enabled: true }), null);
+});
+
+test("buildAiFailureSuspicion: billing失敗は行アンカーなしのhigh項目になる", () => {
+  const item = buildAiFailureSuspicion({
+    enabled: false,
+    transcriptRefineFailed: true,
+    telopRefineFailed: true,
+    transcriptErrorKind: "billing",
+    transcriptProvider: "anthropic",
+    transcriptErrorDetail: "Your credit balance is too low",
+  });
+  assert.ok(item);
+  assert.equal(item?.type, "ai_failure");
+  assert.equal(item?.severity, "high");
+  assert.equal(item?.label, "AI校正が実行されていません");
+  assert.deepEqual(item?.wordIds, [], "特定行にアンカーしない");
+  assert.equal(item?.timestampMs, 0);
+  assert.match(item?.detail || "", /クレジット残高が不足/);
+  assert.match(item?.text || "", /パス1・パス2/);
+});
+
+test("buildAiFailureSuspicion: パス2のみ失敗時はtelop側のerror_kindを使う", () => {
+  const item = buildAiFailureSuspicion({
+    enabled: true,
+    telopRefineFailed: true,
+    telopErrorKind: "auth",
+    telopProvider: "gemini",
+  });
+  assert.ok(item);
+  assert.match(item?.detail || "", /APIキーが無効/);
+  assert.match(item?.text || "", /パス2/);
+});
+
+test("buildSuspicionQueue: AI校正失敗項目がキューの先頭に固定される", () => {
+  // high の word_split・低confidence等が存在しても ai_failure が先頭。
+  const testWords: TranscriptWord[] = [
+    { id: "w1", text: "こ", startMs: 0, endMs: 120, confidence: 0.9 },
+    { id: "w2", text: "ん", startMs: 130, endMs: 240, confidence: 0.3 },
+    { id: "w3", text: "に", startMs: 250, endMs: 340, confidence: 0.5 },
+  ];
+  const items = buildSuspicionQueue({
+    words: testWords,
+    keepSegments: [{ startMs: 0, endMs: 400 }],
+    wordSplitFlags: [
+      { prev_end_ms: 100, next_start_ms: 130, tail_text: "こ", head_text: "ん", gap_ms: 30 },
+    ],
+    aiReview: {
+      enabled: false,
+      transcriptRefineFailed: true,
+      telopRefineFailed: true,
+      transcriptErrorKind: "billing",
+      transcriptProvider: "anthropic",
+    },
+  });
+  assert.ok(items.length > 1);
+  assert.equal(items[0].type, "ai_failure");
+  assert.match(items[0].detail, /クレジット残高が不足/);
+});
+
+test("buildSuspicionQueue: 失敗が無ければai_failure項目は追加されない", () => {
+  const items = buildSuspicionQueue({
+    words: [{ id: "w1", text: "あ", startMs: 0, endMs: 100 }],
+    keepSegments: [{ startMs: 0, endMs: 200 }],
+    aiReview: { enabled: true },
+  });
+  assert.equal(items.some((item) => item.type === "ai_failure"), false);
+});
+
+// --- 改善21-C: カタカナ「辞書未登録」フラグの洪水抑制 ---
+
+test("21-C: 一般ビジネスカタカナ語(テレアポ/インバウンド等)は既定で除外される", () => {
+  // カタカナ語同士が連結して1ランにならないよう、間にひらがなを挟む(実際の会話と同じ)。
+  const words: TranscriptWord[] = [];
+  let ms = 0;
+  const append = (text: string) => {
+    for (const ch of text) {
+      words.push({ id: `w${words.length}`, text: ch, startMs: ms, endMs: ms + 100 });
+      ms += 100;
+    }
+  };
+  append("テレアポ");
+  append("と");
+  append("インバウンド");
+  append("の");
+  append("コンサルタント");
+  append("が");
+  append("ミーティング");
+  const items = buildProperNounSuspicions(words, [], [{ startMs: 0, endMs: ms }]);
+  assert.equal(items.length, 0);
+});
+
+test("21-C: 同一表記のカタカナ語が3回以上出現する場合はフラグしない(頻度ベース抑制)", () => {
+  const words: TranscriptWord[] = [];
+  // 「シラタニ」を3回、「カサハラ」を1回出現させる(ひらがなで区切って別ランにする)。
+  let ms = 0;
+  const append = (text: string) => {
+    for (const ch of text) {
+      words.push({ id: `w${words.length}`, text: ch, startMs: ms, endMs: ms + 100 });
+      ms += 100;
+    }
+  };
+  append("シラタニ");
+  append("の");
+  append("シラタニ");
+  append("の");
+  append("シラタニ");
+  append("の");
+  append("カサハラ");
+  const items = buildProperNounSuspicions(words, [], [{ startMs: 0, endMs: ms }]);
+  assert.equal(items.length, 1, "3回出現するシラタニは抑制、1回のカサハラのみ残る");
+  assert.equal(items[0].text, "カサハラ");
+});
+
+test("21-C: 2回以下の出現はこれまで通りフラグされる", () => {
+  const words: TranscriptWord[] = [];
+  let ms = 0;
+  const append = (text: string) => {
+    for (const ch of text) {
+      words.push({ id: `w${words.length}`, text: ch, startMs: ms, endMs: ms + 100 });
+      ms += 100;
+    }
+  };
+  append("シラタニ");
+  append("の");
+  append("シラタニ");
+  const items = buildProperNounSuspicions(words, [], [{ startMs: 0, endMs: ms }]);
+  assert.equal(items.length, 2);
+});
+
+test("21-C: 数字の辞書未登録フラグは頻度・一般語除外の影響を受けない", () => {
+  const words: TranscriptWord[] = [
+    { id: "w1", text: "3", startMs: 0, endMs: 100 },
+    { id: "w2", text: "回", startMs: 100, endMs: 200 },
+    { id: "w3", text: "3", startMs: 300, endMs: 400 },
+    { id: "w4", text: "回", startMs: 400, endMs: 500 },
+    { id: "w5", text: "3", startMs: 600, endMs: 700 },
+    { id: "w6", text: "回", startMs: 700, endMs: 800 },
+  ];
+  const items = buildProperNounSuspicions(words, [], [{ startMs: 0, endMs: 800 }]);
+  assert.equal(items.filter((item) => item.detail.includes("数字")).length, 3);
+});
+
+test("21-C: AIが明示的に出したneeds_review(ai_review)は一般語でも抑制されない", () => {
+  const words: TranscriptWord[] = [..."テレアポ"].map((ch, j) => ({
+    id: `w${j}`,
+    text: ch,
+    startMs: j * 100,
+    endMs: (j + 1) * 100,
+  }));
+  const items = buildAiReviewSuspicions(
+    {
+      enabled: true,
+      transcriptNeedsReview: [
+        { word_ids: ["w0"], start_ms: 0, text: "テレアポ", reason: "文脈から復元できない" },
+      ],
+    },
+    words,
+    [{ startMs: 0, endMs: 1000 }],
+  );
+  assert.equal(items.length, 1);
+});
+
+test("21-C: COMMON_KATAKANA_WORDSは50語以上の一般語リストである", () => {
+  assert.ok(COMMON_KATAKANA_WORDS.size >= 50);
+  assert.ok(COMMON_KATAKANA_WORDS.has("テレアポ"));
+  assert.ok(COMMON_KATAKANA_WORDS.has("ノウハウ"));
 });

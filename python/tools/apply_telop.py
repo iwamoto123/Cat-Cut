@@ -147,6 +147,7 @@ def remap_telops_to_words(
             clean_pos += 1
 
     telops = []
+    original_by_id = {t.get("id"): t for t in original_telops if isinstance(t, dict)}
     page_clean_offset = 0
     for page_idx, page in enumerate(pages):
         lines = [str(line) for line in page.get("lines", [])]
@@ -195,6 +196,18 @@ def remap_telops_to_words(
             next_telop["end"] = end_ms / 1000
         if page.get("style"):
             next_telop["style"] = page["style"]
+        # フェーズT2: directedモードのtelopが持つ部分強調(highlight_words)を、
+        # telop.txt往復(remap)で落とさない。同一page_idの既存telopから引き継ぎ、
+        # 編集後の本文に実在する語だけを残す。
+        source_telop = original_by_id.get(page.get("id")) or fallback_telop
+        original_highlights = source_telop.get("highlight_words") if isinstance(source_telop, dict) else None
+        if isinstance(original_highlights, list):
+            kept_highlights = [
+                str(word) for word in original_highlights
+                if str(word) and str(word) in page_text
+            ]
+            if kept_highlights:
+                next_telop["highlight_words"] = kept_highlights
         telops.append(next_telop)
 
         if exact_match:

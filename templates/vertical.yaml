@@ -12,6 +12,9 @@ text_rules:
   corrections: {}
 
 telop:
+  # フェーズT2: full=従来のword同期テロップ / directed=演出決定エンジン(AIパス3)による
+  # スロット単位テロップ+オーバーレイ。directedのときのみ step06c_direction.py が実行される。
+  mode: "full"
   max_chars_per_line: 12
   # 改善8-A-4: 1ページ基本1行 (縦12文字目安)。learned_rules.json の学習値と一致。
   max_lines_per_page: 1

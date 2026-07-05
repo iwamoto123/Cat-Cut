@@ -28,6 +28,8 @@ import json
 import os
 import re
 import sys
+import unicodedata
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 
@@ -39,6 +41,7 @@ from review_telop import TelopPage, parse_telop, render_telop  # noqa: E402
 from shared.llm_client import (  # noqa: E402
     API_KEY_ENV,
     DEFAULT_MODELS,
+    FATAL_LLM_ERROR_KINDS,
     MODEL_ENV,
     PROVIDER_PRIORITY,
     ProviderArg,
@@ -49,12 +52,19 @@ from shared.llm_client import (  # noqa: E402
     call_llm,
     call_llm_json,
     call_openai,
+    classify_llm_error,
     find_env_key,
     find_provider_key,
+    get_usage_summary,
+    print_usage_summary,
+    reset_usage_tracking,
     resolve_model,
     resolve_provider_and_key,
+    summarize_error_kinds,
+    truncate_error_detail,
 )
 from shared.project_config import load_project_config  # noqa: E402
+from shared.telop_builder import _PROPER_NOUN_MAP  # noqa: E402
 from shared.text_cleaning import apply_deterministic_text_cleaning, clean_telop_line  # noqa: E402
 from shared.transcript_correction import load_correction_dictionary  # noqa: E402
 
@@ -171,6 +181,91 @@ def merge_refine_responses(responses: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# 表記揺れ候補の抽出 (改善22-B)
+# ---------------------------------------------------------------------------
+
+# カタカナ語 (3文字以上) と英数字語 (2文字以上)
+_KATAKANA_WORD_RE = re.compile(r"[ァ-ヶー]{3,}")
+_ALNUM_WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9&+.\-]{1,}")
+
+
+def _notation_key(word: str) -> str:
+    """表記揺れグループ化用の正規化キー (NFKC → 既知カナ表記の正式化 → 長音/中点除去 → 大文字化)。"""
+    normalized = unicodedata.normalize("NFKC", word)
+    # ユーチューブ/YouTube のようなカナ↔英字の揺れは決定的マップでキーを同一視する
+    normalized = _PROPER_NOUN_MAP.get(normalized, normalized)
+    normalized = normalized.replace("ー", "").replace("・", "")
+    return normalized.upper()
+
+
+def _edit_distance_at_most(s1: str, s2: str, limit: int) -> bool:
+    """編集距離が limit 以下かを判定する (語は短いので単純DPで十分)。"""
+    if abs(len(s1) - len(s2)) > limit:
+        return False
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1, 1):
+        cur = [i]
+        for j, c2 in enumerate(s2, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (c1 != c2)))
+        prev = cur
+    return prev[-1] <= limit
+
+
+def extract_notation_variants(full_text: str, min_count: int = 2) -> list[dict[str, Any]]:
+    """全文から表記揺れ候補を抽出する (改善22-B)。
+
+    1. カタカナ語・英数字語を正規化キーでグループ化し、同一キーに複数表記があるもの
+    2. 編集距離1〜2の近似カタカナ語ペア (両方とも出現 min_count 回以上)
+    を候補として返す。パス2はチャンク単位で処理するため、動画全体の表記一貫性は
+    ここで抽出した候補を全チャンク共通のプロンプト節として注入して担保する。
+
+    Returns:
+        [{"canonical": 多数派表記, "variants": [(表記, 出現数), ...出現数降順]}]
+    """
+    words = _KATAKANA_WORD_RE.findall(full_text) + _ALNUM_WORD_RE.findall(full_text)
+    counts = Counter(words)
+
+    groups: dict[str, dict[str, int]] = {}
+    for word, count in counts.items():
+        groups.setdefault(_notation_key(word), {})[word] = count
+
+    candidates: list[dict[str, Any]] = []
+    seen_words: set[str] = set()
+    for variants in groups.values():
+        if len(variants) < 2:
+            continue
+        ordered = sorted(variants.items(), key=lambda kv: (-kv[1], kv[0]))
+        candidates.append({"canonical": ordered[0][0], "variants": ordered})
+        seen_words.update(variants)
+
+    # 近似カタカナ語ペア (例: フォーメイ業/フォーム営業 のカナ部分)。過剰検出を避けるため
+    # 両方とも min_count 回以上出現する語に限定する
+    kata_counts = {
+        w: c for w, c in counts.items()
+        if c >= min_count and _KATAKANA_WORD_RE.fullmatch(w)
+    }
+    kata_words = sorted(kata_counts)
+    for i, w1 in enumerate(kata_words):
+        for w2 in kata_words[i + 1:]:
+            if w1 in seen_words and w2 in seen_words:
+                continue
+            # 短いカタカナ語同士の偶然の近似 (ツール/ハードル等) の誤爆を抑えるため、
+            # 先頭2文字が一致するペアに限定する
+            if w1[:2] != w2[:2]:
+                continue
+            if not _edit_distance_at_most(w1, w2, 2):
+                continue
+            pair = sorted(
+                [(w1, kata_counts[w1]), (w2, kata_counts[w2])],
+                key=lambda kv: (-kv[1], kv[0]),
+            )
+            candidates.append({"canonical": pair[0][0], "variants": pair})
+            seen_words.update((w1, w2))
+
+    return candidates
+
+
+# ---------------------------------------------------------------------------
 # Prompt / LLM API 呼び出し
 # ---------------------------------------------------------------------------
 
@@ -235,6 +330,7 @@ def build_prompt(
     dictionary_hint: str = "",
     review_findings: Optional[list[dict[str, Any]]] = None,
     video_title: str = "",
+    notation_variants: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     cuts_json = json.dumps(cuts, ensure_ascii=False, indent=2)
     title_section = ""
@@ -251,6 +347,21 @@ def build_prompt(
         dictionary_section = f"""
 # 参考: ドメイン辞書の語彙(専門用語・固有名詞の文脈ヒント)
 {dictionary_hint}
+"""
+    # 改善22-B: 全文から機械抽出した表記揺れ候補を全チャンク共通で注入する
+    notation_section = ""
+    if notation_variants:
+        notation_lines = []
+        for group in notation_variants:
+            variants_str = " / ".join(v for v, _ in group["variants"])
+            counts_str = " vs ".join(f"{c}回" for _, c in group["variants"])
+            notation_lines.append(f"- {variants_str} → {group['canonical']}（出現: {counts_str}）")
+        notation_list = "\n".join(notation_lines)
+        notation_section = f"""
+# この動画内で表記が揺れている語 (全文からの機械抽出)。
+# 同一の語・固有名詞を指す場合は、すべて多数派の表記 (→ の右側) に統一してください。
+# 別の語である場合 (単なる類似語) は統一しないでください:
+{notation_list}
 """
     review_section = ""
     if review_findings:
@@ -289,12 +400,17 @@ def build_prompt(
    (reason: 「前のカットと語が分断されています。シーンの結合を検討してください」)
 8. 固有名詞の動画内統一: 同一の人物・組織・サービスを指す語が動画内で複数の表記になっている場合、
    最も妥当な1つの表記に統一し corrections に含める
-   (人名の漢字が不明な場合はカタカナ/ひらがなの最頻表記でよい)
+   (人名の漢字が不明な場合はカタカナ/ひらがなの最頻表記でよい)。
+   人名・社名の表記が動画内で揺れている場合 (例: 山本/矢本/矢元) は最頻の表記に統一する
 9. カット境界の重複文字除去: 隣接カットの末尾と先頭で同じ文字・音が重複している場合
    (ジェットカットのアーティファクト)、後のカットの先頭側の重複文字を削除する
    (自カット内のテキスト修正なので可)。
    例: 前カット「…それが」＋次カット「がめちゃくちゃ…」→ 次カットを「めちゃくちゃ…」に
 10. STTのローマ字混入: ローマ字で出力された部分 (例: そうdesu) はかな表記 (そうです) に直す
+11. STTの重複アーティファクト: 同一の文字や助詞が不自然に連続している場合
+   (例: 書書いてある→書いてある、そのの→その、半径径一定→半径一定) は修正する。
+   ただし畳語・慣用的な繰り返し (人々、日々、一つ一つ、次々 等) や
+   意図的な強調の繰り返しは修正しない
 
 ルール(厳守):
 - 各ページは基本1行、目安 {max_chars_per_line}文字以内、最大 {max_lines_per_page}行。
@@ -304,7 +420,7 @@ def build_prompt(
 - 話していない内容を創作しない。確信が持てない誤字は直さずそのまま残す
 - 各カットの発話内容の意味を変えない(要約・省略はしない。誤字修正と改行位置調整のみ)
 - 変更が不要なカットは "cuts" 配列に含めなくてよい
-{dictionary_section}{review_section}
+{dictionary_section}{notation_section}{review_section}
 出力は次のJSON形式のみを返してください。説明文やコードフェンスは不要です:
 {{
   "corrections": {{"誤字表記": "正しい表記"}},
@@ -455,6 +571,14 @@ def _write_result(output_path: Path, result: dict[str, Any]) -> None:
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _attach_usage(payload: dict[str, Any]) -> dict[str, Any]:
+    """累積使用量があれば payload に usage キーを付与する。"""
+    usage = get_usage_summary()
+    if usage:
+        payload["usage"] = usage
+    return payload
+
+
 def _make_caller(
     call_refine_fn: Optional[Callable[[ProviderName, str, str, str], dict[str, Any]]],
     call_claude_fn: Optional[Callable[[str, str, str], dict[str, Any]]],
@@ -493,6 +617,7 @@ def run_step(
     caller = _make_caller(call_refine_fn, call_claude_fn)
 
     print("[Step 6b] AI Refine (LLM telop correction)")
+    reset_usage_tracking()
 
     if not telop_file.exists():
         result = {
@@ -559,11 +684,18 @@ def run_step(
     dictionary_hint = build_dictionary_hint(dictionary_path)
     review_findings = build_review_findings_payload(review_path)
     video_title = (title or "").strip() or extract_title_from_run_dir(run_dir)
+    # 改善22-B: 表記揺れ抽出はチャンク横断の一貫性が目的のため、切り詰めない全文を使う
+    full_transcript = build_transcript_context(Path(stt_path), max_chars=1_000_000)
+    notation_variants = extract_notation_variants(full_transcript)
+    if notation_variants:
+        print(f"  notation variants: {len(notation_variants)} groups")
     cut_chunks = chunk_cuts_payload(cuts_payload)
     print(f"  cuts: {len(cuts_payload)}, chunks: {len(cut_chunks)}")
 
     successful_responses: list[dict[str, Any]] = []
     failed_chunks = 0
+    error_kinds: list[str] = []
+    error_details: list[str] = []
 
     for chunk_index, chunk_cuts in enumerate(cut_chunks):
         prompt = build_prompt(
@@ -574,6 +706,7 @@ def run_step(
             dictionary_hint=dictionary_hint,
             review_findings=review_findings or None if chunk_index == 0 else None,
             video_title=video_title,
+            notation_variants=notation_variants or None,
         )
         try:
             response = call_llm_json(
@@ -584,14 +717,24 @@ def run_step(
             print(f"  chunk {chunk_index + 1}/{len(cut_chunks)}: ok")
         except Exception as exc:  # noqa: BLE001
             failed_chunks += 1
+            error_kind = classify_llm_error(exc)
+            error_kinds.append(error_kind)
+            error_details.append(truncate_error_detail(f"{type(exc).__name__}: {exc}"))
             print(
                 f"  chunk {chunk_index + 1}/{len(cut_chunks)} failed "
-                f"({type(exc).__name__}: {exc})"
+                f"[error_kind={error_kind}] ({type(exc).__name__}: {exc})"
             )
+            # billing/auth はリトライ・続行が無意味なので残チャンクをスキップして即時失敗(改善21-A)。
+            if error_kind in FATAL_LLM_ERROR_KINDS:
+                remaining = len(cut_chunks) - chunk_index - 1
+                if remaining > 0:
+                    failed_chunks += remaining
+                    print(f"  fatal error ({error_kind}) - skipping remaining {remaining} chunks")
+                break
 
     if not successful_responses:
         print(f"  all {len(cut_chunks)} chunks failed - keeping BudouX output")
-        result = {
+        result = _attach_usage({
             "enabled": False,
             "reason": f"api_error: all {len(cut_chunks)} chunks failed",
             "provider": resolved_provider,
@@ -599,8 +742,11 @@ def run_step(
             "needs_review": [],
             "dismissed_finding_ids": [],
             "failed_chunks": failed_chunks,
-        }
+            "error_kind": summarize_error_kinds(error_kinds),
+            "error_detail": error_details[0] if error_details else "",
+        })
         _write_result(output_file, result)
+        print_usage_summary()
         return result
 
     response = merge_refine_responses(successful_responses)
@@ -612,15 +758,16 @@ def run_step(
             f"  failed to apply {resolved_provider} response ({type(exc).__name__}: {exc}) "
             "- keeping BudouX output"
         )
-        result = {
+        result = _attach_usage({
             "enabled": False,
             "reason": f"apply_error: {exc}",
             "provider": resolved_provider,
             "model": resolved_model,
             "needs_review": [],
             "dismissed_finding_ids": [],
-        }
+        })
         _write_result(output_file, result)
+        print_usage_summary()
         return result
 
     telop_file.write_text(render_telop(preamble, new_pages), encoding="utf-8")
@@ -641,6 +788,10 @@ def run_step(
     }
     if failed_chunks > 0:
         result["failed_chunks"] = failed_chunks
+        result["error_kind"] = summarize_error_kinds(error_kinds)
+        if error_details:
+            result["error_detail"] = error_details[0]
+    _attach_usage(result)
     _write_result(output_file, result)
     print(
         f"  applied ({resolved_provider}/{resolved_model}): "
@@ -648,6 +799,7 @@ def run_step(
         f"{len(pages)} -> {len(new_pages)} pages, "
         f"{stats['corrections_applied']} pages with dictionary corrections"
     )
+    print_usage_summary()
     print(f"[Step 6b] Done: {output_file}")
     return result
 

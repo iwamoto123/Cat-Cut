@@ -1,0 +1,20 @@
+# フェーズT2.5-4: シーン種類(semantic type) → テロッププリセット の既定マッピング
+#
+# AIパス3(step06c)はプリセットIDではなく「シーンの意味種類」を返し、
+# step08 / UI がこのマッピングを解決してスタイルを適用する。
+# ユーザーごとの上書きは desktop の userData(telop_type_mapping.json)に保存され、
+# 本ファイルの既定値の上に重ねられる。
+#
+# type一覧(10種)は python/shared/telop_types.py / desktop/src/lib/telopTypes.ts と同期すること。
+
+type_styles:
+  default: fact_yellow      # 説明・事実
+  surprise: box_yellow      # 意外な事実
+  harsh: serif_harsh        # 辛辣・毒舌
+  quote: serif_quote        # 名言・格言
+  emphasis: emotion_red     # 強調・断言
+  question: question_blue   # 質問
+  reply: reply_cyan         # 相槌・軽い返し
+  punchline: box_yellow     # 要点・オチ
+  hype: special_purple      # 煽り
+  cta: cta_yellow           # 行動喚起

@@ -258,14 +258,19 @@ def run_step(
     keep_segments = _trim_trailing_silence(keep_segments, remaining_words)
 
     # 改善16-A: 単語内カット境界ガード（BudouXチャンク内部の境界を結合）
-    word_split_max_gap_ms = int(cfg.get("word_split_merge_max_gap_ms", 1200) or 1200)
-    keep_segments, word_split_merges = _apply_word_split_merge(
+    if "word_split_merge_max_gap_ms" in cfg:
+        word_split_max_gap_ms = int(cfg["word_split_merge_max_gap_ms"])
+    else:
+        word_split_max_gap_ms = 1500
+    keep_segments, word_split_merges, word_split_flags = _apply_word_split_merge(
         keep_segments,
         remaining_words,
         max_gap_ms=word_split_max_gap_ms,
     )
     if word_split_merges:
         print(f"  word-split merges: {word_split_merges}")
+    if word_split_flags:
+        print(f"  word-split flags: {len(word_split_flags)}")
 
     # scene_id 再計算（マージ後の中点ベース）
     for seg in keep_segments:
@@ -282,6 +287,7 @@ def run_step(
         "keep_segments": keep_segments,
         "remove_ranges": remove_ranges,
         "removed_word_ids": sorted(remove_word_ids),
+        "word_split_flags": word_split_flags,
         "stats": {
             "total_keep_segments": len(keep_segments),
             "total_remove_ranges": len(remove_ranges),
@@ -294,6 +300,7 @@ def run_step(
             "words_kept": len(remaining_words),
             "removed_word_ids": sorted(remove_word_ids),
             "word_split_merges": word_split_merges,
+            "word_split_flags": len(word_split_flags),
             "config": {
                 "max_gap_ms": max_gap_ms,
                 "lead_padding_ms": lead_padding_ms,
@@ -970,20 +977,22 @@ def _should_remove_filler(filler: dict, confidence_threshold: float) -> bool:
     return filler.get("confidence", 0) >= confidence_threshold
 
 
-def _is_word_boundary_char(ch: str) -> bool:
-    """単語内分断の典型境界文字 (漢字・カタカナ)。"""
+def _is_japanese_char(ch: str) -> bool:
+    """日本語文字 (ひらがな・カタカナ・漢字) かどうか。"""
     if not ch:
         return False
     code = ord(ch)
-    if 0x4E00 <= code <= 0x9FFF or 0x3400 <= code <= 0x4DBF:
+    if 0x3040 <= code <= 0x309F:
         return True
     if 0x30A0 <= code <= 0x30FF or ch in "ー":
+        return True
+    if 0x4E00 <= code <= 0x9FFF or 0x3400 <= code <= 0x4DBF:
         return True
     return False
 
 
 def _boundary_chars_eligible_for_merge(tail_text: str, head_text: str) -> bool:
-    """境界直後/直前が句読点でなく、漢字/カタカナを跨ぐ疑いがあるか。"""
+    """境界直後/直前が句読点・文末記号でなく、日本語文字を跨ぐ疑いがあるか。"""
     if not tail_text or not head_text:
         return False
     last_ch = tail_text[-1]
@@ -992,7 +1001,7 @@ def _boundary_chars_eligible_for_merge(tail_text: str, head_text: str) -> bool:
         return False
     if last_ch in "。！？!?…":
         return False
-    return _is_word_boundary_char(last_ch) or _is_word_boundary_char(first_ch)
+    return _is_japanese_char(last_ch) or _is_japanese_char(first_ch)
 
 
 def _is_boundary_inside_budoux_chunk(text_before: str, text_after: str) -> bool:
@@ -1020,18 +1029,38 @@ def _is_boundary_inside_budoux_chunk(text_before: str, text_after: str) -> bool:
     return False
 
 
+def _make_word_split_flag(seg_a: dict, seg_b: dict, gap_ms: int, context_chars: int = 10) -> dict:
+    """隣接セグメント境界の word_split フラグ dict を生成する。"""
+    tail_text = str(seg_a.get("text", ""))[-context_chars:]
+    head_text = str(seg_b.get("text", ""))[:context_chars]
+    return {
+        "prev_end_ms": seg_a["end_ms"],
+        "next_start_ms": seg_b["start_ms"],
+        "tail_text": tail_text,
+        "head_text": head_text,
+        "gap_ms": gap_ms,
+    }
+
+
+_PARTICLE_COMMA_HEAD_RE = re.compile(r"^[はがをにでとも]、")
+
+
 def _apply_word_split_merge(
     keep_segments: list,
     remaining_words: list,
-    max_gap_ms: int = 1200,
+    max_gap_ms: int = 1500,
     context_chars: int = 15,
-) -> tuple[list, int]:
-    """隣接セグメントで BudouX チャンク内部に境界がある場合、ギャップ閾値以内なら結合する。"""
+) -> tuple[list, int, list]:
+    """隣接セグメントで BudouX チャンク内部に境界がある場合、ギャップ閾値以内なら結合する。
+
+    結合不可の単語分断は word_split_flags として収集する (改善19-B)。
+    """
     del remaining_words  # 互換のため引数は残す。判定は segment text を使う。
     if len(keep_segments) <= 1:
-        return keep_segments, 0
+        return keep_segments, 0, []
 
     merges = 0
+    flags: list = []
     result = [keep_segments[0].copy()]
     for seg_b in keep_segments[1:]:
         seg_a = result[-1]
@@ -1041,9 +1070,11 @@ def _apply_word_split_merge(
         # 判定は segment text の末尾/先頭を使う (ElevenLabs 1文字 word と等価)。
         tail_text = str(seg_a.get("text", ""))[-context_chars:]
         head_text = str(seg_b.get("text", ""))[:context_chars]
+        head_full = str(seg_b.get("text", ""))
 
         should_merge = (
-            gap_ms <= max_gap_ms
+            max_gap_ms > 0
+            and 0 <= gap_ms <= max_gap_ms
             and tail_text
             and head_text
             and _boundary_chars_eligible_for_merge(tail_text, head_text)
@@ -1054,9 +1085,18 @@ def _apply_word_split_merge(
             seg_a["text"] = seg_a.get("text", "") + seg_b.get("text", "")
             merges += 1
         else:
+            # 改善19-B: 結合不可の単語分断を flag 化
+            if gap_ms > max_gap_ms and tail_text and head_text:
+                inside_budoux = (
+                    _boundary_chars_eligible_for_merge(tail_text, head_text)
+                    and _is_boundary_inside_budoux_chunk(tail_text, head_text)
+                )
+                particle_comma_head = bool(_PARTICLE_COMMA_HEAD_RE.match(head_full))
+                if inside_budoux or particle_comma_head:
+                    flags.append(_make_word_split_flag(seg_a, seg_b, gap_ms, context_chars=10))
             result.append(seg_b.copy())
 
-    return result, merges
+    return result, merges, flags
 
 
 def _clean_segment_text(text: str) -> str:

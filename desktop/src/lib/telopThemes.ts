@@ -56,6 +56,8 @@ export type TelopStyleDef = {
   inner_stroke?: TelopStroke | null;
   outer_stroke?: TelopStroke | null;
   drop_shadow?: string | null;
+  /** フェーズT2.5-2: ハードなオフセット影(縁レイヤーの下に(x,y)pxずらして描画)。 */
+  shadow_offset?: { x: number; y: number; color: string } | null;
   y_position_offset?: number;
   underline?: boolean;
   background?: { color: string; borderRadius?: string } | null;

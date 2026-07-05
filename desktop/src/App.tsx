@@ -42,6 +42,9 @@ import {
   initializeScenes,
   type Scene,
 } from "./lib/scenes";
+import { deriveDirectedSlots } from "./lib/directedTelop";
+import { DEFAULT_TYPE_MAPPING, sanitizeTypeMapping, type TelopTypeMapping } from "./lib/telopTypes";
+import { TelopTypeMappingModal } from "./components/TelopTypeMappingModal";
 import {
   applyEdgeTrim,
   formatEdgeTrimDelta,
@@ -83,6 +86,7 @@ import {
 import { mapFontProfileToEmotionStyles, pickPrimaryFontProfile, type FontProfile } from "./lib/fontProfileTheme";
 import { buildSuspicionQueue, type SuspicionItem } from "./lib/suspicionQueue";
 import { buildAiReviewBanner } from "./lib/aiReviewBanner";
+import { formatAiUsageSummary } from "./lib/aiUsage";
 import { TelopStyleSample } from "./components/TelopStyleSample";
 import { TelopThemeGalleryModal } from "./components/TelopThemeGalleryModal";
 import { buildWordGroups, wordIdsForGroupRange } from "./lib/wordGroups";
@@ -1791,6 +1795,9 @@ export function App() {
   const [telopReplaceSelectedKeys, setTelopReplaceSelectedKeys] = useState<Set<string>>(() => new Set());
   const [telopReplaceDictChecked, setTelopReplaceDictChecked] = useState(false);
   const [userDictionaryOpen, setUserDictionaryOpen] = useState(false);
+  // フェーズT2.5-4: シーン種類→プリセットのマッピング(既定+userDataのユーザー設定)と設定ビュー開閉。
+  const [telopTypeMapping, setTelopTypeMapping] = useState<TelopTypeMapping>(DEFAULT_TYPE_MAPPING);
+  const [telopTypeMappingOpen, setTelopTypeMappingOpen] = useState(false);
   const isEditingSceneTelopRef = useRef(false);
   const scenePlayStopAtMsRef = useRef<number | null>(null);
   const scenesInitializedRunDirRef = useRef<string | null>(null);
@@ -1897,6 +1904,13 @@ export function App() {
         .then((presets) => {
           if (presets && Object.keys(presets).length) registerPresetCatalog(presets);
         })
+        .catch(() => {});
+    }
+    // フェーズT2.5-4: シーン種類→プリセットの解決済みマッピング(既定YAML+userData)を読み込む。
+    if (typeof window.catcut.getTelopTypeMapping === "function") {
+      window.catcut
+        .getTelopTypeMapping()
+        .then((mapping) => setTelopTypeMapping(sanitizeTypeMapping(mapping)))
         .catch(() => {});
     }
   }, [electronReady]);
@@ -2243,6 +2257,7 @@ export function App() {
       fillerWordIds: transcriptState.fillerWordIds,
       dictionaryRules: userRules?.dictionary,
       aiReview: transcriptState.aiReview,
+      wordSplitFlags: transcriptState.wordSplitFlags,
     });
   }, [keepSegmentsHistory.keepSegments, reviewState, transcriptState, userRules]);
 
@@ -2282,11 +2297,26 @@ export function App() {
       fillerWordIds: transcriptState.fillerWordIds,
       dictionaryRules: userRules?.dictionary,
       aiReview: transcriptState.aiReview,
+      wordSplitFlags: transcriptState.wordSplitFlags,
     });
   }, [reviewState, scenesHistory.keepSegments, transcriptState, userRules]);
 
+  // フェーズT2: directedモード(演出ディレクティブ駆動)かどうか。スタイルバッジ表示と
+  // 編集適用経路(telop_directives.jsonへの書き戻し)の切替に使う。
+  const isDirectedTelopMode = transcriptState?.telopMode === "directed";
+
   const aiReviewBanner = useMemo(
     () => (transcriptState ? buildAiReviewBanner(transcriptState.aiReview || {}) : null),
+    [transcriptState],
+  );
+  const sceneAiUsageSummary = useMemo(
+    () =>
+      transcriptState
+        ? formatAiUsageSummary(
+            transcriptState.aiReview?.transcriptUsage,
+            transcriptState.aiReview?.telopUsage,
+          )
+        : null,
     [transcriptState],
   );
 
@@ -2826,6 +2856,33 @@ export function App() {
     setSceneApplying(true);
     setError("");
     try {
+      // フェーズT2(directedモード): テーマ×感情(T-5)経路は使わず、シーン編集を
+      // directedスロット(文言・スタイルID・強調語・絶対ms範囲)としてmainへ送る。
+      // main側が telop_directives.json を差し替えてから step08 を再実行する。
+      if (isDirectedTelopMode) {
+        const result = await window.catcut.applyTranscriptEdits({
+          runDir: transcriptState.runDir,
+          keepSegments: scenesHistory.keepSegments,
+          corrections: [],
+          directedSlots: deriveDirectedSlots(scenesHistory.scenes, telopTypeMapping),
+        });
+        scenesInitializedRunDirRef.current = result.transcript.runDir;
+        setTranscriptState(result.transcript);
+        setReviewState({
+          outputs: result.review.outputs,
+          review: result.review.review,
+          renderFinal: reviewState?.renderFinal ?? true,
+          fontPlan: result.review.fontPlan,
+          telopStyleDirectivesText: result.review.telopStyleDirectivesText,
+          telopStylePlan: result.review.telopStylePlan,
+          telopStyles: result.review.telopStyles,
+          defaultTelopStyle: result.review.defaultTelopStyle,
+          previewPages: result.review.previewPages,
+        });
+        setTelopText(result.review.telopText);
+        setFontDirectives(result.review.fontDirectivesText);
+        return result;
+      }
       // T-5: scenesから導出したcut単位のスタイルID配列と、実際に使うスタイルの辞書一式を
       // 一緒に送る(main側はtelop.txtへの@styleディレクティブ注入とtelop_style_plan.json書き込みに使う)。
       const telopStyleIdsByCut = deriveTelopStyleIds(scenesHistory.scenes, telopThemeId);
@@ -4592,20 +4649,38 @@ export function App() {
           <section className="transcriptWorkspace sceneWorkspaceSection">
             <div className="sceneThemeBar">
               <div className="sceneThemeBarThemes">
-                <span className="sceneThemeBarLabel">テロップテーマ</span>
-                <button className="sceneThemeOpenButton" onClick={() => setThemeGalleryOpen(true)} type="button">
-                  <TelopStyleSample
-                    className="sceneThemeCardSample"
-                    fontSizePx={20}
-                    style={describeThemeCard(telopThemeId).sampleStyle}
-                  />
-                  <span className="sceneThemeCardLabel">
-                    {telopThemeId === SAVED_THEME_ID
-                      ? `保存済み: ${primaryFontProfile?.name || ""}`
-                      : describeThemeCard(telopThemeId).label}
-                  </span>
-                  <span className="sceneThemeOpenButtonHint">変更…</span>
-                </button>
+                {isDirectedTelopMode ? (
+                  // フェーズT2.5-4(directedモード): テーマ×感情の代わりに
+                  // 「シーン種類→プリセット」の設定ビューを開くボタンを出す。
+                  <>
+                    <span className="sceneThemeBarLabel">テロップデザイン</span>
+                    <button
+                      className="sceneThemeOpenButton"
+                      onClick={() => setTelopTypeMappingOpen(true)}
+                      type="button"
+                    >
+                      <span className="sceneThemeCardLabel">シーンの種類ごとの割り当て</span>
+                      <span className="sceneThemeOpenButtonHint">変更…</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="sceneThemeBarLabel">テロップテーマ</span>
+                    <button className="sceneThemeOpenButton" onClick={() => setThemeGalleryOpen(true)} type="button">
+                      <TelopStyleSample
+                        className="sceneThemeCardSample"
+                        fontSizePx={20}
+                        style={describeThemeCard(telopThemeId).sampleStyle}
+                      />
+                      <span className="sceneThemeCardLabel">
+                        {telopThemeId === SAVED_THEME_ID
+                          ? `保存済み: ${primaryFontProfile?.name || ""}`
+                          : describeThemeCard(telopThemeId).label}
+                      </span>
+                      <span className="sceneThemeOpenButtonHint">変更…</span>
+                    </button>
+                  </>
+                )}
               </div>
               <div className="sceneThemeBarRight">
                 <button
@@ -4676,6 +4751,9 @@ export function App() {
                   AI校正済み・残り{sceneSuspicionItems.length}件を確認すれば完了です
                 </p>
               ) : null}
+              {sceneAiUsageSummary ? (
+                <p className="sceneAiUsageSummary">{sceneAiUsageSummary}</p>
+              ) : null}
               <button
                 className={sceneFilter === "all" ? "active" : ""}
                 onClick={() => setSceneFilter("all")}
@@ -4716,6 +4794,7 @@ export function App() {
                   telopStyle={currentSceneTelopStyle}
                   telopFontSize={transcriptState.telopFontSize}
                   telopBaseWidth={transcriptState.telopBaseWidth}
+                  telopMaxCharsPerLine={transcriptState.telopMaxCharsPerLine}
                   videoUrl={transcriptState.sourceVideoUrl}
                   words={transcriptState.words}
                 />
@@ -4806,12 +4885,20 @@ export function App() {
                   scenes={renderedScenes}
                   scissorsMode={scissorsMode}
                   suspicionsBySceneId={sceneSuspicionsBySceneId}
+                  onOpenApiSettings={() => {
+                    setApiWizardRequired(false);
+                    setApiWizardOpen(true);
+                  }}
                   themeId={telopThemeId}
                   onSetEmotionTag={(sceneId, tag) => scenesHistory.setEmotionTag(sceneId, tag)}
                   onSetStyleOverride={(sceneId, styleId) => scenesHistory.setStyleOverride(sceneId, styleId)}
                   onApplyStyleToEmotionGroup={(sceneId, styleId) =>
                     scenesHistory.applyStyleToEmotionGroup(sceneId, styleId)
                   }
+                  directedMode={isDirectedTelopMode}
+                  telopTypeMapping={telopTypeMapping}
+                  onSetDirectedType={(sceneId, typeId) => scenesHistory.setDirectedType(sceneId, typeId)}
+                  onSetDirectedStyle={(sceneId, styleId) => scenesHistory.setDirectedStyle(sceneId, styleId)}
                 />
               </div>
             </div>
@@ -5444,6 +5531,21 @@ export function App() {
           selectedKeys={telopReplaceSelectedKeys}
         />
         <UserDictionaryModal onClose={() => setUserDictionaryOpen(false)} open={userDictionaryOpen} />
+        <TelopTypeMappingModal
+          mapping={telopTypeMapping}
+          onClose={() => setTelopTypeMappingOpen(false)}
+          onSave={async (nextMapping) => {
+            // userDataへ永続化 → UIのバッジ色を即更新 → directedプロジェクトへ即時反映
+            // (main側のstep08再実行が --type-mapping で最新マッピングを読み、
+            // 個別上書きでないスロットのstyleをtypeから再解決する)。
+            const saved = await window.catcut.saveTelopTypeMapping(nextMapping);
+            setTelopTypeMapping(sanitizeTypeMapping(saved));
+            if (isDirectedTelopMode && transcriptState) {
+              await applySceneEdits();
+            }
+          }}
+          open={telopTypeMappingOpen}
+        />
         {themeGalleryOpen && (
           <TelopThemeGalleryModal
             currentThemeId={telopThemeId}

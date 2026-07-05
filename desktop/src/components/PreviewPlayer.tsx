@@ -3,6 +3,7 @@ import type { KeepSegment, TranscriptWord } from "../lib/keepSegments";
 import { findActiveWordIndex } from "../lib/keepSegments";
 import type { TelopStyleDef } from "../lib/telopThemes";
 import { computeContainedVideoBox, computeRelativeTelopFontPx, fitTelopTextToWidth } from "../lib/telopPreviewSize";
+import { wrapTelopLine } from "../lib/wrapTelopLine";
 import { TelopStyledText } from "./TelopStyledText";
 
 /**
@@ -59,6 +60,13 @@ type Props = {
   /** 改善7-2: telopFontSizeの基準解像度幅(px)。未指定時はFALLBACK_TELOP_BASE_WIDTHを使う。 */
   telopBaseWidth?: number;
   /**
+   * 改善20-B: 1行の文字数バジェット(composition.jsonのtelop_max_chars_per_line)。
+   * 手編集等でバジェットを超えたテロップは、CSS任せではなくwrapTelopLineの語境界で
+   * 折り返して表示する(Remotionレンダリングと同じ折返し位置)。未指定なら従来の
+   * フォント縮小のみ(折返しなし)。
+   */
+  telopMaxCharsPerLine?: number;
+  /**
    * 改善5-1(ホバー自動スクロールの抑制): <video>要素が実際に再生中/停止中かを親へ通知する。
    * previewCurrentMsはホバースクラブ等でも(再生していなくても)更新されるため、
    * 「実際の再生中のみ自動追従スクロールする」判定にはこのコールバックを使う。
@@ -87,6 +95,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     telopStyle,
     telopFontSize,
     telopBaseWidth,
+    telopMaxCharsPerLine,
     onPlayingChange,
   },
   forwardedRef,
@@ -198,7 +207,17 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   // 収まる」よう逆算でフォントサイズをクランプする。
   // 手動で改行(\n)を含むテロップ本文は、ユーザーの明示的な行分けを尊重しそのまま各行の幅で
   // フォントサイズだけクランプする(自動2行折り返しは行わない)。
+  // 改善20-B: 手動改行がなく行バジェット(telopMaxCharsPerLine)を超える本文は、
+  // CSS任せではなくwrapTelopLineの語境界で折り返す(Remotionレンダリングと同じ位置)。
   const manualLines = telopText ? telopText.split("\n") : [];
+  const displayLines =
+    manualLines.length > 1
+      ? manualLines
+      : telopText && telopMaxCharsPerLine
+        ? // フェーズT2.5-1(はみ出し根絶): Remotion側(computeTelopBlockLayout)と同じく
+          // 折返しは最大2行で確定し、超過ぶんは下のfitTelopTextToWidthの縮小に任せる。
+          wrapTelopLine(telopText, telopMaxCharsPerLine, 2)
+        : manualLines;
   const videoDisplayWidthPx = containedBox.width || containerSize.width;
   const preferredTelopFontPx =
     computeRelativeTelopFontPx(
@@ -211,9 +230,9 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     const fontFamily = effectiveTelopStyle.font_family || FALLBACK_TELOP_STYLE.font_family!;
     const fontWeight = effectiveTelopStyle.font_weight ?? 900;
     const letterSpacing = effectiveTelopStyle.letter_spacing;
-    if (manualLines.length > 1) {
+    if (displayLines.length > 1) {
       // 複数行それぞれについて90%幅に収まるフォントサイズを求め、最小値(=最も制約が厳しい行)を採用する。
-      const fittedSizes = manualLines.map(
+      const fittedSizes = displayLines.map(
         (line) =>
           fitTelopTextToWidth(line, {
             videoDisplayWidthPx,
@@ -224,7 +243,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
             minFontSizePx: preferredTelopFontPx * 0.4,
           }).fontSizePx,
       );
-      return { fontSizePx: Math.min(...fittedSizes), lines: manualLines };
+      return { fontSizePx: Math.min(...fittedSizes), lines: displayLines };
     }
     return fitTelopTextToWidth(telopText, {
       videoDisplayWidthPx,
@@ -234,7 +253,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       letterSpacing,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [telopText, videoDisplayWidthPx, preferredTelopFontPx, effectiveTelopStyle]);
+  }, [telopText, telopMaxCharsPerLine, videoDisplayWidthPx, preferredTelopFontPx, effectiveTelopStyle]);
 
   // B-3: ハイライト更新はrequestVideoFrameCallback（利用不可ならrAF）で
   // timeupdate（〜250ms間隔）より滑らかに追従させる。videoUrl変更時（<video>の再マウント）に

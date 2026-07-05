@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "remotion studio",
     "build": "remotion bundle",
-    "render:cli": "npx tsx scripts/render-cli.ts"
+    "render:cli": "npx tsx scripts/render-cli.ts",
+    "test": "node --experimental-strip-types --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.454",

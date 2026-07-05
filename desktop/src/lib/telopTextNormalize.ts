@@ -13,6 +13,23 @@ const PAGE_LEADING_FORBIDDEN = new Set(["、", "。", "！", "？", "!", "?", "�
 
 const FULLWIDTH_DIGIT_RE = /[０-９]/g;
 
+/** 改善17-B: 行末の読点+フィラー断片 (長い順にマッチ) */
+const TRAILING_FILLER_FRAGMENTS = ["まあ", "ま", "ね"] as const;
+const TRAILING_COMMA_CHARS = ["、", "，"] as const;
+
+/** 行末の「、ね」「、ま」「、まあ」等のフィラー断片を除去する。 */
+export function stripTrailingFillerFragments(line: string): string {
+  for (const fragment of TRAILING_FILLER_FRAGMENTS) {
+    for (const comma of TRAILING_COMMA_CHARS) {
+      const suffix = comma + fragment;
+      if (line.endsWith(suffix)) {
+        return line.slice(0, -suffix.length);
+      }
+    }
+  }
+  return line;
+}
+
 /** 全角数字を半角数字に変換する。 */
 export function normalizeFullwidthDigits(text: string): string {
   return text.replace(FULLWIDTH_DIGIT_RE, (char) =>
@@ -46,9 +63,10 @@ export function applyDeterministicTextCleaning(text: string): string {
   return cleanTelopCommas(normalizeFullwidthDigits(text));
 }
 
-/** 行単位: 「？、」「！、」を正規化し、行末の読点(、，)を除去する。 */
+/** 行単位: 「？、」「！、」を正規化し、行末フィラー・読点(、，)を除去する。 */
 export function cleanTelopLine(line: string): string {
   let result = line.replace(/([？！])[、，]+/g, "$1");
+  result = stripTrailingFillerFragments(result);
   result = result.replace(/[、，]+$/g, "");
   return result;
 }

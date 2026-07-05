@@ -7,8 +7,9 @@ text_rules による正規化 (列挙数字変換、誤認識補正) を適用�
 Cat-Cut の字幕ページ生成で共通利用する。
 """
 
+import difflib
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from shared.budoux_layout import split_pages
 from shared.text_cleaning import apply_deterministic_text_cleaning, clean_telop_line
@@ -180,10 +181,11 @@ _KANJI_NUM_CHARS = "〇零一二三四五六七八九十百千万億兆"
 _COUNTER_SUFFIXES_STR = (
     "円|個|本|人|回|件|枚|台|匹|頭|冊|杯|"
     "度|時|分|秒|時間|日|週間|ヶ月|か月|カ月|年|月|"
-    "点|パー|％|%|倍|問|"
+    "点|パー|％|%|倍|問|割|語|"
     "パーセント|"
-    "キロ|キロメートル|キログラム|グラム|メートル|センチ|ミリ|トン|"
-    "フォロワー|名|社|店|"
+    "キロ|キロメートル|キログラム|グラム|メートル|メーター|センチ|ミリ|トン|"
+    "ヘルツ|ボルト|アンペア|ワット|リットル|"
+    "フォロワー|名|社|店|アポ|"
     "ぐらい|くらい|以上|以下|以内|未満"
 )
 
@@ -209,12 +211,45 @@ _KANJI_IDIOM_PROTECT = (
     "三角",
     "十分",
     "万一",
+    "万全",
+    "万歳",
+    "万能",
+    "億劫",
     "三味線",
+    "一語一語",
+    "八百屋",
+    "八百長",
+    "何百",
+    "何千",
 )
 
 # 正規表現: 漢数字列 + 助数詞 を一括マッチ
+# 改善20-C: 「数百万円」「何十人」のような概数（数/何 始まり）は漢数字のまま残すため、
+# 漢数字列の直前が 数/何（および漢数字の途中からのマッチ）にならないようにする。
 _KANJI_NUM_PATTERN = re.compile(
-    rf"([{_KANJI_NUM_CHARS}]+)({_COUNTER_SUFFIXES_STR})"
+    rf"(?<![数何{_KANJI_NUM_CHARS}])([{_KANJI_NUM_CHARS}]+)({_COUNTER_SUFFIXES_STR})"
+)
+
+# 改善19-D: 助数詞なし単独漢数字 (百/千/万/億いずれかの単位を含む2文字以上)
+# 改善20-C: 数/何 始まりの概数は対象外。
+_STANDALONE_KANJI_NUM_PATTERN = re.compile(
+    rf"(?<![数何{_KANJI_NUM_CHARS}])([{_KANJI_NUM_CHARS}]{{2,}})(?![{_KANJI_NUM_CHARS}])"
+)
+
+# 改善20-C: 単独漢数字の変換対象とする単位文字（万・億は単位として残し前の数を算用化する）
+_STANDALONE_UNIT_CHARS = ("百", "千", "万", "億")
+
+# 改善22-C: 並列漢数字（「二、3件」「二 30社」）の前半用の単純な漢数字→算用数字マップ
+_PARALLEL_KANJI_DIGIT = {
+    "一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
+    "六": "6", "七": "7", "八": "8", "九": "9",
+}
+
+# 改善22-C: 漢数字1〜9 ＋ 読点orスペース ＋ 算用数字 ＋ 助数詞 の並列パターン。
+# 「一、しかし…」のような列挙読点と誤爆しないよう、直後が算用数字＋助数詞の場合のみ変換する。
+# 助数詞付き変換の後段で適用するため、後半は算用化済み（「二、三件」→「二、3件」→ここで前半を変換）。
+_PARALLEL_KANJI_NUM_PATTERN = re.compile(
+    rf"(?<![数何{_KANJI_NUM_CHARS}])([一二三四五六七八九])[、,\s　]+(\d[\d万億兆]*(?:{_COUNTER_SUFFIXES_STR}))"
 )
 
 
@@ -246,6 +281,23 @@ def _normalize_kanji_numbers(text: str) -> str:
         return num_str + suffix
 
     text = _KANJI_NUM_PATTERN.sub(_replace, text)
+
+    def _replace_standalone(m: re.Match) -> str:
+        kanji_str = m.group(1)
+        if not any(unit in kanji_str for unit in _STANDALONE_UNIT_CHARS):
+            return m.group(0)
+        try:
+            num = _kanji2number(kanji_str)
+        except (ValueError, KeyError):
+            return m.group(0)
+        return _format_number(num)
+
+    text = _STANDALONE_KANJI_NUM_PATTERN.sub(_replace_standalone, text)
+
+    # 改善22-C: 並列漢数字の前半を算用化（「二、3件」→「2、3件」。区切りは読点に正規化）
+    text = _PARALLEL_KANJI_NUM_PATTERN.sub(
+        lambda m: _PARALLEL_KANJI_DIGIT[m.group(1)] + "、" + m.group(2), text
+    )
 
     for key, idiom in placeholders.items():
         text = text.replace(key, idiom)
@@ -300,6 +352,14 @@ _PROPER_NOUN_MAP = {
     "twitter": "X",
     "Twitter": "X",
     "LINE": "LINE",  # そのまま (正式)
+    # 改善22-B: 汎用サービス名のカナ表記→正式表記 (ニッチな固有社名は入れない)
+    "ユーチューブ": "YouTube",
+    "インスタグラム": "Instagram",
+    "ツイッター": "X",
+    "フェイスブック": "Facebook",
+    "リンクトイン": "LinkedIn",
+    "リンクドイン": "LinkedIn",
+    "ティックトック": "TikTok",
 }
 
 
@@ -418,14 +478,13 @@ def _map_pages_to_telops(
         page_text = "".join(page["lines"])
         page_len = len(page_text)
 
-        # クリーンテキスト内での位置を探す
-        match_pos = full_text_clean.find(page_text, page_clean_offset)
-        if match_pos == -1:
-            match_pos = page_clean_offset
+        # 改善22-A: 完全一致 find の誤マッチ（後方の同一テキストへの飛び）を検査し、
+        # 先頭文字欠け・ファジーマッチのフォールバック付きで位置を推定する
+        match_pos, match_len = _find_page_position(full_text_clean, page_text, page_clean_offset)
 
         # word indices を特定（クリーン → raw → word_idx）
         word_indices = set()
-        for ci in range(match_pos, min(match_pos + page_len, len(full_text_clean))):
+        for ci in range(match_pos, min(match_pos + match_len, len(full_text_clean))):
             raw_pos = clean_to_raw.get(ci)
             if raw_pos is not None and raw_pos in char_to_word_idx:
                 word_indices.add(char_to_word_idx[raw_pos])
@@ -455,6 +514,52 @@ def _map_pages_to_telops(
             "segments": segments,
         })
 
-        page_clean_offset = match_pos + page_len
+        page_clean_offset = match_pos + match_len
 
     return telops
+
+
+def _find_page_position(full_text_clean: str, page_text: str, offset: int) -> Tuple[int, int]:
+    """クリーンテキスト内でのページ位置を推定する (改善22-A)。
+
+    keep_segment のカット境界で先頭文字が欠けたwords列に対して、
+    `find()` の完全一致が後方の同一テキストに誤マッチすると、
+    後続ページの word_indices が連鎖的にズレる。
+    完全一致の飛び幅検査 + 先頭削りの部分一致 + difflib による近傍ファジーマッチで
+    単調前進（offset 以上）を保ちながら位置を復元する。
+
+    Returns:
+        (match_pos, match_len): クリーンテキスト内の開始位置と一致長
+    """
+    page_len = len(page_text)
+    # 期待位置からの許容飛び幅。これを超える一致は後方への誤マッチを疑う
+    max_jump = max(page_len * 2, 20)
+
+    # 1. 完全一致 (飛び幅検査つき)
+    match_pos = full_text_clean.find(page_text, offset)
+    if match_pos != -1 and match_pos - offset <= max_jump:
+        return match_pos, page_len
+
+    # 2a. ページ先頭の1〜2文字を削った部分文字列で再探索 (カット境界の先頭文字欠け対策)
+    for strip in (1, 2):
+        sub = page_text[strip:]
+        if len(sub) < 2:
+            break
+        pos = full_text_clean.find(sub, offset)
+        if pos != -1 and pos - offset <= max_jump:
+            return pos, len(sub)
+
+    # 2b. difflib による offset 近傍のファジーマッチ
+    window_end = min(len(full_text_clean), offset + page_len + max_jump)
+    window = full_text_clean[offset:window_end]
+    if window:
+        matcher = difflib.SequenceMatcher(None, page_text, window, autojunk=False)
+        best = matcher.find_longest_match(0, page_len, 0, len(window))
+        # ページの半分以上が連続一致した場合のみ採用
+        if best.size >= max(2, page_len // 2):
+            # ページ内の一致開始位置ぶん手前に補正しつつ、後戻りは禁止
+            pos = max(offset, offset + best.b - best.a)
+            return pos, page_len
+
+    # 3. 最後の手段: 従来どおり期待位置に置く
+    return offset, page_len

@@ -58,6 +58,28 @@ export type Scene = {
    * 具体テーマ+感情を指しているため、アクティブテーマが変わっても指すスタイルは変化しない)。
    */
   styleOverrideId?: string | null;
+  /**
+   * フェーズT2(directedモード): 演出ディレクティブのスタイルID(fact_yellow等、
+   * directedTelop.ts の DIRECTED_STYLE_OPTIONS のいずれか)。
+   * フェーズT2.5-4以降は「個別プリセット上書き」の意味になり、null/undefined なら
+   * directedType × type→presetマッピングでスタイルを解決する。T2の旧run(type無し)では
+   * ディレクティブのstyleスナップショットがそのままここに入る(後方互換)。
+   */
+  directedStyleId?: string | null;
+  /**
+   * フェーズT2.5-4(directedモード): シーンの意味種類(semantic type。telopTypes.ts の
+   * SEMANTIC_TYPES のいずれか)。directedモードのスタイルバッジはこの日本語名を主表示にし、
+   * type→presetマッピング(ユーザー設定)でプリセットを解決する。
+   * 旧run(type無し)・fullモードでは未使用(undefined)。
+   */
+  directedType?: string | null;
+  /** フェーズT2(directedモード): 演出ディレクティブの部分強調語(テロップ文言内の部分文字列)。 */
+  directedHighlightWords?: string[];
+  /**
+   * フェーズT3(directedモード): 登場アニメの個別上書き(シーン行のアニメーションピッカー)。
+   * null/undefined なら上書きなし(type→マッピング → プリセット既定で解決される)。
+   */
+  directedAnimationIn?: string | null;
 };
 
 export type SourceWord = {
@@ -81,6 +103,14 @@ export type TelopPageBoundary = {
   endMs: number;
   /** 改善10-B-3: パイプライン適用済みのページ本文(句読点ルール済み)。未指定時はwords連結+正規化。 */
   text?: string;
+  /** フェーズT2(directedモード): ディレクティブのスタイルID(fact_yellow等)。fullモードでは未指定。 */
+  styleId?: string;
+  /** フェーズT2.5-4(directedモード): シーンの意味種類(semantic type)。旧run・fullモードでは未指定。 */
+  typeId?: string;
+  /** フェーズT2.5-4(directedモード): styleId が個別上書き(type→presetマッピングより優先)かどうか。 */
+  styleOverridden?: boolean;
+  /** フェーズT2(directedモード): ディレクティブの部分強調語。 */
+  highlightWords?: string[];
 };
 
 export type InitializeScenesInput = {
@@ -125,6 +155,7 @@ function buildScene(
   sourceStartMs: number,
   sourceEndMs: number,
   telopTextOverride?: string,
+  directedFields?: { styleId?: string; typeId?: string; styleOverridden?: boolean; highlightWords?: string[] },
 ): Scene {
   const sceneWords: SceneWord[] = words.map((word) => ({
     id: word.id,
@@ -134,7 +165,7 @@ function buildScene(
     deleted: false,
   }));
   const telopText = telopTextOverride ?? autoTelopTextFromWords(sceneWords);
-  return {
+  const scene: Scene = {
     id: nextSceneId(),
     sourceStartMs,
     sourceEndMs,
@@ -145,6 +176,19 @@ function buildScene(
     emotionTag: detectEmotionTag(telopText),
     styleOverrideId: null,
   };
+  // フェーズT2(directedモード): ページ境界がディレクティブ由来の場合のみ付与する
+  // (fullモードのSceneには余計なフィールドを増やさない)。
+  // フェーズT2.5-4: typeがあるシーンのスタイルは type×マッピング で解決するため、
+  // directedStyleId は「個別上書き」または「type無しの旧run(スナップショットが正)」の
+  // 場合のみ設定する。
+  if (directedFields?.styleId || directedFields?.typeId) {
+    if (directedFields.typeId) scene.directedType = directedFields.typeId;
+    if (directedFields.styleId && (directedFields.styleOverridden || !directedFields.typeId)) {
+      scene.directedStyleId = directedFields.styleId;
+    }
+    scene.directedHighlightWords = directedFields.highlightWords ?? [];
+  }
+  return scene;
 }
 
 /**
@@ -420,7 +464,16 @@ function initializeScenesFromPageBoundaries(
         index === pagesInSegment.length - 1 ? segment.endMs : Math.round((page.endMs + nextPage.startMs) / 2);
       const sceneWords = segmentWords.filter((word) => word.startMs < endMs && word.endMs > startMs);
       const pageText = typeof page.text === "string" && page.text.trim() ? page.text.trim() : undefined;
-      if (sceneWords.length) scenes.push(buildScene(sceneWords, startMs, endMs, pageText));
+      const directedFields =
+        page.styleId || page.typeId
+          ? {
+              styleId: page.styleId,
+              typeId: page.typeId,
+              styleOverridden: page.styleOverridden,
+              highlightWords: page.highlightWords,
+            }
+          : undefined;
+      if (sceneWords.length) scenes.push(buildScene(sceneWords, startMs, endMs, pageText, directedFields));
     });
   }
   return scenes;
@@ -604,6 +657,24 @@ export function setSceneStyleOverride(scenes: Scene[], sceneId: string, styleId:
 }
 
 /**
+ * フェーズT2(directedモード): スタイルバッジからdirectedスタイルIDを個別上書きする
+ * (T2.5-4以降は「type→presetマッピングより優先される個別上書き」の意味。null=上書き解除)。
+ */
+export function setSceneDirectedStyle(scenes: Scene[], sceneId: string, styleId: string | null): Scene[] {
+  return scenes.map((scene) => (scene.id === sceneId ? { ...scene, directedStyleId: styleId } : scene));
+}
+
+/**
+ * フェーズT2.5-4(directedモード): typeバッジからシーンの意味種類を変更する。
+ * type変更はスタイルをマッピング解決へ戻す意図なので、個別上書き(directedStyleId)は解除する。
+ */
+export function setSceneDirectedType(scenes: Scene[], sceneId: string, typeId: string): Scene[] {
+  return scenes.map((scene) =>
+    scene.id === sceneId ? { ...scene, directedType: typeId, directedStyleId: null } : scene,
+  );
+}
+
+/**
  * T-3「このスタイルを同じ感情の全シーンに適用」: 対象シーンの感情タグ(未設定は"normal"扱い)と
  * 一致する全シーン(対象シーン自身を含む)にstyleIdを一括オーバーライドする。1回の呼び出しで
  * 1つの不変更新(=呼び出し側で1回のUndo操作)になる。
@@ -723,10 +794,14 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     telopText: firstTelopText,
     telopEdited: scene.telopEdited,
     cutMarks: scene.cutMarks.filter((mark) => mark < boundaryMs),
-    // 感情タグ(T-2)は分割後の本文に対して再判定する。個別スタイルオーバーライド(T-3)は
-    // 「分割」という構造操作ではユーザーの意図を推測できないため両半分にそのまま引き継ぐ。
+    // 感情タグ(T-2)は分割後の本文に対して再判定する。個別スタイルオーバーライド(T-3)・
+    // directedスタイル(T2)は「分割」という構造操作ではユーザーの意図を推測できないため
+    // 両半分にそのまま引き継ぐ(directedの強調語は本文に残っている側でのみ有効になる)。
     emotionTag: detectEmotionTag(firstTelopText),
     styleOverrideId: scene.styleOverrideId,
+    directedStyleId: scene.directedStyleId,
+    directedType: scene.directedType,
+    directedHighlightWords: scene.directedHighlightWords,
   };
   const secondScene: Scene = {
     id: `${scene.id}R`,
@@ -738,6 +813,9 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     cutMarks: scene.cutMarks.filter((mark) => mark >= boundaryMs),
     emotionTag: detectEmotionTag(secondTelopText),
     styleOverrideId: scene.styleOverrideId,
+    directedStyleId: scene.directedStyleId,
+    directedType: scene.directedType,
+    directedHighlightWords: scene.directedHighlightWords,
   };
 
   return [...scenes.slice(0, sceneIndex), firstScene, secondScene, ...scenes.slice(sceneIndex + 1)];
@@ -778,6 +856,9 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     cutMarks: scene.cutMarks.filter((mark) => mark < ms),
     emotionTag: detectEmotionTag(firstTelopText),
     styleOverrideId: scene.styleOverrideId,
+    directedStyleId: scene.directedStyleId,
+    directedType: scene.directedType,
+    directedHighlightWords: scene.directedHighlightWords,
   };
   const secondScene: Scene = {
     id: `${scene.id}R`,
@@ -789,6 +870,9 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     cutMarks: scene.cutMarks.filter((mark) => mark > ms),
     emotionTag: detectEmotionTag(secondTelopText),
     styleOverrideId: scene.styleOverrideId,
+    directedStyleId: scene.directedStyleId,
+    directedType: scene.directedType,
+    directedHighlightWords: scene.directedHighlightWords,
   };
 
   return [...scenes.slice(0, sceneIndex), firstScene, secondScene, ...scenes.slice(sceneIndex + 1)];
@@ -825,10 +909,16 @@ export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
     telopText,
     telopEdited,
     cutMarks: [...first.cutMarks, ...second.cutMarks],
-    // 結合後の本文で感情タグ(T-2)を再判定する。個別スタイルオーバーライド(T-3)は
-    // 前半シーンのものを優先し、前半になければ後半のものを引き継ぐ。
+    // 結合後の本文で感情タグ(T-2)を再判定する。個別スタイルオーバーライド(T-3)・
+    // directedスタイル(T2)は前半シーンのものを優先し、前半になければ後半のものを引き継ぐ。
     emotionTag: detectEmotionTag(telopText),
     styleOverrideId: first.styleOverrideId ?? second.styleOverrideId ?? null,
+    directedStyleId: first.directedStyleId ?? second.directedStyleId,
+    directedType: first.directedType ?? second.directedType,
+    directedHighlightWords:
+      first.directedHighlightWords || second.directedHighlightWords
+        ? [...new Set([...(first.directedHighlightWords || []), ...(second.directedHighlightWords || [])])]
+        : undefined,
   };
   return [...scenes.slice(0, sceneIndex), merged, ...scenes.slice(sceneIndex + 2)];
 }
@@ -866,6 +956,11 @@ export function attachSuspicionsToScenes(
     if (!sceneId) {
       const index = findSceneIndexAtMs(scenes, item.timestampMs);
       sceneId = index >= 0 ? scenes[index].id : undefined;
+    }
+    // 改善21-B: ai_failure(AI校正未実行)は動画全体に関する項目で行アンカーを持たないため、
+    // 先頭シーンに固定表示する(先頭シーンが0msから始まらないrunでも消えないように)。
+    if (!sceneId && item.type === "ai_failure" && scenes.length) {
+      sceneId = scenes[0].id;
     }
     if (!sceneId) continue;
     const list = result.get(sceneId);

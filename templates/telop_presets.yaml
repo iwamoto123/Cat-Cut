@@ -23,7 +23,31 @@
 #     color             : 色
 #     width             : 太さ (px) ※inner_stroke より大きく
 #   drop_shadow         : 影 (CSS の filter: drop-shadow() 文字列、null で無効)
+#   shadow_offset       : ハードなオフセット影 (フェーズT2.5。縁レイヤーの下に(x,y)pxずらした
+#     x                 : 影レイヤーを描画する。drop_shadowのぼかし影とは別物で、
+#     y                 : 「細い縁+オフセット影」の商用テロップ定番表現に使う。
+#     color             : x/y は font_size 基準のpx。null/省略で無効)
 #   y_position_offset   : 縦位置オフセット (yaml の telop_y からの相対調整, -0.1〜0.1, 0=変更なし)
+#   highlight_color     : 部分ハイライト色 (フェーズT1。telops[].highlight_words に含まれる
+#                         部分文字列の塗り色。省略時は "#E7305B")
+#   background          : 背景 (オプション)
+#     color             : 背景色
+#     borderRadius      : 角丸 (CSS文字列。従来の行ごと帯背景用)
+#     padding_x         : 横パディング px (フェーズT1。指定すると「行ごとの帯」ではなく
+#     padding_y         : 縦パディング px  文字ブロック全体の背後に1枚のベタ長方形を描画する)
+#     border_radius     : 角丸 px (ブロック背景用)
+#   animation_in        : 登場アニメーション (フェーズT3。プリセット単位の既定。
+#                         "pop_big"    = 画面中央に大きく出てから定位置へ縮小移動(強調・煽り系)
+#                         "slide_left" = 左からスライドイン+フェード(名言・辛辣系)
+#                         "slide_up"   = 下から浮き上がる(質問系)
+#                         "zoom"       = その場でズームイン(要点・オチ・CTA)
+#                         "stamp"      = ハンコ(既存流用) / "fade" = フェードのみ / "none" = なし
+#                         省略時は timeline.animation_in (従来のグローバル設定) にフォールバック)
+#   animation_out       : 退場アニメーション ("fade" | "pop_out" | "none"。省略時は
+#                         timeline.animation_out にフォールバック)
+#   animation_duration_frames : 登場アニメの長さ(フレーム数。省略時は既定12)
+#   sfx                 : 登場時効果音ID (assets/sfx/ の "don"|"shakin"|"pon"|"jan"|"hyu"。
+#                         null/省略で鳴らさない。連発防止のため描画側で最小間隔5秒のガードあり)
 
 presets:
   # ----- 標準テロップ (青グラデ + 多重縁取り) -----
@@ -131,6 +155,16 @@ presets:
       width: 20
     drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.5))"
     y_position_offset: 0
+
+  # ===========================================================================
+  # フェーズT2.5-2: 縁取りデザイン原則 (演出系プリセット fact_yellow〜serif_harsh に適用)
+  #
+  #   原則1: 二重縁で濃色同士を隣接させない (縁の明度差 >= 0.4。リント:
+  #          python/tests/test_telop_preset_lint.py が全プリセットを機械検証する)
+  #   原則2: 太い第2縁の代わりに「細い縁(8〜12px級) + オフセット影(shadow_offset)」
+  #          または「細い縁 + ソフト影(drop_shadow)」を基本とする
+  #   定番形: 「白文字+黒細縁+ハード影」「黄文字+黒細縁」「色文字+白細縁+黒オフセット影」
+  # ===========================================================================
 
   # ===========================================================================
   # 改善8-B-2: カラーウェイ×用途プリセット群(共通デザイン式)
@@ -679,6 +713,244 @@ presets:
     outer_stroke: { color: "#4A2E12", width: 16 }
     drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
     y_position_offset: 0
+
+  # ===========================================================================
+  # フェーズT1: 参考動画テロップ8系統プリセット (telop_analysis_20260705/analysis.md)
+  #
+  # 配色ルール: 事実=fact_yellow(A1) / 中立・相槌=neutral_white(A2) /
+  # 感情・断言=emotion_red(A3) / 質問=question_blue(A4) / 軽い返し=reply_cyan(A5) /
+  # 強い煽り=special_purple(A6) / 要点・オチ=box_yellow(B) / プラン名等=box_red /
+  # CTA=cta_yellow(G) / OP煽り=op_brush(D)
+  # 参考画像: templates/reference/telop_analysis_20260705/telop_samples/
+  # ===========================================================================
+
+  # ----- A1: 黄ベタ+黒細縁 (デフォルト事実。参考画像05,06の黄字幕) -----
+  fact_yellow:
+    description: "事実・説明のデフォルト。黄ベタ文字+黒細縁"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFE600" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 10 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.45))"
+    y_position_offset: 0
+    animation_in: fade
+    sfx: null
+
+  # ----- A2: 白+黒細縁+黒ハード影 (T2.5-2: 旧「黒縁+青の第2縁」の濃色隣接を全廃) -----
+  neutral_white:
+    description: "ニュートラルな相槌・つなぎ・引用。白+黒細縁+黒ハード影"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 8 }
+    drop_shadow: null
+    shadow_offset: { x: 6, y: 6, color: "#000000" }
+    y_position_offset: 0
+    animation_in: fade
+    sfx: null
+
+  # ----- A3: 赤ベタ+白細縁+黒オフセット影 (感情・驚き・断言・煽り。参考画像13) -----
+  emotion_red:
+    description: "感情・驚き・断言。赤ベタ+白細縁+黒オフセット影"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 76
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.35
+    fill: { type: solid, color: "#E60028" }
+    inner_stroke: null
+    outer_stroke: { color: "#FFFFFF", width: 10 }
+    drop_shadow: null
+    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"  # 赤地なので部分強調は黄
+    animation_in: pop_big  # 強調・断言は「画面中央に大きくバッと出て」定位置へ
+    sfx: don
+
+  # ----- A4: 青ベタ+白細縁+黒オフセット影 (聞き手の質問・ツッコミ) -----
+  question_blue:
+    description: "聞き手の質問・ツッコミ。青ベタ+白細縁+黒オフセット影"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.35
+    fill: { type: solid, color: "#1D6AE5" }
+    inner_stroke: null
+    outer_stroke: { color: "#FFFFFF", width: 10 }
+    drop_shadow: null
+    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"  # 青地なので部分強調は黄
+    animation_in: slide_up  # 質問は下から浮き上がる
+    sfx: pon
+
+  # ----- A5: 水色ベタ+黒細縁 (軽い返し・相槌) -----
+  reply_cyan:
+    description: "軽い返し・相槌。水色ベタ+黒細縁"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 68
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.35
+    fill: { type: solid, color: "#6BDCF5" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 10 }
+    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    y_position_offset: 0
+    animation_in: fade
+    sfx: null
+
+  # ----- A6: 紫グラデ+白細縁+暗紫の外縁 (特別強調・強い煽り。参考画像09) -----
+  # 二重縁だが「紫 → 白(明) → 暗紫(暗)」と明度差を挟むため原則1を満たす
+  special_purple:
+    description: "特別に強い煽り/ネガ。紫グラデ+白細縁+暗紫の外縁"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 80
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#B06CF2", gradient_to: "#4E1490", gradient_direction: vertical }
+    inner_stroke: { color: "#FFFFFF", width: 8 }
+    outer_stroke: { color: "#14042E", width: 14 }
+    drop_shadow: "drop-shadow(0px 5px 10px rgba(20,4,46,0.6))"
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: pop_big  # 強い煽りは「画面中央に大きくバッと出て」定位置へ
+    sfx: don
+
+  # ----- B: 黄色ベタ背景ボックス+黒文字 (要点・オチ・言い切り。参考画像06) -----
+  box_yellow:
+    description: "話のオチ・要約・言い切り。黄色ベタ背景ボックス+黒文字(2行)"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 64
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: solid, color: "#000000" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))"
+    background: { color: "#FFE600", padding_x: 36, padding_y: 14 }
+    y_position_offset: 0
+    animation_in: zoom  # 要点・オチはその場でズームイン
+    sfx: jan
+
+  # ----- 赤ベタ背景ボックス+白文字 (プラン名・代行プラン等。analysis CH8 12:27) -----
+  box_red:
+    description: "プラン名等の強い提示。赤ベタ背景ボックス+白文字"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 64
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))"
+    background: { color: "#E60028", padding_x: 36, padding_y: 14 }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: zoom
+    sfx: jan
+
+  # ----- G: CTA用 (box_yellowの変形・下部2行。参考画像12) -----
+  cta_yellow:
+    description: "CTA「概要欄の公式LINEに『◯◯希望』」。黄色ベタ大ボックス+黒文字2行"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 76
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: solid, color: "#000000" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 4px 10px rgba(0,0,0,0.4))"
+    background: { color: "#FFE600", padding_x: 44, padding_y: 16 }
+    y_position_offset: 0
+    highlight_color: "#E60028"
+    animation_in: zoom
+    sfx: jan
+
+  # ----- D: OP専用の煽り (毛筆・白文字+黒フチ。参考画像02) -----
+  # フェーズT2.5-3: 毛筆フォントを Yuji Syuku (Google Fonts, OFL) に差し替え。
+  # オフライン時は明朝系システムフォントへフォールバックする。
+  op_brush:
+    description: "OP煽り。毛筆(Yuji Syuku)・白文字+黒フチ(参考画像02)"
+    font_family: '"Yuji Syuku", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 88
+    font_weight: 400  # Yuji Syuku は400のみ提供(疑似ボールドは筆致が潰れるため使わない)
+    letter_spacing: "0.04em"
+    line_height: 1.3
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 12 }
+    drop_shadow: "drop-shadow(0px 5px 10px rgba(0,0,0,0.7))"
+    y_position_offset: -0.1
+
+  # ----- A2変種: 白+ピンク細縁+黒ハード影 (T2.5-2: 旧「黒縁+ピンク第2縁」の濃色隣接を全廃) -----
+  neutral_white_pink:
+    description: "ニュートラル変種。白+ピンク細縁+黒ハード影"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#E8336E", width: 10 }
+    drop_shadow: null
+    shadow_offset: { x: 6, y: 6, color: "#000000" }
+    y_position_offset: 0
+    animation_in: fade
+    sfx: null
+
+  # ===========================================================================
+  # フェーズT2.5-3: 明朝体プリセット (辛辣・毒舌・名言・シリアス向け)
+  # フォント: Shippori Mincho B1 (Google Fonts, OFL)。オフライン時はシステム明朝へフォールバック
+  # ===========================================================================
+
+  # ----- 名言・格言 (しっとり。左右に余韻のある字間) -----
+  serif_quote:
+    description: "名言・格言。白の明朝+黒細縁+ソフト影。余韻のある字間"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 74
+    font_weight: 700
+    letter_spacing: "0.14em"
+    line_height: 1.6
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 8 }
+    drop_shadow: "drop-shadow(0px 6px 14px rgba(0,0,0,0.65))"
+    y_position_offset: 0
+    animation_in: slide_left  # 名言は「左から現れる」
+    sfx: shakin
+
+  # ----- 辛辣・毒舌 (突き刺さる。黒明朝+白細縁+黒オフセット影) -----
+  serif_harsh:
+    description: "辛辣・毒舌。黒の明朝+白細縁+黒オフセット影"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 78
+    font_weight: 800
+    letter_spacing: "0.06em"
+    line_height: 1.45
+    fill: { type: solid, color: "#111111" }
+    inner_stroke: null
+    outer_stroke: { color: "#FFFFFF", width: 10 }
+    drop_shadow: null
+    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#E60028"
+    animation_in: slide_left  # 辛辣も左から(名言系と同じ所作)
+    sfx: shakin
 
   # ----- 質問・ホスト発言 (グリーン系) -----
   question:

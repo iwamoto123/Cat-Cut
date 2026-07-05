@@ -42,6 +42,16 @@ test("cleanTelopLine: 行末読点を除去する", () => {
   assert.equal(cleanTelopLine("それでは奉仕インタビューということで、"), "それでは奉仕インタビューということで");
 });
 
+test("cleanTelopLine: 行末フィラー「、ね」「、ま」を除去する", () => {
+  assert.equal(cleanTelopLine("お疲れ様でしたということで、ね"), "お疲れ様でしたということで");
+  assert.equal(cleanTelopLine("動画撮ってるんですが、ま"), "動画撮ってるんですが");
+});
+
+test("cleanTelopLine: 読点なしの「ね」や行頭の「ね」は残す", () => {
+  assert.equal(cleanTelopLine("大学ってすごいからね"), "大学ってすごいからね");
+  assert.equal(cleanTelopLine("ね、まだ逆転できるよ"), "ね、まだ逆転できるよ");
+});
+
 test("cleanTelopLine: 「？、」を「？」に正規化する", () => {
   assert.equal(cleanTelopLine("正社員だったんですか？、"), "正社員だったんですか？");
 });

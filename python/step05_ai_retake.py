@@ -24,11 +24,18 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from shared.llm_client import (  # noqa: E402
+    FATAL_LLM_ERROR_KINDS,
     ProviderArg,
     ProviderName,
     call_llm,
     call_llm_json,
+    classify_llm_error,
+    get_usage_summary,
+    print_usage_summary,
+    reset_usage_tracking,
     resolve_provider_and_key,
+    summarize_error_kinds,
+    truncate_error_detail,
 )
 
 REPO_ROOT = ROOT.parent
@@ -327,6 +334,14 @@ def apply_llm_response(
     return retake_entries, needs_review_items, retakes_applied, fillers_removed
 
 
+def _attach_usage(payload: dict[str, Any]) -> dict[str, Any]:
+    """累積使用量があれば payload に usage キーを付与する。"""
+    usage = get_usage_summary()
+    if usage:
+        payload["usage"] = usage
+    return payload
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -344,6 +359,7 @@ def run_step(
 ) -> dict[str, Any]:
     """AI retake ステップ本体。キーなし/エラー時は安全にスキップする。"""
     print("[Step 5 AI] Retake detection (LLM)")
+    reset_usage_tracking()
     caller = call_llm_fn or call_llm
     stt_file = Path(stt_path)
     fillers_file = Path(fillers_path)
@@ -398,6 +414,8 @@ def run_step(
 
     successful_responses: list[dict[str, Any]] = []
     failed_chunks = 0
+    error_kinds: list[str] = []
+    error_details: list[str] = []
 
     for chunk_index, (context, target) in enumerate(chunks):
         prompt = build_prompt(
@@ -414,21 +432,35 @@ def run_step(
             print(f"  chunk {chunk_index + 1}/{len(chunks)}: ok")
         except Exception as exc:  # noqa: BLE001
             failed_chunks += 1
+            error_kind = classify_llm_error(exc)
+            error_kinds.append(error_kind)
+            error_details.append(truncate_error_detail(f"{type(exc).__name__}: {exc}"))
             print(
                 f"  chunk {chunk_index + 1}/{len(chunks)} failed "
-                f"({type(exc).__name__}: {exc})"
+                f"[error_kind={error_kind}] ({type(exc).__name__}: {exc})"
             )
+            # billing/auth はリトライ・続行が無意味なので残チャンクをスキップして即時失敗(改善21-A)。
+            if error_kind in FATAL_LLM_ERROR_KINDS:
+                remaining = len(chunks) - chunk_index - 1
+                if remaining > 0:
+                    failed_chunks += remaining
+                    print(f"  fatal error ({error_kind}) - skipping remaining {remaining} chunks")
+                break
 
     if not successful_responses:
         print(f"  all {len(chunks)} chunks failed - skipping")
         _write_json(retakes_file, {"retakes": []})
-        _write_json(review_file, {
+        failure_payload = _attach_usage({
             "enabled": False,
             "reason": f"api_error: all {len(chunks)} chunks failed",
             "provider": resolved_provider,
             "failed_chunks": failed_chunks,
+            "error_kind": summarize_error_kinds(error_kinds),
+            "error_detail": error_details[0] if error_details else "",
         })
-        return {"enabled": False, "reason": f"api_error: all {len(chunks)} chunks failed"}
+        _write_json(review_file, failure_payload)
+        print_usage_summary()
+        return failure_payload
 
     merged_response = merge_llm_responses(successful_responses)
 
@@ -439,12 +471,13 @@ def run_step(
     except Exception as exc:  # noqa: BLE001
         print(f"  failed to apply response ({type(exc).__name__}: {exc}) - skipping")
         _write_json(retakes_file, {"retakes": []})
-        _write_json(review_file, {
+        _write_json(review_file, _attach_usage({
             "enabled": False,
             "reason": f"apply_error: {exc}",
             "provider": resolved_provider,
             "failed_chunks": failed_chunks,
-        })
+        }))
+        print_usage_summary()
         return {"enabled": False, "reason": f"apply_error: {exc}"}
 
     _write_json(retakes_file, {"retakes": retake_entries})
@@ -458,12 +491,17 @@ def run_step(
     }
     if failed_chunks > 0:
         review_payload["failed_chunks"] = failed_chunks
+        review_payload["error_kind"] = summarize_error_kinds(error_kinds)
+        if error_details:
+            review_payload["error_detail"] = error_details[0]
+    _attach_usage(review_payload)
     _write_json(review_file, review_payload)
 
     print(
         f"  retakes: {retakes_applied}, fillers_removed: {fillers_removed}, "
         f"needs_review: {len(needs_review_items)}, failed_chunks: {failed_chunks}"
     )
+    print_usage_summary()
     print(f"[Step 5 AI] Done: {review_file}")
     return review_payload
 

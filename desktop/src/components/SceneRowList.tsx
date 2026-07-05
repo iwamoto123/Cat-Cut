@@ -70,6 +70,16 @@ type Props = {
   onSetStyleOverride: (sceneId: string, styleId: string | null) => void;
   /** T-3: 「このスタイルを同じ感情の全シーンに適用」。 */
   onApplyStyleToEmotionGroup: (sceneId: string, styleId: string) => void;
+  /** フェーズT2: directedモード(演出ディレクティブ駆動)ならスタイルバッジ=シーン種類/スタイルIDを正とする。 */
+  directedMode?: boolean;
+  /** フェーズT2.5-4: シーン種類→プリセットIDの解決済みマッピング(既定+ユーザー設定)。 */
+  telopTypeMapping?: Record<string, string>;
+  /** フェーズT2.5-4: typeバッジからのシーン種類変更。 */
+  onSetDirectedType?: (sceneId: string, typeId: string) => void;
+  /** フェーズT2: プリセットの個別上書き(null=解除)。 */
+  onSetDirectedStyle?: (sceneId: string, styleId: string | null) => void;
+  /** 改善21-B: ai_failure 疑義(AI校正未実行)の項目内から⚙API設定モーダルを開く。 */
+  onOpenApiSettings?: () => void;
 };
 
 /**
@@ -109,6 +119,11 @@ export function SceneRowList({
   onSetEmotionTag,
   onSetStyleOverride,
   onApplyStyleToEmotionGroup,
+  directedMode,
+  telopTypeMapping,
+  onSetDirectedType,
+  onSetDirectedStyle,
+  onOpenApiSettings,
 }: Props) {
   if (!scenes.length) {
     return <div className="sceneRowListEmpty">表示できるシーンがありません。</div>;
@@ -161,6 +176,11 @@ export function SceneRowList({
             onSetEmotionTag={(tag) => onSetEmotionTag(scene.id, tag)}
             onSetStyleOverride={(styleId) => onSetStyleOverride(scene.id, styleId)}
             onApplyStyleToEmotionGroup={(styleId) => onApplyStyleToEmotionGroup(scene.id, styleId)}
+            directedMode={directedMode}
+            telopTypeMapping={telopTypeMapping}
+            onSetDirectedType={onSetDirectedType ? (typeId) => onSetDirectedType(scene.id, typeId) : undefined}
+            onSetDirectedStyle={onSetDirectedStyle ? (styleId) => onSetDirectedStyle(scene.id, styleId) : undefined}
+            onOpenApiSettings={onOpenApiSettings}
           />
         );
       })}

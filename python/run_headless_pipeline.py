@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHON = ROOT / ".venv" / "bin" / "python"
 sys.path.insert(0, str(ROOT / "python"))
 from shared.app_paths import default_user_dictionary_path
+from shared.project_config import load_project_config
 
 
 def repo_path(*parts: str) -> Path:
@@ -184,6 +185,32 @@ def run_pipeline(
         env=env,
     )
 
+    # フェーズT2: telop.mode が directed のときのみパス3(演出決定エンジン)を実行する。
+    # step06c は run直下に telop_directives.json を書き、step08 がそれを読んで
+    # directedテロップ+オーバーレイを生成する(既定 full では従来動作のまま)。
+    # CATCUT_TELOP_MODE 環境変数で project.yaml の telop.mode を上書きできる
+    # (共有テンプレートを書き換えずに directed を試すための開発用フック)
+    telop_mode = os.environ.get("CATCUT_TELOP_MODE", "").strip() or str(
+        load_project_config(str(project)).get("telop", {}).get("mode", "full")
+    )
+    directed_mode = telop_mode == "directed"
+    if directed_mode:
+        run_cmd(
+            [
+                "python/step06c_direction.py",
+                str(rel_run),
+                "--proposal",
+                str(rel_run / "step07_cut_proposal" / "cut_proposal.json"),
+                "--stt",
+                str(corrected_stt),
+                "--title",
+                title,
+                "--project",
+                str(project.relative_to(ROOT)),
+            ],
+            env=env,
+        )
+
     run_cmd(
         [
             "python/step08_composition.py",
@@ -215,19 +242,24 @@ def run_pipeline(
     )
     # 改善8-A-5: LLM refine (Claude API)。ANTHROPIC_API_KEYが無ければ内部で
     # 自動スキップしてBudouXのみの出力を維持するため、常に呼んで問題ない。
-    run_cmd(
-        [
-            "python/step06b_ai_refine.py",
-            str(rel_run),
-            "--stt",
-            str(corrected_stt),
-            "--project",
-            str(project.relative_to(ROOT)),
-            "--output",
-            str(rel_run / "step06b_ai_refine" / "refine.json"),
-        ],
-        env=env,
-    )
+    # フェーズT2: directedモードではスキップする(step06bのページ再分割はスロット単位の
+    # 明示タイミング・スタイルを破壊するため。文言整形の責務はstep06cが担う)。
+    if not directed_mode:
+        run_cmd(
+            [
+                "python/step06b_ai_refine.py",
+                str(rel_run),
+                "--stt",
+                str(corrected_stt),
+                "--project",
+                str(project.relative_to(ROOT)),
+                "--output",
+                str(rel_run / "step06b_ai_refine" / "refine.json"),
+            ],
+            env=env,
+        )
+    else:
+        print("\n[headless] telop.mode=directed - skip step06b (refinement handled by step06c)")
 
     if stop_at == "review":
         print(f"\n[headless] Review ready: {run_dir}")

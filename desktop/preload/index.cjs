@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("catcut", {
   saveFontProfile: (input) => ipcRenderer.invoke("font-profiles:save", input),
   deleteFontProfile: (profileId) => ipcRenderer.invoke("font-profiles:delete", profileId),
   getTelopPresets: () => ipcRenderer.invoke("telop-presets:list"),
+  getTelopTypeMapping: () => ipcRenderer.invoke("telop-type-mapping:get"),
+  saveTelopTypeMapping: (input) => ipcRenderer.invoke("telop-type-mapping:save", input),
   getUserRules: () => ipcRenderer.invoke("user-rules:get"),
   saveUserRules: (input) => ipcRenderer.invoke("user-rules:save", input),
   learnDictionaryRule: (input) => ipcRenderer.invoke("user-rules:learnDictionary", input),

@@ -9,7 +9,9 @@ export type SuspicionType =
   | "short_cut"
   | "filler"
   | "proper_noun"
-  | "ai_review";
+  | "ai_review"
+  | "ai_failure"
+  | "word_split";
 
 export type SuspicionItem = {
   id: string;
@@ -231,6 +233,171 @@ function findHeuristicTermRuns(words: TranscriptWord[], katakanaMinLength: numbe
 
 export type DictionaryTerm = { wrong?: string; correct?: string };
 
+/**
+ * 改善21-C: 汎用ビジネス・日常カタカナ語の既定除外リスト。
+ * STT誤認識の可能性が低い一般語を「カタカナ語で辞書未登録」フラグから除外する。
+ * 特定動画専用の固有名詞(社名・人名・サービス名)はここに入れないこと。
+ */
+export const COMMON_KATAKANA_WORDS: ReadonlySet<string> = new Set([
+  "テレアポ",
+  "インバウンド",
+  "アウトバウンド",
+  "コンサル",
+  "コンサルタント",
+  "コンサルティング",
+  "ミーティング",
+  "リスト",
+  "メッセージ",
+  "サービス",
+  "チャンネル",
+  "クライアント",
+  "リファラル",
+  "マーケティング",
+  "コミュニケーション",
+  "ターゲット",
+  "アプローチ",
+  "トレンド",
+  "フリーランス",
+  "サラリーマン",
+  "プロジェクト",
+  "プロモーション",
+  "ソリューション",
+  "インパクト",
+  "タイミング",
+  "コントロール",
+  "カスタマイズ",
+  "ツール",
+  "プラン",
+  "フォロワー",
+  "キャッチコピー",
+  "インフルエンサー",
+  "レバレッジ",
+  "マインド",
+  "ノウハウ",
+  "ハードル",
+  "スタートアップ",
+  "オンライン",
+  "オフライン",
+  "ビジネス",
+  "インターネット",
+  "ホームページ",
+  "ウェブサイト",
+  "スマホ",
+  "スマートフォン",
+  "パソコン",
+  "アプリ",
+  "データ",
+  "テーマ",
+  "ポイント",
+  "メリット",
+  "デメリット",
+  "リスク",
+  "チャンス",
+  "イメージ",
+  "パターン",
+  "ペース",
+  "レベル",
+  "バランス",
+  "エネルギー",
+  "モチベーション",
+  "テンション",
+  "スキル",
+  "キャリア",
+  "チーム",
+  "リーダー",
+  "マネージャー",
+  "サポート",
+  "フォロー",
+  "スケジュール",
+  "プレゼン",
+  "セミナー",
+  "ウェビナー",
+  "コンテンツ",
+  "デザイン",
+  "シンプル",
+  "スムーズ",
+  "スピード",
+  "スタイル",
+  "システム",
+  "プロセス",
+  "ステップ",
+  "ゴール",
+  "スタート",
+  "オススメ",
+  "アドバイス",
+  "フィードバック",
+  "アンケート",
+  "キャンペーン",
+  "ブランド",
+  "コスト",
+  "ビジョン",
+  "ルーティン",
+  "メンバー",
+  "パートナー",
+  "グループ",
+  "カテゴリー",
+  "ジャンル",
+  "キーワード",
+  "アカウント",
+  "フォーマット",
+  "テンプレート",
+  "マニュアル",
+  "フォーム",
+  "アタック",
+  "ヒアリング",
+  "マックス",
+  "クラス",
+  "トライアル",
+  "ポッドキャスト",
+  "リリース",
+  "メイン",
+  "パッケージ",
+  "タクシー",
+  "コロナ",
+  "コミュニティ",
+  "コミュニティー",
+  "リソース",
+  "ラッキー",
+  "デート",
+  "カンファレンス",
+  "プロダクト",
+  "アメリカ",
+  "アクティブ",
+  "ユーザー",
+  "アクティブユーザー",
+  "ネット",
+  "コラボレーション",
+  "ショートカット",
+  "ベース",
+  "サイト",
+  "ニーズ",
+  "テスト",
+  "ブレスト",
+  "ページ",
+  "リサーチ",
+  "プラス",
+  "マイナス",
+  "ユーチューバー",
+  "プレゼント",
+  "ライン",
+  "メール",
+  "ファネル",
+  "インサイドセールス",
+  "ワンオンワン",
+  "ハイブリッド",
+  "フランク",
+  "ドンピシャ",
+]);
+
+/**
+ * 改善21-C: オノマトペ・擬音語らしいカタカナ連続(ドキドキ/ゴリゴリ/バーッ/ブワーッ等)。
+ * 1〜2音の繰り返し、または長音+促音で終わる短い語は固有名詞ではなく擬音の可能性が高い。
+ */
+const KATAKANA_ONOMATOPOEIA_RE = /^(?:([ァ-ヴー]{1,2})\1+|[ァ-ヴ]{1,3}ーッ)$/;
+
+/** 頻度ベース抑制の既定閾値: 同一表記が動画全体でこの回数以上出現したらフラグしない。 */
+export const KATAKANA_FREQUENCY_SUPPRESS_MIN = 3;
+
 export type ProperNounOptions = {
   /** カタカナ連続とみなす最小文字数。既定3。 */
   katakanaMinLength?: number;
@@ -238,6 +405,13 @@ export type ProperNounOptions = {
   knownDictionary?: DictionaryTerm[];
   /** false の場合、(b)ヒューリスティック検出を行わない(AIモード向け)。既定true。 */
   includeHeuristic?: boolean;
+  /**
+   * 改善21-C(頻度ベース抑制): 同一表記のカタカナ語が動画全体でこの回数以上出現する場合は
+   * フラグしない(表記が安定している語はSTT誤認識の可能性が低い)。既定3。
+   */
+  katakanaFrequencySuppressMin?: number;
+  /** 改善21-C: 一般カタカナ語の除外リスト(既定 COMMON_KATAKANA_WORDS)。 */
+  commonKatakanaWords?: ReadonlySet<string>;
 };
 
 const PROPER_NOUN_FINDING_TYPES = new Set(["dictionary", "proper_noun_check", "number_check"]);
@@ -279,13 +453,26 @@ export function buildProperNounSuspicions(
   }
 
   const katakanaMinLength = options.katakanaMinLength ?? 3;
+  const frequencySuppressMin = options.katakanaFrequencySuppressMin ?? KATAKANA_FREQUENCY_SUPPRESS_MIN;
+  const commonKatakanaWords = options.commonKatakanaWords ?? COMMON_KATAKANA_WORDS;
   const knownTerms = new Set<string>();
   for (const term of options.knownDictionary || []) {
     if (term.wrong) knownTerms.add(term.wrong);
     if (term.correct) knownTerms.add(term.correct);
   }
 
-  for (const run of findHeuristicTermRuns(words, katakanaMinLength)) {
+  const runs = findHeuristicTermRuns(words, katakanaMinLength);
+
+  // 改善21-C(頻度ベース抑制): 同一表記のカタカナ語の動画全体での出現回数を数える。
+  const katakanaOccurrences = new Map<string, number>();
+  for (const run of runs) {
+    if (run.kind !== "katakana") continue;
+    const text = run.text.trim();
+    if (!text) continue;
+    katakanaOccurrences.set(text, (katakanaOccurrences.get(text) || 0) + 1);
+  }
+
+  for (const run of runs) {
     const text = run.text.trim();
     if (!text) continue;
     if (run.wordIds.some((wordId) => flaggedWordIds.has(wordId))) continue;
@@ -294,6 +481,14 @@ export function buildProperNounSuspicions(
     );
     if (!overlapsKeepSegment) continue;
     if (knownTerms.has(text)) continue;
+    if (run.kind === "katakana") {
+      // 改善21-C: 一般語(既定除外リスト)・オノマトペと、動画内で表記が安定している語
+      // (3回以上出現)は機械的な「辞書未登録」フラグから除外する。
+      // AI由来の needs_review には影響しない。
+      if (commonKatakanaWords.has(text)) continue;
+      if (KATAKANA_ONOMATOPOEIA_RE.test(text)) continue;
+      if ((katakanaOccurrences.get(text) || 0) >= frequencySuppressMin) continue;
+    }
     items.push({
       id: `proper_noun_heuristic:${run.wordIds.join("_")}`,
       type: "proper_noun",
@@ -329,6 +524,15 @@ export type AiReviewInput = {
   transcriptNeedsReview?: AiReviewTranscriptNeedsReview[];
   telopNeedsReview?: AiReviewTelopNeedsReview[];
   dismissedFindingIds?: string[];
+  /** 改善21-B: AI校正失敗時の情報(main/index.cjs が ai_review.json / refine.json から読む)。 */
+  transcriptRefineFailed?: boolean;
+  telopRefineFailed?: boolean;
+  transcriptErrorKind?: string;
+  telopErrorKind?: string;
+  transcriptErrorDetail?: string;
+  telopErrorDetail?: string;
+  transcriptProvider?: string;
+  telopProvider?: string;
 };
 
 function aiReviewLabel(reason: string): string {
@@ -348,23 +552,37 @@ function extractQuotedTexts(text: string): string[] {
   return results;
 }
 
-/** telop needs_review の位置解決用候補テキスト (長い順)。 */
+/** telop needs_review の位置解決用候補テキスト (優先順・各グループ内は長い順)。 */
 export function collectAiReviewCandidateTexts(entry: AiReviewTelopNeedsReview): string[] {
   const seen = new Set<string>();
   const candidates: string[] = [];
-  const push = (value: string | undefined) => {
+  const push = (value: string | undefined, minLen = 2) => {
     const trimmed = String(value || "").trim();
-    if (trimmed.length < 3 || seen.has(trimmed)) return;
+    if (trimmed.length < minLen || seen.has(trimmed)) return;
     seen.add(trimmed);
     candidates.push(trimmed);
   };
 
+  // (1) entry.text
   push(entry.text);
-  push(entry.suggestion);
-  for (const quoted of extractQuotedTexts(String(entry.reason || ""))) push(quoted);
-  for (const quoted of extractQuotedTexts(String(entry.suggestion || ""))) push(quoted);
-  push(entry.reason);
-  return candidates.sort((a, b) => b.length - a.length);
+
+  const reasonText = String(entry.reason || "");
+  const suggestionText = String(entry.suggestion || "");
+  const reasonQuotes = extractQuotedTexts(reasonText);
+  const suggestionQuotes = extractQuotedTexts(suggestionText);
+
+  // (2) suggestion 内の「」引用 (長い順)
+  for (const quoted of [...suggestionQuotes].sort((a, b) => b.length - a.length)) {
+    push(quoted);
+  }
+  // (3) reason 内の「」引用 (長い順)
+  for (const quoted of [...reasonQuotes].sort((a, b) => b.length - a.length)) {
+    push(quoted);
+  }
+
+  // 改善19-A: reason/suggestion の地の文は候補に含めない (部分一致の誤アンカー防止)
+
+  return candidates;
 }
 
 type SegmentRow = {
@@ -432,7 +650,7 @@ function findBestAiReviewTextMatch(
 
   for (const candidate of candidates) {
     let foundFullCandidate = false;
-    for (let len = candidate.length; len >= 3; len -= 1) {
+    for (let len = candidate.length; len >= 2; len -= 1) {
       for (let start = 0; start <= candidate.length - len; start += 1) {
         const needle = candidate.slice(start, start + len);
         for (const row of rows) {
@@ -506,6 +724,131 @@ export function resolveAiReviewAnchor(
   };
 }
 
+// --- 改善21-B: AI校正失敗を要確認キューの先頭項目に統合する ---
+
+export type AiFailureErrorKind = "billing" | "auth" | "rate_limit" | "overloaded" | "timeout" | "other";
+
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  gemini: "Gemini",
+};
+
+export function normalizeAiFailureErrorKind(kind: string | undefined): AiFailureErrorKind {
+  const normalized = String(kind || "").trim();
+  if (
+    normalized === "billing" ||
+    normalized === "auth" ||
+    normalized === "rate_limit" ||
+    normalized === "overloaded" ||
+    normalized === "timeout"
+  ) {
+    return normalized;
+  }
+  // error_kind が無い旧run・未知の値は other 扱い(フォールバック)。
+  return "other";
+}
+
+function providerDisplayName(provider: string | undefined): string {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return PROVIDER_DISPLAY_NAMES[normalized] || normalized || "不明";
+}
+
+function summarizeErrorDetail(detail: string | undefined, maxChars = 160): string {
+  const normalized = String(detail || "").trim();
+  if (!normalized) return "";
+  return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars)}…`;
+}
+
+/** error_kind → ユーザー向け日本語メッセージ(原因＋次アクション)。 */
+export function aiFailureMessage(
+  kind: AiFailureErrorKind,
+  provider: string | undefined,
+  errorDetail: string | undefined,
+): { summary: string; action: string } {
+  switch (kind) {
+    case "billing":
+      return {
+        summary: `クレジット残高不足（${providerDisplayName(provider)}）`,
+        action:
+          `AIプロバイダ（${providerDisplayName(provider)}）のクレジット残高が不足しています。` +
+          "チャージするか、⚙API設定で別のプロバイダ（Geminiは無料枠あり）を設定して、再解析してください",
+      };
+    case "auth":
+      return {
+        summary: "APIキーが無効",
+        action: "APIキーが無効です。⚙API設定で確認してください",
+      };
+    case "rate_limit":
+    case "overloaded":
+      return {
+        summary: "APIが混雑・制限中",
+        action: "AIプロバイダのAPIが混雑・制限中です。しばらく待ってから再解析してください",
+      };
+    default: {
+      const detailSummary = summarizeErrorDetail(errorDetail);
+      return {
+        summary: "AI校正が失敗",
+        action:
+          "AI校正が失敗しました。再解析で再試行できます" +
+          (detailSummary ? `（詳細: ${detailSummary}）` : ""),
+      };
+    }
+  }
+}
+
+/**
+ * AI校正(パス1/パス2)の失敗を、要確認キューの先頭に置く1項目として生成する。
+ * この項目は特定行にアンカーしない(動画全体に関する項目)ため wordIds は空・timestampMs は 0。
+ */
+export function buildAiFailureSuspicion(aiReview: AiReviewInput | undefined): SuspicionItem | null {
+  if (!aiReview) return null;
+  const transcriptFailed = Boolean(aiReview.transcriptRefineFailed);
+  const telopFailed = Boolean(aiReview.telopRefineFailed);
+  if (!transcriptFailed && !telopFailed) return null;
+
+  // パス1優先で代表の error_kind / provider / detail を決める(通常は同一原因)。
+  const kind = normalizeAiFailureErrorKind(
+    (transcriptFailed ? aiReview.transcriptErrorKind : "") || aiReview.telopErrorKind,
+  );
+  const provider =
+    (transcriptFailed ? aiReview.transcriptProvider : "") || aiReview.telopProvider;
+  const errorDetail =
+    (transcriptFailed ? aiReview.transcriptErrorDetail : "") || aiReview.telopErrorDetail;
+  const message = aiFailureMessage(kind, provider, errorDetail);
+
+  const failedPasses =
+    transcriptFailed && telopFailed ? "パス1・パス2" : transcriptFailed ? "パス1" : "パス2";
+
+  return {
+    id: "ai_failure:global",
+    type: "ai_failure",
+    severity: "high",
+    label: "AI校正が実行されていません",
+    text: `${message.summary}（${failedPasses}が失敗・テキストは未校正です）`,
+    timestampMs: 0,
+    wordIds: [],
+    detail: message.action,
+  };
+}
+
+/** 改善19-A: 同一行(同一word)に同一 label+detail の AI 疑義が複数付く場合は1件に集約する。 */
+function dedupeAiReviewSuspicions(items: SuspicionItem[]): SuspicionItem[] {
+  const grouped = new Map<string, { item: SuspicionItem; count: number }>();
+  for (const item of items) {
+    const key = `${item.label}\0${item.detail}\0${item.wordIds.join(",")}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      grouped.set(key, { item, count: 1 });
+    }
+  }
+  return [...grouped.values()].map(({ item, count }) =>
+    count > 1 ? { ...item, text: `${item.text}（${count}件）` } : item,
+  );
+}
+
 /** パス1/2の AI needs_review を疑義キュー項目に変換する(改善13)。 */
 export function buildAiReviewSuspicions(
   aiReview: AiReviewInput,
@@ -556,7 +899,43 @@ export function buildAiReviewSuspicions(
     });
   }
 
-  return items;
+  return dedupeAiReviewSuspicions(items);
+}
+
+export type WordSplitFlag = {
+  prev_end_ms: number;
+  next_start_ms: number;
+  tail_text: string;
+  head_text: string;
+  gap_ms: number;
+};
+
+/** 改善19-B: cut_proposal.json の word_split_flags を疑義キュー項目に変換する。 */
+export function buildWordSplitSuspicions(
+  flags: WordSplitFlag[] | undefined,
+  words: TranscriptWord[],
+): SuspicionItem[] {
+  if (!flags?.length) return [];
+  const sortedWords = [...words].sort((a, b) => a.startMs - b.startMs);
+  return flags.map((flag, index) => {
+    const nextStartMs = Number(flag.next_start_ms || 0);
+    const matchedWord =
+      sortedWords.find((word) => word.startMs === nextStartMs) ||
+      sortedWords.find((word) => Math.abs(word.startMs - nextStartMs) <= 80);
+    const tailText = String(flag.tail_text || "");
+    const headText = String(flag.head_text || "");
+    const gapMs = Number(flag.gap_ms || 0);
+    return {
+      id: `word_split:${index}:${nextStartMs}`,
+      type: "word_split",
+      severity: "high",
+      label: "カット境界の単語分断の疑い",
+      text: `${tailText} / ${headText}`,
+      timestampMs: nextStartMs,
+      wordIds: matchedWord ? [matchedWord.id] : [],
+      detail: `ギャップ ${Math.round(gapMs)}ms（自動結合不可）`,
+    };
+  });
 }
 
 export type BoundaryOverrunOptions = { thresholdMs?: number };
@@ -646,6 +1025,8 @@ export type SuspicionQueueInput = {
   dictionaryRules?: DictionaryTerm[];
   /** 改善13: AI校正結果。enabled 時は AIモードの要確認リスト生成に使う。 */
   aiReview?: AiReviewInput;
+  /** 改善19-B: step07 の word_split_flags (旧runでは undefined 可)。 */
+  wordSplitFlags?: WordSplitFlag[];
   lowConfidenceOptions?: LowConfidenceOptions;
   boundaryOverrunOptions?: BoundaryOverrunOptions;
   shortCutOptions?: ShortCutOptions;
@@ -664,6 +1045,7 @@ export function buildSuspicionQueue(input: SuspicionQueueInput): SuspicionItem[]
   const telopFindings = (input.telopFindings || []).filter((finding) => !dismissedIds.has(finding.id));
 
   const aiItems = buildAiReviewSuspicions(aiReview || { enabled: false }, input.words, input.keepSegments);
+  const wordSplitItems = buildWordSplitSuspicions(input.wordSplitFlags, input.words);
 
   const fillerItems = aiMode
     ? []
@@ -689,15 +1071,20 @@ export function buildSuspicionQueue(input: SuspicionQueueInput): SuspicionItem[]
 
   const items = [
     ...aiItems,
+    ...wordSplitItems,
     ...buildLowConfidenceSuspicions(input.words, input.lowConfidenceOptions),
     ...fillerItems,
     ...properNounItems,
     ...boundaryItems,
     ...shortCutItems,
   ];
-  return items.sort((a, b) => {
+  const sorted = items.sort((a, b) => {
     const severityDiff = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
     if (severityDiff !== 0) return severityDiff;
     return a.timestampMs - b.timestampMs;
   });
+
+  // 改善21-B: AI校正失敗はソートに関わらず常にキューの先頭に固定する。
+  const failureItem = buildAiFailureSuspicion(aiReview);
+  return failureItem ? [failureItem, ...sorted] : sorted;
 }

@@ -45,7 +45,7 @@ class WordSplitBoundaryTests(unittest.TestCase):
             {"start_ms": 500, "end_ms": 1200, "text": "来について話した"},
         ]
         words = _char_words("じっくり将来について話した")
-        merged, count = _apply_word_split_merge(segments, words, max_gap_ms=1200)
+        merged, count, _flags = _apply_word_split_merge(segments, words, max_gap_ms=1200)
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0]["end_ms"], 1200)
@@ -56,17 +56,29 @@ class WordSplitBoundaryTests(unittest.TestCase):
             {"start_ms": 500, "end_ms": 900, "text": "。次の話"},
         ]
         words = _char_words("そうです。次の話", start_ms=0)
-        merged, count = _apply_word_split_merge(segments, words, max_gap_ms=1200)
+        merged, count, _flags = _apply_word_split_merge(segments, words, max_gap_ms=1200)
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
 
-    def test_no_merge_on_hiragana_word_boundary(self):
+    def test_merge_on_hiragana_word_internal_boundary(self):
+        """改善17-A: ひらがな境界でも BudouX 内部なら結合する。"""
         segments = [
-            {"start_ms": 0, "end_ms": 400, "text": "あい"},
-            {"start_ms": 500, "end_ms": 900, "text": "うえ"},
+            {"start_ms": 0, "end_ms": 400, "text": "取ろうと思っていま"},
+            {"start_ms": 680, "end_ms": 1200, "text": "す。次の話"},
         ]
-        words = _char_words("あいうえ", start_ms=0, char_ms=100)
-        merged, count = _apply_word_split_merge(segments, words, max_gap_ms=1200)
+        words = _char_words("取ろうと思っています。次の話", start_ms=0, char_ms=80)
+        merged, count, _flags = _apply_word_split_merge(segments, words, max_gap_ms=1500)
+        self.assertEqual(count, 1)
+        self.assertEqual(len(merged), 1)
+
+    def test_no_merge_on_unrelated_hiragana_segments(self):
+        """無関係なひらがなセグメント同士は BudouX 判定で結合されない。"""
+        segments = [
+            {"start_ms": 0, "end_ms": 400, "text": "本当に"},
+            {"start_ms": 500, "end_ms": 900, "text": "すごい"},
+        ]
+        words = _char_words("本当にすごい", start_ms=0, char_ms=100)
+        merged, count, _flags = _apply_word_split_merge(segments, words, max_gap_ms=1500)
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
 
@@ -76,7 +88,7 @@ class WordSplitBoundaryTests(unittest.TestCase):
             {"start_ms": 2000, "end_ms": 2800, "text": "来について"},
         ]
         words = _char_words("将来について", char_ms=200)
-        merged, count = _apply_word_split_merge(segments, words, max_gap_ms=1200)
+        merged, count, _flags = _apply_word_split_merge(segments, words, max_gap_ms=1200)
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
 
@@ -130,7 +142,7 @@ class DougaWordSplitIntegrationTests(unittest.TestCase):
             config={
                 "min_segment_duration_ms": 1000,
                 "min_segment_chars": 5,
-                "word_split_merge_max_gap_ms": 1200,
+                "word_split_merge_max_gap_ms": 1500,
             },
             vad_result_path=str(run / "step03_vad" / "vad_result.json"),
             audio_path=str(run / "step01_preprocess" / "audio.wav"),

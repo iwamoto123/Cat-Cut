@@ -14,6 +14,18 @@ import type { SuspicionItem } from "../lib/suspicionQueue";
 import type { EdgeTrimEdge } from "../lib/edgeTrim";
 import { SceneWaveformStrip, type EdgeDragTooltip } from "./SceneWaveformStrip";
 import { EMOTION_ICONS, EMOTION_LABELS, EMOTION_TAGS, type EmotionTag } from "../lib/emotionTag";
+import {
+  DIRECTED_STYLE_OPTIONS,
+  directedStyleColor,
+  directedStyleLabel,
+  effectiveDirectedStyleId,
+} from "../lib/directedTelop";
+import {
+  SEMANTIC_TYPES,
+  SEMANTIC_TYPE_INFO,
+  isSemanticType,
+  semanticTypeLabel,
+} from "../lib/telopTypes";
 import { TelopStyleSample } from "./TelopStyleSample";
 import {
   paletteOptionsForTheme,
@@ -112,6 +124,16 @@ type Props = {
   onSetStyleOverride: (styleId: string | null) => void;
   /** T-3: 「このスタイルを同じ感情の全シーンに適用」。 */
   onApplyStyleToEmotionGroup: (styleId: string) => void;
+  /** フェーズT2: directedモード(演出ディレクティブ駆動)ならスタイルバッジ=シーン種類/スタイルIDを正とする。 */
+  directedMode?: boolean;
+  /** フェーズT2.5-4: シーン種類(semantic type)→プリセットIDの解決済みマッピング(既定+ユーザー設定)。 */
+  telopTypeMapping?: Record<string, string>;
+  /** フェーズT2.5-4: typeバッジのドロップダウンからシーン種類を変更する(スタイルはマッピング解決へ戻る)。 */
+  onSetDirectedType?: (typeId: string) => void;
+  /** フェーズT2: プリセットの個別上書き(null=上書き解除してマッピング解決へ戻す)。 */
+  onSetDirectedStyle?: (styleId: string | null) => void;
+  /** 改善21-B: ai_failure 疑義(AI校正未実行)の項目内から⚙API設定モーダルを開く。 */
+  onOpenApiSettings?: () => void;
 };
 
 export function SceneRow({
@@ -150,15 +172,23 @@ export function SceneRow({
   onSetEmotionTag,
   onSetStyleOverride,
   onApplyStyleToEmotionGroup,
+  directedMode,
+  telopTypeMapping,
+  onSetDirectedType,
+  onSetDirectedStyle,
+  onOpenApiSettings,
 }: Props) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const chipsRef = useRef<HTMLDivElement | null>(null);
   const emotionMenuRef = useRef<HTMLDivElement | null>(null);
   const stylePaletteRef = useRef<HTMLDivElement | null>(null);
+  const directedMenuRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
   const [chipCaret, setChipCaret] = useState<ChipCaretState | null>(null);
   const [emotionMenuOpen, setEmotionMenuOpen] = useState(false);
   const [stylePaletteOpen, setStylePaletteOpen] = useState(false);
+  // フェーズT2(directedモード): スタイルバッジのドロップダウン開閉。
+  const [directedMenuOpen, setDirectedMenuOpen] = useState(false);
   /** 改善5-2(チップのドラッグ複数選択): ドラッグ中(コミット前)の一時状態。再描画不要なのでref。 */
   const chipDragRef = useRef<ChipDragState | null>(null);
   /** ドラッグ確定直後、mouseupの直後に発火するclickイベントを1回だけ無視するためのフラグ。 */
@@ -206,17 +236,18 @@ export function SceneRow({
     return () => window.removeEventListener("mouseup", handleWindowMouseUp);
   }, []);
 
-  // T-2/T-3: 感情バッジメニュー・スタイルパレットは外側クリックで閉じる。
+  // T-2/T-3/T2: 感情バッジメニュー・スタイルパレット・directedスタイルメニューは外側クリックで閉じる。
   useEffect(() => {
-    if (!emotionMenuOpen && !stylePaletteOpen) return undefined;
+    if (!emotionMenuOpen && !stylePaletteOpen && !directedMenuOpen) return undefined;
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node;
       if (emotionMenuOpen && !emotionMenuRef.current?.contains(target)) setEmotionMenuOpen(false);
       if (stylePaletteOpen && !stylePaletteRef.current?.contains(target)) setStylePaletteOpen(false);
+      if (directedMenuOpen && !directedMenuRef.current?.contains(target)) setDirectedMenuOpen(false);
     }
     window.addEventListener("mousedown", handleOutsideClick);
     return () => window.removeEventListener("mousedown", handleOutsideClick);
-  }, [emotionMenuOpen, stylePaletteOpen]);
+  }, [directedMenuOpen, emotionMenuOpen, stylePaletteOpen]);
 
   const emotionTag: EmotionTag = scene.emotionTag ?? "normal";
   const resolvedStyle = useMemo(
@@ -384,35 +415,147 @@ export function SceneRow({
           {topSuspicion && (
             <span className={`sceneSuspicionBadge ${topSuspicion.severity}`}>{topSuspicion.label}</span>
           )}
-          <div className="sceneEmotionBadgeWrap" ref={emotionMenuRef}>
-            <button
-              className="sceneEmotionBadge"
-              onClick={() => setEmotionMenuOpen((current) => !current)}
-              title="クリックで感情タグを変更(スタイルも追従します)"
-              type="button"
-            >
-              <span>{EMOTION_ICONS[emotionTag]}</span>
-              <span>{EMOTION_LABELS[emotionTag]}</span>
-            </button>
-            {emotionMenuOpen && (
-              <div className="sceneEmotionMenu">
-                {EMOTION_TAGS.map((tag) => (
-                  <button
-                    className={`sceneEmotionMenuItem ${tag === emotionTag ? "active" : ""}`}
-                    key={tag}
-                    onClick={() => {
-                      onSetEmotionTag(tag);
-                      setEmotionMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <span>{EMOTION_ICONS[tag]}</span>
-                    <span>{EMOTION_LABELS[tag]}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {directedMode ? (
+            // フェーズT2.5-4(directedモード): シーン種類(semantic type)を主表示にするtypeバッジ。
+            // クリックでドロップダウンを開き、種類の変更(=マッピング解決)と
+            // プリセットの個別上書き(マッピングより優先)ができる。
+            // 旧run(type無し)のシーンはT2までと同じくプリセット名を表示する。
+            <div className="sceneEmotionBadgeWrap" ref={directedMenuRef}>
+              <button
+                className="sceneEmotionBadge sceneDirectedStyleBadge"
+                onClick={() => setDirectedMenuOpen((current) => !current)}
+                title={
+                  isSemanticType(scene.directedType)
+                    ? "クリックでシーンの種類・テロップデザインを変更"
+                    : "クリックでテロップスタイルを変更"
+                }
+                type="button"
+              >
+                <span
+                  className="sceneDirectedStyleDot"
+                  style={{
+                    display: "inline-block",
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    backgroundColor: directedStyleColor(effectiveDirectedStyleId(scene, telopTypeMapping)),
+                    border: "1px solid rgba(0,0,0,0.25)",
+                  }}
+                />
+                <span>
+                  {isSemanticType(scene.directedType)
+                    ? `${semanticTypeLabel(scene.directedType)}${scene.directedStyleId ? "*" : ""}`
+                    : directedStyleLabel(scene.directedStyleId)}
+                </span>
+              </button>
+              {directedMenuOpen && (
+                <div className="sceneEmotionMenu sceneDirectedTypeMenu">
+                  {isSemanticType(scene.directedType) && (
+                    <>
+                      <div className="sceneDirectedMenuCaption">シーンの種類</div>
+                      {SEMANTIC_TYPES.map((type) => (
+                        <button
+                          className={`sceneEmotionMenuItem ${
+                            type === scene.directedType && !scene.directedStyleId ? "active" : ""
+                          }`}
+                          key={type}
+                          onClick={() => {
+                            onSetDirectedType?.(type);
+                            setDirectedMenuOpen(false);
+                          }}
+                          title={SEMANTIC_TYPE_INFO[type].description}
+                          type="button"
+                        >
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: 10,
+                              height: 10,
+                              borderRadius: "50%",
+                              backgroundColor: directedStyleColor(telopTypeMapping?.[type]),
+                              border: "1px solid rgba(0,0,0,0.25)",
+                            }}
+                          />
+                          <span>{SEMANTIC_TYPE_INFO[type].label}</span>
+                        </button>
+                      ))}
+                      <div className="sceneDirectedMenuCaption">プリセットで個別指定</div>
+                      {scene.directedStyleId && (
+                        <button
+                          className="sceneEmotionMenuItem"
+                          onClick={() => {
+                            onSetDirectedStyle?.(null);
+                            setDirectedMenuOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <span>個別指定を解除(種類の設定に従う)</span>
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {DIRECTED_STYLE_OPTIONS.map((option) => (
+                    <button
+                      className={`sceneEmotionMenuItem ${
+                        option.id === effectiveDirectedStyleId(scene, telopTypeMapping) &&
+                        (scene.directedStyleId || !isSemanticType(scene.directedType))
+                          ? "active"
+                          : ""
+                      }`}
+                      key={option.id}
+                      onClick={() => {
+                        onSetDirectedStyle?.(option.id);
+                        setDirectedMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: 10,
+                          height: 10,
+                          borderRadius: "50%",
+                          backgroundColor: option.color,
+                          border: "1px solid rgba(0,0,0,0.25)",
+                        }}
+                      />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="sceneEmotionBadgeWrap" ref={emotionMenuRef}>
+              <button
+                className="sceneEmotionBadge"
+                onClick={() => setEmotionMenuOpen((current) => !current)}
+                title="クリックで感情タグを変更(スタイルも追従します)"
+                type="button"
+              >
+                <span>{EMOTION_ICONS[emotionTag]}</span>
+                <span>{EMOTION_LABELS[emotionTag]}</span>
+              </button>
+              {emotionMenuOpen && (
+                <div className="sceneEmotionMenu">
+                  {EMOTION_TAGS.map((tag) => (
+                    <button
+                      className={`sceneEmotionMenuItem ${tag === emotionTag ? "active" : ""}`}
+                      key={tag}
+                      onClick={() => {
+                        onSetEmotionTag(tag);
+                        setEmotionMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      <span>{EMOTION_ICONS[tag]}</span>
+                      <span>{EMOTION_LABELS[tag]}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="sceneTelopInputRow">
         <textarea
@@ -432,6 +575,8 @@ export function SceneRow({
           title="クリックでこのシーンの先頭から再生します"
           value={scene.telopText}
         />
+          {/* T-3のテーマ×感情スウォッチはfullモード専用(directedではスタイルバッジが正)。 */}
+          {!directedMode && (
           <div className="sceneStyleSwatchWrap" ref={stylePaletteRef}>
             <button
               className="sceneStyleSwatch"
@@ -472,6 +617,7 @@ export function SceneRow({
               </div>
             )}
           </div>
+          )}
         </div>
         <div className="sceneRowBottom">
           <SceneWaveformStrip
@@ -494,7 +640,22 @@ export function SceneRow({
         </div>
         {suspicions.length > 0 && (
           <div className="sceneSuspicionFooter">
-            <span className="sceneSuspicionDetail">{topSuspicion?.detail}</span>
+            <span className="sceneSuspicionDetail">
+              {topSuspicion?.type === "ai_failure" ? `${topSuspicion.label}: ` : ""}
+              {topSuspicion?.detail}
+            </span>
+            {topSuspicion?.type === "ai_failure" && onOpenApiSettings && (
+              <button
+                className="sceneSuspicionActionButton"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenApiSettings();
+                }}
+                type="button"
+              >
+                ⚙ API設定を開く
+              </button>
+            )}
           </div>
         )}
         {linkedNext && (

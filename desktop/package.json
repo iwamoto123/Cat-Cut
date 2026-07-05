@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5174 && env -u ELECTRON_RUN_AS_NODE electron .\"",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --experimental-strip-types --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

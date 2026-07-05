@@ -47,7 +47,7 @@ class CutProposalPaddingTests(unittest.TestCase):
         retakes_path = _write(self.tmp_path / "retakes.json", {"retakes": []})
         scenes_path = _write(self.tmp_path / "scenes.json", {"scenes": []})
         output_dir = str(self.tmp_path / "out")
-        cfg = {"min_segment_duration_ms": 0, "min_segment_chars": 0, **config}
+        cfg = {"min_segment_duration_ms": 0, "min_segment_chars": 0, "word_split_merge_max_gap_ms": 0, **config}
         return run_step(stt_path, fillers_path, retakes_path, scenes_path, output_dir, config=cfg)
 
     def test_default_asymmetric_padding_widens_lead_more_than_tail(self):
@@ -119,7 +119,7 @@ class CutProposalPaddingTests(unittest.TestCase):
 
         result = run_step(
             stt_path, fillers_path, retakes_path, scenes_path, output_dir,
-            config={"min_segment_duration_ms": 0, "min_segment_chars": 0},
+            config={"min_segment_duration_ms": 0, "min_segment_chars": 0, "word_split_merge_max_gap_ms": 0},
         )
         segments = result["keep_segments"]
         self.assertEqual(len(segments), 2)
@@ -266,7 +266,7 @@ class ClampWordsToSpeechTests(unittest.TestCase):
             retakes_path,
             scenes_path,
             output_dir,
-            config={"min_segment_duration_ms": 0, "min_segment_chars": 0},
+            config={"min_segment_duration_ms": 0, "min_segment_chars": 0, "word_split_merge_max_gap_ms": 0},
             vad_result_path=vad_path,
         )
 
@@ -527,7 +527,7 @@ class Img5952AcceptanceCriteriaTests(unittest.TestCase):
 
         result = run_step(
             stt_path, fillers_path, retakes_path, scenes_path, output_dir,
-            config={"min_segment_duration_ms": 0, "min_segment_chars": 0, "max_gap_ms": 600},
+            config={"min_segment_duration_ms": 0, "min_segment_chars": 0, "max_gap_ms": 600, "word_split_merge_max_gap_ms": 0},
             vad_result_path=vad_path,
         )
         segments = result["keep_segments"]
@@ -580,6 +580,7 @@ class Img5952AcceptanceCriteriaTests(unittest.TestCase):
                 "max_gap_ms": 250,
                 "lead_padding_ms": 50,
                 "tail_padding_ms": 50,
+                "word_split_merge_max_gap_ms": 0,
             },
             vad_result_path=vad_path,
         )

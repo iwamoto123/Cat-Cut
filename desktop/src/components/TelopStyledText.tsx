@@ -36,7 +36,15 @@ export function TelopStyledText({ lines, style, fontSizePx }: TelopStyledTextPro
     ? scaleTelopStrokeWidth(style.outer_stroke.width, fontSizePx, presetFontSize)
     : 0;
   const scaledDropShadow = scaleTelopDropShadow(style.drop_shadow, fontSizePx, presetFontSize);
+  // フェーズT2.5-2(オフセット影): Remotion側(Telop.tsx TelopLayer)と同じく、縁レイヤーの
+  // 下に(x,y)pxずらした影レイヤーを描画する。ずらし量はプリセットfont_size基準の値を
+  // 表示フォントサイズに比例スケールする(縁取り幅と同じ規則)。
+  const shadowOffset = style.shadow_offset ?? null;
+  const shadowScale = fontSizePx / presetFontSize;
+  const shadowStrokeWidth = Math.max(outerStrokeWidth, innerStrokeWidth);
 
+  // フェーズT2.5-1(多層縁の行ズレ根絶): 折返しはlines(呼び出し側のwrapTelopLine)で確定済み。
+  // CSSの再折返しを禁止し、全レイヤーの行数を構造的に一致させる(Remotion側と同じ)。
   const textStyle: CSSProperties = {
     fontFamily,
     fontSize: `${fontSizePx}px`,
@@ -44,7 +52,7 @@ export function TelopStyledText({ lines, style, fontSizePx }: TelopStyledTextPro
     letterSpacing,
     lineHeight,
     textAlign: "center",
-    whiteSpace: "pre-wrap",
+    whiteSpace: "nowrap",
     wordBreak: "keep-all",
     margin: 0,
   };
@@ -84,6 +92,22 @@ export function TelopStyledText({ lines, style, fontSizePx }: TelopStyledTextPro
             borderRadius: style.background?.borderRadius,
           }}
         >
+          {shadowOffset && (
+            <div
+              style={{
+                ...textStyle,
+                color: shadowOffset.color,
+                WebkitTextStroke: shadowStrokeWidth
+                  ? `${shadowStrokeWidth}px ${shadowOffset.color}`
+                  : undefined,
+                position: "absolute",
+                inset: 0,
+                transform: `translate(${shadowOffset.x * shadowScale}px, ${shadowOffset.y * shadowScale}px)`,
+              }}
+            >
+              {line}
+            </div>
+          )}
           {style.outer_stroke && (
             <div
               style={{

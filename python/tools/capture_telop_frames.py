@@ -80,6 +80,18 @@ def _telop_word_span_ms(voice_words: list[dict[str, Any]], word_indices: list[in
     return min(starts) * 1000.0, max(ends) * 1000.0
 
 
+def _telop_explicit_span_ms(telop: dict[str, Any]) -> Optional[tuple[float, float]]:
+    """telops[].start/end (カット内相対秒。フェーズT1の演出テロップが使う) から区間(ms)を求める。
+
+    Telop.tsx と同じ優先順位: 明示 start/end があればそれを使い、無ければ word_indices。
+    """
+    start = telop.get("start")
+    end = telop.get("end")
+    if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
+        return float(start) * 1000.0, float(end) * 1000.0
+    return None
+
+
 def collect_pages(composition: dict[str, Any]) -> list[dict[str, Any]]:
     """各テロップページの (page_id, text, center_ms) を書き出し後タイムライン上で計算する。
 
@@ -87,6 +99,8 @@ def collect_pages(composition: dict[str, Any]) -> list[dict[str, Any]]:
     (同cutの voice.words への添字) を持つが、start/end (時刻) は直接持たない。
     そのため対象wordのstart/endから区間を逆算し、カットのtimeline.start_msを
     加算して書き出し後タイムライン上の絶対時刻に変換する。
+    (フェーズT1: 明示 start/end (カット内相対秒) を持つテロップはそちらを優先する。
+     また timeline.overlays もページとして含め、演出オーバーレイの目視確認に使えるようにする。)
     """
     cuts_by_id = {c.get("cut_id"): c for c in composition.get("timeline", {}).get("cuts", [])}
     pages: list[dict[str, Any]] = []
@@ -102,7 +116,7 @@ def collect_pages(composition: dict[str, Any]) -> list[dict[str, Any]]:
 
         for telop in vcut.get("telops", []):
             word_indices = telop.get("word_indices") or []
-            span = _telop_word_span_ms(voice_words, word_indices)
+            span = _telop_explicit_span_ms(telop) or _telop_word_span_ms(voice_words, word_indices)
             if span is None:
                 continue
             rel_start_ms, rel_end_ms = span
@@ -126,6 +140,24 @@ def collect_pages(composition: dict[str, Any]) -> list[dict[str, Any]]:
                 "end_ms": end_ms,
                 "center_ms": max(0, center_ms),
             })
+
+    # フェーズT1-3: timeline.overlays (タイムライン基準ms) もページとして含める
+    for overlay in composition.get("timeline", {}).get("overlays", []) or []:
+        if not isinstance(overlay, dict):
+            continue
+        start_ms = overlay.get("start_ms")
+        end_ms = overlay.get("end_ms")
+        if not isinstance(start_ms, (int, float)) or not isinstance(end_ms, (int, float)) or end_ms <= start_ms:
+            continue
+        text = overlay.get("text") or " / ".join(overlay.get("lines") or [])
+        pages.append({
+            "page_id": overlay.get("id") or f"overlay_{overlay.get('type', '??')}",
+            "cut_id": None,
+            "text": f"[{overlay.get('type', 'overlay')}] {text}",
+            "start_ms": int(start_ms),
+            "end_ms": int(end_ms),
+            "center_ms": max(0, int((start_ms + end_ms) // 2)),
+        })
 
     pages.sort(key=lambda p: p["center_ms"])
     return pages

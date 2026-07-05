@@ -14,12 +14,17 @@
  */
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
+import { DEFAULT_HIGHLIGHT_COLOR, splitHighlightRuns } from "../lib/telopHighlight";
+import { clampTelopYPercent, computeTelopBlockLayout, TELOP_LINE_GAP_PX } from "../lib/telopLayout";
+import {
+  resolveTelopAnimation,
+  type TelopAnimationIn,
+  type TelopAnimationOut,
+} from "../lib/telopAnimation";
+
 // =============================================================================
 // 型定義
 // =============================================================================
-
-type TelopAnimationIn = "stamp" | "popIn" | "fadeIn" | "none";
-type TelopAnimationOut = "popOut" | "fadeOut" | "none";
 
 interface VoiceWord {
   text: string;
@@ -48,6 +53,13 @@ export interface TelopStyle {
   inner_stroke?: { color: string; width: number } | null;
   outer_stroke?: { color: string; width: number } | null;
   drop_shadow?: string | null;
+  /**
+   * フェーズT2.5-2(縁取りデザイン刷新): ハードなオフセット影。縁レイヤーの下に
+   * (x, y) pxずらした影レイヤーを描画する(CSS filterのdrop_shadowとは別物。
+   * 「細い縁+オフセットシャドウ」の商用テロップ定番表現に使う)。
+   * x/y はプリセット font_size 基準のpx値で、実フォントサイズに比例スケールされる。
+   */
+  shadow_offset?: { x: number; y: number; color: string } | null;
   y_position_offset?: number;
   /**
    * テーマ×感情の自動スタイリング(T-1/T-5)向けの最小拡張。
@@ -58,8 +70,35 @@ export interface TelopStyle {
    * テーマ×感情の自動スタイリング(T-1/T-5)向けの最小拡張。
    * 背景帯(色・角丸、行ごとにpadding付きで塗る)。null/省略時は背景帯なし。
    * borderRadiusは改善7-4(プリセットギャラリー「半透明角丸」背景)向けの追加拡張。
+   *
+   * フェーズT1-2(背景ボックス): padding_x / padding_y (px) を指定すると「行ごとの帯」ではなく
+   * 文字ブロック全体の背後に1枚のベタ長方形を描画する(box_yellow / box_red / cta_yellow。
+   * 参考画像06/12/13)。未指定なら従来の行ごと帯背景のまま(後方互換)。
    */
-  background?: { color: string; borderRadius?: string } | null;
+  background?: {
+    color: string;
+    borderRadius?: string;
+    padding_x?: number;
+    padding_y?: number;
+    border_radius?: number;
+  } | null;
+  /**
+   * フェーズT1-2(部分ハイライト A-emph): telops[].highlight_words に含まれる部分文字列の
+   * 塗り色。省略時は DEFAULT_HIGHLIGHT_COLOR (#E7305B)。縁取り・サイズは変えない。
+   */
+  highlight_color?: string;
+  /**
+   * フェーズT3: プリセット単位の登場アニメーション
+   * ("pop_big" | "slide_left" | "slide_up" | "zoom" | "stamp" | "fade" | "none")。
+   * 省略時は timeline.animation_in(従来のグローバル設定)にフォールバック(後方互換)。
+   */
+  animation_in?: string | null;
+  /** フェーズT3: プリセット単位の退場アニメーション("fade" | "pop_out" | "none")。 */
+  animation_out?: string | null;
+  /** フェーズT3: 登場アニメの長さ(フレーム数。省略時は既定12)。 */
+  animation_duration_frames?: number;
+  /** フェーズT3: 登場時効果音ID(assets/sfx/。null/省略で鳴らさない。再生はComposition側)。 */
+  sfx?: string | null;
 }
 
 interface TelopData {
@@ -71,6 +110,20 @@ interface TelopData {
   end?: number;
   style?: string;
   style_override?: Partial<TelopStyle>;
+  /**
+   * フェーズT1-2(部分ハイライト A-emph): テロップ文言中の該当部分文字列だけ塗り色を
+   * style.highlight_color に変える(複数語・複数出現対応)。省略時はハイライトなし。
+   */
+  highlight_words?: string[];
+  /**
+   * フェーズT3: テロップ個別の登場アニメーション上書き(UIピッカー or type→マッピング既定を
+   * step08 が書き込む)。プリセット既定・timeline既定より優先される。
+   */
+  animation_in?: string | null;
+  /** フェーズT3: テロップ個別の退場アニメーション上書き。 */
+  animation_out?: string | null;
+  /** フェーズT3: 効果音の個別指定(文字列=ID / null="鳴らさない"明示。再生はComposition側)。 */
+  sfx?: string | null;
 }
 
 interface TelopProps {
@@ -78,12 +131,20 @@ interface TelopProps {
   words: VoiceWord[];
   cutStartFrame: number;
   fps: number;
-  animationIn: TelopAnimationIn;
-  animationOut: TelopAnimationOut;
+  /** timeline.animation_in(従来のグローバル既定。旧名 popIn/fadeIn も受ける)。 */
+  animationIn: string;
+  /** timeline.animation_out(旧名 popOut/fadeOut も受ける)。 */
+  animationOut: string;
   telopY?: number;
   fontSize?: number;
   styles: Record<string, TelopStyle>;
   defaultStyleName?: string;
+  /**
+   * 改善20-B: 1行の文字数バジェット(composition.json timeline.telop_max_chars_per_line)。
+   * 手編集等でバジェットを超えた行はCSS任せにせず wrapTelopLine の語境界で折り返す
+   * (プレビュー側 PreviewPlayer と同じロジック・同じ折返し位置)。未指定なら折返しなし。
+   */
+  maxCharsPerLine?: number;
 }
 
 // =============================================================================
@@ -130,19 +191,81 @@ const gradientCss = (style: TelopStyle): string => {
 };
 
 // =============================================================================
-// アニメーション (Remotion spring ベース)
+// アニメーション (Remotion spring ベース。種類の解決は lib/telopAnimation.ts)
 // =============================================================================
 
 const OUT_DURATION = 6;
+
+/** pop_big / slide 系の移動量計算に使う画面コンテキスト。 */
+type AnimContext = {
+  /** テロップ定位置から画面中央までの縦距離(px。pop_bigの出現位置)。 */
+  centerOffsetYPx: number;
+  /** slide_left の横移動距離(px)。 */
+  slideDistancePx: number;
+};
 
 const getInAnim = (
   frame: number,
   startFrame: number,
   type: TelopAnimationIn,
   fps: number,
+  durationFrames: number,
+  ctx: AnimContext,
 ): { opacity: number; transform: string } => {
   const localFrame = frame - startFrame;
   if (type === "none" || localFrame < 0) return { opacity: 1, transform: "" };
+
+  if (type === "pop_big") {
+    // 画面中央に大きく(scale 1.8)バッと出て、定位置へ縮みながら移動する(強調・煽り系)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 13, stiffness: 160 },
+      durationInFrames: durationFrames,
+    });
+    const scale = interpolate(progress, [0, 1], [1.8, 1]);
+    const translateY = ctx.centerOffsetYPx * (1 - progress);
+    return {
+      opacity: Math.min(1, localFrame / 2),
+      transform: `translateY(${translateY}px) scale(${scale})`,
+    };
+  }
+
+  if (type === "slide_left") {
+    // 左からスライドイン+フェード(名言・辛辣系)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 200 },
+      durationInFrames: durationFrames,
+    });
+    const translateX = -ctx.slideDistancePx * (1 - progress);
+    return { opacity: progress, transform: `translateX(${translateX}px)` };
+  }
+
+  if (type === "slide_up") {
+    // 下から浮き上がる(質問系)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 200 },
+      durationInFrames: durationFrames,
+    });
+    const translateY = 56 * (1 - progress);
+    return { opacity: progress, transform: `translateY(${translateY}px)` };
+  }
+
+  if (type === "zoom") {
+    // その場でズームイン(要点・オチ・CTA)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 11, stiffness: 190 },
+      durationInFrames: durationFrames,
+    });
+    const scale = interpolate(progress, [0, 1], [0.55, 1]);
+    return { opacity: Math.min(1, localFrame / 2), transform: `scale(${scale})` };
+  }
 
   if (type === "stamp") {
     const progress = spring({ frame: localFrame, fps, config: { damping: 8, stiffness: 300 } });
@@ -150,13 +273,8 @@ const getInAnim = (
     return { opacity: Math.min(1, progress * 3), transform: `scale(${scale})` };
   }
 
-  if (type === "popIn") {
-    const progress = spring({ frame: localFrame, fps, config: { damping: 10, stiffness: 200 } });
-    return { opacity: progress, transform: `scale(${interpolate(progress, [0, 1], [0, 1])})` };
-  }
-
-  if (type === "fadeIn") {
-    const opacity = interpolate(localFrame, [0, 10], [0, 1], { extrapolateRight: "clamp" });
+  if (type === "fade") {
+    const opacity = interpolate(localFrame, [0, durationFrames], [0, 1], { extrapolateRight: "clamp" });
     return { opacity, transform: "" };
   }
 
@@ -170,7 +288,7 @@ const getOutAnim = (
   if (type === "none") return { opacity: 1, scale: 1 };
   const progress = Math.min(1, framesUntilEnd / OUT_DURATION);
 
-  if (type === "popOut") {
+  if (type === "pop_out") {
     const c1 = 1.70158;
     const c3 = c1 + 1;
     const eased = progress < 1 ? 1 + c3 * (progress - 1) ** 3 + c1 * (progress - 1) ** 2 : 1;
@@ -180,7 +298,7 @@ const getOutAnim = (
     };
   }
 
-  if (type === "fadeOut") return { opacity: progress, scale: 1 };
+  if (type === "fade") return { opacity: progress, scale: 1 };
   return { opacity: 1, scale: 1 };
 };
 
@@ -188,38 +306,63 @@ const getOutAnim = (
 // 単一テロップ描画 (style 反映)
 // =============================================================================
 
+/**
+ * フェーズT1-2(背景ボックス): padding_x/padding_y 指定時は文字ブロック全体の背後に
+ * 1枚のベタ長方形を描く。未指定の background は従来通り「行ごとの帯」(後方互換)。
+ */
+const resolveBlockBackground = (style: TelopStyle) =>
+  style.background &&
+  (style.background.padding_x !== undefined || style.background.padding_y !== undefined)
+    ? style.background
+    : null;
+
 const TelopLayer = ({
-  segments,
+  lineTexts,
+  fontSize,
   style,
-  globalFontSize,
   opacity,
   transform,
-  videoWidth,
+  highlightWords,
 }: {
-  segments: TelopSegment[];
+  /**
+   * フェーズT2.5-1(多層縁の行ズレ根絶): 折返しは親(computeTelopBlockLayout)で1回だけ
+   * 計算済み。縁取り(outer/inner)・影・塗りの全レイヤーがこの同じ行配列を描画する。
+   */
+  lineTexts: string[];
+  /** 幅フィット適用後のフォントサイズ(親で計算済み)。 */
+  fontSize: number;
   style: TelopStyle;
-  globalFontSize: number;
   opacity: number;
   transform: string;
-  videoWidth: number;
+  highlightWords?: string[];
 }) => {
-  const baseFontSize = style.font_size ?? globalFontSize;
   const fontWeight = (style.font_weight ?? 900) as React.CSSProperties["fontWeight"];
   const letterSpacing = style.letter_spacing ?? "0.02em";
   const lineHeight = style.line_height ?? 1.4;
   const fontFamily = style.font_family ?? DEFAULT_FONT_FAMILY;
 
-  // 幅フィット: 最長行が動画幅の92%(縁取り・背景padding込み)に収まるよう縮小する。
-  // 全角=1em・半角=0.55em の概算幅。プリセットのpx指定は「十分な幅がある時の上限」として扱う。
-  const maxLineEm = Math.max(
-    1,
-    ...segments.map((segment) =>
-      [...segment.text].reduce((acc, ch) => acc + (ch.charCodeAt(0) <= 0xff ? 0.55 : 1), 0),
-    ),
-  );
-  const spacingEm = Number.parseFloat(letterSpacing) || 0;
-  const fitFontSize = (videoWidth * 0.92) / (maxLineEm * (1 + spacingEm) + 0.6);
-  const fontSize = Math.min(baseFontSize, fitFontSize);
+  const blockBackground = resolveBlockBackground(style);
+  const lineBandBackground = blockBackground ? null : style.background;
+
+  // フェーズT1-2(部分ハイライト): 塗り潰しレイヤーの該当部分文字列だけ色を変える。
+  // 縁取りレイヤーは従来通り行全文を描くため、縁取り・サイズは変わらない。
+  const highlightColor = style.highlight_color ?? DEFAULT_HIGHLIGHT_COLOR;
+  const renderFillLine = (lineText: string): React.ReactNode => {
+    const runs = splitHighlightRuns(lineText, highlightWords);
+    if (!runs.some((run) => run.highlight)) return lineText;
+    return runs.map((run, runIdx) =>
+      run.highlight ? (
+        <span
+          key={runIdx}
+          style={{ color: highlightColor, WebkitTextFillColor: highlightColor }}
+        >
+          {run.text}
+        </span>
+      ) : (
+        <span key={runIdx}>{run.text}</span>
+      ),
+    );
+  };
 
   const innerStrokeWidth = style.inner_stroke
     ? Math.round(style.inner_stroke.width * (fontSize / 52))
@@ -227,7 +370,15 @@ const TelopLayer = ({
   const outerStrokeWidth = style.outer_stroke
     ? Math.round(style.outer_stroke.width * (fontSize / 52))
     : 0;
+  // フェーズT2.5-2(オフセット影): 影のずらし量はプリセット font_size 基準の値を
+  // 実フォントサイズに比例スケールする(縁取り幅と同じ規則)。影の輪郭は最も外側の
+  // 縁と同じシルエット(同じstroke幅)で描く。
+  const shadowOffset = style.shadow_offset ?? null;
+  const shadowScale = fontSize / (style.font_size ?? 52);
+  const shadowStrokeWidth = Math.max(outerStrokeWidth, innerStrokeWidth);
 
+  // フェーズT2.5-1(多層縁の行ズレ根絶): 折返しはlineTextsで確定済みのため、
+  // CSSの再折返し(pre-wrap)を禁止する(WebkitTextStroke幅差による行数食い違いを構造的に排除)。
   const textStyle: React.CSSProperties = {
     fontFamily,
     fontSize,
@@ -235,8 +386,7 @@ const TelopLayer = ({
     letterSpacing,
     lineHeight,
     textAlign: "center",
-    whiteSpace: "pre-wrap",
-    wordBreak: "keep-all",
+    whiteSpace: "nowrap",
   };
 
   // 下線(underline)は塗り潰しレイヤーにのみ適用する(縁取りレイヤーは文字色が透明なため、
@@ -259,21 +409,43 @@ const TelopLayer = ({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 8,
+        gap: blockBackground ? 0 : 8,
         filter: style.drop_shadow ?? undefined,
+        // ブロック背景: 文字ブロック全体の背後に1枚のベタ長方形を描画する(参考画像06/12/13)
+        backgroundColor: blockBackground?.color,
+        padding: blockBackground
+          ? `${blockBackground.padding_y ?? 0}px ${blockBackground.padding_x ?? 0}px`
+          : undefined,
+        borderRadius: blockBackground?.border_radius,
       }}
     >
-      {segments.map((segment, segIdx) => (
+      {lineTexts.map((lineText, lineIdx) => (
         <div
-          key={segIdx}
+          key={lineIdx}
           style={{
             position: "relative",
             display: "inline-block",
-            backgroundColor: style.background?.color,
-            padding: style.background ? "0.15em 0.5em" : undefined,
-            borderRadius: style.background?.borderRadius,
+            backgroundColor: lineBandBackground?.color,
+            padding: lineBandBackground ? "0.15em 0.5em" : undefined,
+            borderRadius: lineBandBackground?.borderRadius,
           }}
         >
+          {shadowOffset && (
+            <div
+              style={{
+                ...textStyle,
+                color: shadowOffset.color,
+                WebkitTextStroke: shadowStrokeWidth
+                  ? `${shadowStrokeWidth}px ${shadowOffset.color}`
+                  : undefined,
+                position: "absolute",
+                inset: 0,
+                transform: `translate(${shadowOffset.x * shadowScale}px, ${shadowOffset.y * shadowScale}px)`,
+              }}
+            >
+              {lineText}
+            </div>
+          )}
           {style.outer_stroke && (
             <div
               style={{
@@ -282,7 +454,7 @@ const TelopLayer = ({
                 WebkitTextStroke: `${outerStrokeWidth}px ${style.outer_stroke.color}`,
               }}
             >
-              {segment.text}
+              {lineText}
             </div>
           )}
           {style.inner_stroke && (
@@ -295,7 +467,7 @@ const TelopLayer = ({
                 inset: 0,
               }}
             >
-              {segment.text}
+              {lineText}
             </div>
           )}
           <div
@@ -306,7 +478,7 @@ const TelopLayer = ({
               inset: 0,
             }}
           >
-            {segment.text}
+            {renderFillLine(lineText)}
           </div>
         </div>
       ))}
@@ -328,9 +500,10 @@ export const Telop = ({
   fontSize,
   styles,
   defaultStyleName = "default",
+  maxCharsPerLine,
 }: TelopProps) => {
   const frame = useCurrentFrame();
-  const { width: videoWidth } = useVideoConfig();
+  const { width: videoWidth, height: videoHeight } = useVideoConfig();
   const globalFontSize = fontSize ?? 52;
 
   const rawTimings = telops
@@ -384,13 +557,50 @@ export const Telop = ({
           : frame >= startFrame && frame < displayEnd;
         if (!isVisible) return null;
 
-        const inAnim = getInAnim(frame, startFrame, animationIn, fps);
-        const outAnim = getOutAnim(displayEnd - frame, animationOut);
+        // フェーズT2.5-1(はみ出し根絶): 折返し(最大2行)と幅フィットをここで1回だけ確定し、
+        // TelopLayerの全レイヤー(影・縁取り・塗り)は同じ行配列・同じフォントサイズを使う。
+        const blockBackground = resolveBlockBackground(style);
+        const baseFontSize = style.font_size ?? globalFontSize;
+        const letterSpacingEm = Number.parseFloat(style.letter_spacing ?? "0.02em") || 0;
+        const layout = computeTelopBlockLayout({
+          segmentTexts: segments.map((segment) => segment.text),
+          maxCharsPerLine,
+          baseFontSize,
+          letterSpacingEm,
+          fitWidth:
+            videoWidth * 0.92 - (blockBackground ? (blockBackground.padding_x ?? 0) * 2 : 0),
+        });
+
+        // 縦方向: y_position_offset 適用後もブロック全体が上下セーフエリア内に収まるようクランプする
+        const yPercent = clampTelopYPercent({
+          telopY,
+          yOffset: style.y_position_offset ?? 0,
+          lineCount: layout.lineTexts.length,
+          lineHeight: style.line_height ?? 1.4,
+          fontSize: layout.fontSize,
+          videoHeight,
+          lineGapPx: blockBackground ? 0 : TELOP_LINE_GAP_PX,
+          blockPaddingY: blockBackground ? (blockBackground.padding_y ?? 0) : 0,
+        });
+
+        // フェーズT3: アニメの解決(telop個別 > プリセット既定 > timeline既定 > none)
+        const anim = resolveTelopAnimation({
+          telopAnimationIn: telop.animation_in,
+          telopAnimationOut: telop.animation_out,
+          styleAnimationIn: style.animation_in,
+          styleAnimationOut: style.animation_out,
+          styleDurationFrames: style.animation_duration_frames,
+          timelineAnimationIn: animationIn,
+          timelineAnimationOut: animationOut,
+        });
+        const inAnim = getInAnim(frame, startFrame, anim.animationIn, fps, anim.durationFrames, {
+          // pop_big: 画面中央(50%)から定位置(yPercent)への縦移動距離
+          centerOffsetYPx: ((50 - yPercent) / 100) * videoHeight,
+          slideDistancePx: videoWidth * 0.18,
+        });
+        const outAnim = getOutAnim(displayEnd - frame, anim.animationOut);
         const opacity = inAnim.opacity * outAnim.opacity;
         const transform = `${inAnim.transform}${outAnim.scale !== 1 ? ` scale(${outAnim.scale})` : ""}`;
-
-        const yOffset = style.y_position_offset ?? 0;
-        const yPercent = (telopY + yOffset) * 100;
 
         return (
           <div
@@ -407,12 +617,12 @@ export const Telop = ({
             }}
           >
             <TelopLayer
-              segments={segments}
+              lineTexts={layout.lineTexts}
+              fontSize={layout.fontSize}
               style={style}
-              globalFontSize={globalFontSize}
               opacity={opacity}
               transform={transform}
-              videoWidth={videoWidth}
+              highlightWords={telop.highlight_words}
             />
           </div>
         );

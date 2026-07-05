@@ -66,6 +66,96 @@ function loadTelopPresetCatalog() {
   }
 }
 
+// --- フェーズT2.5-4: シーン種類(semantic type) → テロッププリセット マッピング ---
+//
+// 既定は templates/telop_type_mapping.yaml、ユーザー変更分は userData の
+// telop_type_mapping.json に永続化する(apiKeys等と同じuserData永続化パターン)。
+// python側(step06c/step08)へは --type-mapping でユーザーJSONのパスを渡し、
+// load_type_mapping() が「フォールバック < 既定YAML < ユーザーJSON」で解決する。
+// type一覧・既定マッピングは python/shared/telop_types.py / src/lib/telopTypes.ts と同期すること。
+
+const TELOP_SEMANTIC_TYPES = [
+  "default",
+  "surprise",
+  "harsh",
+  "quote",
+  "emphasis",
+  "question",
+  "reply",
+  "punchline",
+  "hype",
+  "cta",
+];
+
+const TELOP_TYPE_FALLBACK_MAPPING = {
+  default: "fact_yellow",
+  surprise: "box_yellow",
+  harsh: "serif_harsh",
+  quote: "serif_quote",
+  emphasis: "emotion_red",
+  question: "question_blue",
+  reply: "reply_cyan",
+  punchline: "box_yellow",
+  hype: "special_purple",
+  cta: "cta_yellow",
+};
+
+function telopTypeMappingPath() {
+  return userDataPath("telop_type_mapping.json");
+}
+
+function extractTypeStyles(raw) {
+  const source = raw && typeof raw === "object" ? (raw.type_styles ?? raw) : {};
+  const result = {};
+  if (!source || typeof source !== "object") return result;
+  for (const type of TELOP_SEMANTIC_TYPES) {
+    const value = source[type];
+    if (typeof value === "string" && value.trim()) result[type] = value.trim();
+  }
+  return result;
+}
+
+/** 既定マッピング(フォールバック定数 < templates/telop_type_mapping.yaml)。 */
+function loadDefaultTelopTypeMapping() {
+  const mapping = { ...TELOP_TYPE_FALLBACK_MAPPING };
+  try {
+    const defaultPath = path.join(repoRoot(), "templates", "telop_type_mapping.yaml");
+    if (fs.existsSync(defaultPath)) {
+      Object.assign(mapping, extractTypeStyles(yaml.load(fs.readFileSync(defaultPath, "utf-8"))));
+    }
+  } catch (error) {
+    console.error("[telop-type-mapping] failed to load default yaml:", error);
+  }
+  return mapping;
+}
+
+/** 解決済みのtype→presetマッピング(既定 + ユーザー上書き)。常に全typeのエントリを持つ。 */
+function loadTelopTypeMapping() {
+  const mapping = loadDefaultTelopTypeMapping();
+  try {
+    const filePath = telopTypeMappingPath();
+    if (fs.existsSync(filePath)) {
+      Object.assign(mapping, extractTypeStyles(readJson(filePath)));
+    }
+  } catch (error) {
+    console.error("[telop-type-mapping] failed to load user mapping:", error);
+  }
+  return mapping;
+}
+
+/** ユーザーマッピングをuserDataへ保存し、解決済みマッピングを返す。 */
+function saveTelopTypeMapping(input) {
+  const sanitized = extractTypeStyles(input);
+  const filePath = telopTypeMappingPath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  writeJson(filePath, {
+    version: "1.0",
+    updated_at: new Date().toISOString(),
+    type_styles: sanitized,
+  });
+  return loadTelopTypeMapping();
+}
+
 function settingsPath() {
   return userDataPath("settings.json");
 }
@@ -2203,6 +2293,7 @@ function loadTranscriptSource(runDir) {
     }
   }
   return {
+    runDir,
     sttPath,
     proposalPath,
     fillerPath,
@@ -2363,6 +2454,10 @@ async function rerunCompositionAndTelop(runDir) {
   const preprocess = source.preprocess || {};
   const reviewPath = path.join(relRunDir, "step06_review", "review.json");
   const project = projectPathForRun(runDir);
+  // フェーズT2.5-4: ユーザーのtype→presetマッピング(userData)があればstep08へ渡す。
+  // directedモードのスロットは実行のたびに最新マッピングでスタイルが再解決される。
+  const typeMappingFile = telopTypeMappingPath();
+  const typeMappingArgs = fs.existsSync(typeMappingFile) ? ["--type-mapping", typeMappingFile] : [];
   await spawnUtility({
     command: python,
     args: [
@@ -2379,6 +2474,7 @@ async function rerunCompositionAndTelop(runDir) {
       project,
       "--review",
       reviewPath,
+      ...typeMappingArgs,
     ],
     cwd: root,
     env: apiKeys.buildPipelineEnv(),
@@ -2446,6 +2542,10 @@ function buildTelopPageBoundaries(source) {
   const keepSegments = Array.isArray(source.proposal?.keep_segments) ? source.proposal.keep_segments : [];
   const cuts = Array.isArray(source.composition?.voice_data?.cuts) ? source.composition.voice_data.cuts : [];
   const timelineCuts = Array.isArray(source.composition?.timeline?.cuts) ? source.composition.timeline.cuts : [];
+  // フェーズT2(directedモード): telopはスロット単位の明示start/end(カット相対秒)を持つため、
+  // word_indicesの逆算ではなく明示タイミングをそのままページ境界に使う(1シーン=1スロット)。
+  // fullモードは従来のword_indices逆算のまま(既存runのシーン初期化を変えない)。
+  const directed = isDirectedTelopMode(source);
   const boundaries = [];
   cuts.forEach((cut, index) => {
     const segment = keepSegments[index];
@@ -2457,24 +2557,58 @@ function buildTelopPageBoundaries(source) {
     const timelinePages = Array.isArray(timelineCut?.telop?.pages) ? timelineCut.telop.pages : [];
     for (let pageIndex = 0; pageIndex < telops.length; pageIndex += 1) {
       const telop = telops[pageIndex];
-      const indices = Array.isArray(telop?.word_indices) ? telop.word_indices : [];
-      if (!indices.length) continue;
-      const minIndex = Math.min(...indices);
-      const maxIndex = Math.max(...indices);
-      const firstWord = words[minIndex];
-      const lastWord = words[maxIndex];
-      if (!firstWord || !lastWord) continue;
-      const startMs = segStartMs + Math.round(Number(firstWord.start || 0) * 1000);
-      const endMs = segStartMs + Math.round(Number(lastWord.end || 0) * 1000);
+      let startMs = null;
+      let endMs = null;
+      if (directed && typeof telop?.start === "number" && typeof telop?.end === "number") {
+        startMs = segStartMs + Math.round(Number(telop.start) * 1000);
+        endMs = segStartMs + Math.round(Number(telop.end) * 1000);
+      } else {
+        const indices = Array.isArray(telop?.word_indices) ? telop.word_indices : [];
+        if (!indices.length) continue;
+        const minIndex = Math.min(...indices);
+        const maxIndex = Math.max(...indices);
+        const firstWord = words[minIndex];
+        const lastWord = words[maxIndex];
+        if (!firstWord || !lastWord) continue;
+        startMs = segStartMs + Math.round(Number(firstWord.start || 0) * 1000);
+        endMs = segStartMs + Math.round(Number(lastWord.end || 0) * 1000);
+      }
       if (endMs <= startMs) continue;
       const timelinePage = timelinePages[pageIndex];
       const timelineText = Array.isArray(timelinePage?.lines) ? timelinePage.lines.join("") : "";
       const text = String(telop?.text || timelineText || "").trim();
-      boundaries.push({ startMs, endMs, ...(text ? { text } : {}) });
+      const styleId = directed && telop?.style ? String(telop.style) : "";
+      // フェーズT2.5-4: semantic type と個別上書きフラグ(スタイルバッジのtype表示・
+      // マッピング再解決の判定に使う)。旧run(type無し)は空のまま。
+      const typeId =
+        directed && typeof telop?.type === "string" && TELOP_SEMANTIC_TYPES.includes(telop.type)
+          ? telop.type
+          : "";
+      const styleOverridden = Boolean(directed && telop?.style_overridden);
+      const highlightWords = Array.isArray(telop?.highlight_words)
+        ? telop.highlight_words.map(String).filter(Boolean)
+        : [];
+      boundaries.push({
+        startMs,
+        endMs,
+        ...(text ? { text } : {}),
+        ...(styleId ? { styleId } : {}),
+        ...(typeId ? { typeId } : {}),
+        ...(styleOverridden ? { styleOverridden: true } : {}),
+        ...(styleId && highlightWords.length ? { highlightWords } : {}),
+      });
     }
   });
   boundaries.sort((a, b) => a.startMs - b.startMs);
   return boundaries;
+}
+
+/** フェーズT2: このrunがdirectedモード(演出ディレクティブ駆動)かどうか。 */
+function isDirectedTelopMode(source) {
+  if (source.composition?.meta?.telop_mode === "directed") return true;
+  // 旧compositionにフラグが無い場合はディレクティブファイルの存在で判定する
+  const runDir = source.runDir || "";
+  return Boolean(runDir) && fs.existsSync(path.join(runDir, "telop_directives.json"));
 }
 
 function isAiRefineFailure(raw) {
@@ -2573,7 +2707,26 @@ function loadTranscriptEditorState(runDir) {
     telopRefineFailureReason: telopRefineFailed ? String(refineRaw?.reason || "") : "",
     transcriptFailedChunks: Number(aiReviewRaw?.failed_chunks || 0),
     telopFailedChunks: Number(refineRaw?.failed_chunks || 0),
+    // 改善21-B: error_kind / provider / error_detail(旧runのJSONには無い→空文字でUI側がother扱い)。
+    transcriptErrorKind: transcriptRefineFailed ? String(aiReviewRaw?.error_kind || "") : "",
+    telopErrorKind: telopRefineFailed ? String(refineRaw?.error_kind || "") : "",
+    transcriptErrorDetail: transcriptRefineFailed ? String(aiReviewRaw?.error_detail || aiReviewRaw?.reason || "") : "",
+    telopErrorDetail: telopRefineFailed ? String(refineRaw?.error_detail || refineRaw?.reason || "") : "",
+    transcriptProvider: String(aiReviewRaw?.provider || ""),
+    telopProvider: String(refineRaw?.provider || ""),
+    transcriptUsage: aiReviewRaw?.usage || null,
+    telopUsage: refineRaw?.usage || null,
   };
+
+  const wordSplitFlags = Array.isArray(source.proposal?.word_split_flags)
+    ? source.proposal.word_split_flags.map((flag) => ({
+        prev_end_ms: Number(flag.prev_end_ms || 0),
+        next_start_ms: Number(flag.next_start_ms || 0),
+        tail_text: String(flag.tail_text || ""),
+        head_text: String(flag.head_text || ""),
+        gap_ms: Number(flag.gap_ms || 0),
+      }))
+    : undefined;
 
   return {
     runDir: resolved,
@@ -2598,11 +2751,79 @@ function loadTranscriptEditorState(runDir) {
     // プレビュー側で「video要素の実表示幅 × (telopFontSize / telopBaseWidth)」の相対比率計算に使う
     // (Remotion書き出し時と同じ比率になるようにするため)。
     telopBaseWidth: Number(source.composition?.meta?.display_width || 1280),
+    // 改善20-B: 1行の文字数バジェット。超過行のプレビュー折返し(wrapTelopLine)に使う。
+    // 旧run(フィールドなし)は縦横に応じたテンプレート既定値(横16/縦12)にフォールバック。
+    telopMaxCharsPerLine: Number(
+      source.composition?.timeline?.telop_max_chars_per_line ||
+        (source.composition?.meta?.orientation === "horizontal" ? 16 : 12),
+    ),
     // 改善8-B-3(シーン初期化=テロップページ): BudouXテロップページ境界(絶対ms)。
     // composition.jsonにvoice_data/telopsが無い(旧run等)場合は空配列(UI側はヒューリスティックへフォールバック)。
     telopPageBoundaries: buildTelopPageBoundaries(source),
+    // フェーズT2: directedモード(演出ディレクティブ駆動)かどうか。UIのスタイルバッジ表示に使う。
+    telopMode: isDirectedTelopMode(source) ? "directed" : "full",
     aiReview,
+    wordSplitFlags,
   };
+}
+
+/**
+ * フェーズT2(directedモード): UIのシーン編集(deriveDirectedSlots)を telop_directives.json の
+ * slots へ書き戻す。step08 はスロットを絶対msアンカーで現在のkeep_segmentsへ選び直すため、
+ * ここでは編集後のスロット(文言・スタイル・強調語・絶対ms範囲)で丸ごと差し替えればよい。
+ * 既存スロットと中点が一致するものは slot_id / source_text(フォールバック検証の元発話)を引き継ぐ。
+ * 戻り値は実際に書き換えを行ったかどうか。
+ */
+function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
+  if (!Array.isArray(directedSlots) || !directedSlots.length) return false;
+  const directivesPath = path.join(runDir, "telop_directives.json");
+  if (!fs.existsSync(directivesPath)) return false;
+  const directives = readJson(directivesPath);
+  const existingSlots = Array.isArray(directives.slots) ? directives.slots : [];
+
+  const findExisting = (startMs, endMs) => {
+    const midpoint = (startMs + endMs) / 2;
+    return existingSlots.find(
+      (slot) =>
+        Number(slot?.source_start_ms) <= midpoint && midpoint < Number(slot?.source_end_ms),
+    );
+  };
+
+  const nextSlots = [];
+  directedSlots.forEach((edit, index) => {
+    const startMs = Math.round(Number(edit?.startMs ?? 0));
+    const endMs = Math.round(Number(edit?.endMs ?? 0));
+    const text = String(edit?.text || "").trim();
+    if (endMs <= startMs || !text) return;
+    const existing = findExisting(startMs, endMs);
+    const highlightWords = Array.isArray(edit?.highlightWords)
+      ? edit.highlightWords.map(String).filter((word) => word && text.includes(word))
+      : [];
+    // フェーズT2.5-4: typeを保存し、個別上書きでないスロットはstep08実行時に
+    // type×最新マッピングで再解決される(styleはtypeを読めない旧経路向けのスナップショット)。
+    const typeId =
+      typeof edit?.typeId === "string" && TELOP_SEMANTIC_TYPES.includes(edit.typeId) ? edit.typeId : "";
+    nextSlots.push({
+      slot_id: existing?.slot_id || `ui_s${String(index + 1).padStart(3, "0")}`,
+      cut_id: existing?.cut_id || "",
+      source_start_ms: startMs,
+      source_end_ms: endMs,
+      source_text: existing?.source_text ?? text,
+      text,
+      style: typeof edit?.styleId === "string" && edit.styleId ? edit.styleId : "fact_yellow",
+      ...(typeId ? { type: typeId } : {}),
+      ...(edit?.styleOverridden ? { style_overridden: true } : {}),
+      highlight_words: highlightWords,
+      fallback: false,
+    });
+  });
+  if (!nextSlots.length) return false;
+
+  directives.slots = nextSlots;
+  directives.edited_by_ui = true;
+  directives.updated_at = new Date().toISOString();
+  writeJson(directivesPath, directives);
+  return true;
 }
 
 // --- 検品UI v2(シーン行UI, Phase 1): scenesのtelopText編集をtelop.txt/composition.jsonへ反映する ---
@@ -2736,7 +2957,19 @@ async function applyTranscriptKeepSegments(input) {
   const resolved = resolveRunDir(input?.runDir);
   applyWordCorrections(resolved, input?.corrections || []);
   updateCutProposalKeepSegments(resolved, input?.keepSegments || []);
+  // フェーズT2(directedモード): step08はtelop_directives.jsonを読むため、再実行前に
+  // UIのスロット編集(文言・スタイル・強調語)をディレクティブへ書き戻しておく。
+  const directedApplied = applyDirectedSlotEditsToDirectives(resolved, input?.directedSlots);
   await rerunCompositionAndTelop(resolved);
+
+  // directedモードではスロット由来のtelopsが正であり、telop.txt経由の上書き
+  // (apply_telop.pyのword再マッピング)を通すと明示タイミング・スタイルが崩れるため通さない。
+  if (directedApplied) {
+    return {
+      transcript: loadTranscriptEditorState(resolved),
+      review: loadTelopReviewState(resolved),
+    };
+  }
 
   const textChanged = applyTelopOverridesToFile(resolved, input?.telopOverrides);
 
@@ -3219,6 +3452,8 @@ async function runPipeline(options) {
       project,
       "--review",
       path.join(relRunDir, "step06_review", "review.json"),
+      // フェーズT2.5-4: ユーザーのtype→presetマッピング(directedモードのrunでのみ効く)
+      ...(fs.existsSync(telopTypeMappingPath()) ? ["--type-mapping", telopTypeMappingPath()] : []),
     ],
     cwd: root,
     env,
@@ -3351,6 +3586,9 @@ ipcMain.handle("shell:openExternal", (_event, url) => {
 });
 ipcMain.handle("font-profiles:list", () => readFontProfiles());
 ipcMain.handle("telop-presets:list", () => loadTelopPresetCatalog());
+// フェーズT2.5-4: シーン種類→プリセットのユーザーマッピング(userData永続化)
+ipcMain.handle("telop-type-mapping:get", () => loadTelopTypeMapping());
+ipcMain.handle("telop-type-mapping:save", (_event, input) => saveTelopTypeMapping(input || {}));
 ipcMain.handle("font-profiles:save", (_event, input) => saveFontProfile(input || {}));
 ipcMain.handle("font-profiles:delete", (_event, profileId) => deleteFontProfile(profileId));
 ipcMain.handle("user-rules:get", () => readUserRules());
