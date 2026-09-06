@@ -50,6 +50,27 @@ export function computeContainedVideoBox(
 }
 
 /**
+ * フェーズW8(キャンバス基準ステージ): プレビューステージ内で「キャンバス(=コンポジション)」が
+ * 描画される矩形を計算する。テロップ・オーバーレイ・挿入画像はキャンバス座標系なので、
+ * 素材の向きとキャンバスの向きが異なるrun(横素材+縦キャンバス等)でもこの矩形を基準にすれば
+ * 書き出しと同じ配置になる。キャンバス寸法が未指定(0/undefined。旧run・composition未生成)の
+ * 場合は従来どおり動画intrinsic寸法のアスペクトへフォールバックする。
+ */
+export function computeStageCanvasBox(
+  containerWidthPx: number,
+  containerHeightPx: number,
+  canvasWidth: number | undefined,
+  canvasHeight: number | undefined,
+  videoIntrinsicWidth: number,
+  videoIntrinsicHeight: number,
+): ContainedBox {
+  if (canvasWidth && canvasHeight && canvasWidth > 0 && canvasHeight > 0) {
+    return computeContainedVideoBox(containerWidthPx, containerHeightPx, canvasWidth, canvasHeight);
+  }
+  return computeContainedVideoBox(containerWidthPx, containerHeightPx, videoIntrinsicWidth, videoIntrinsicHeight);
+}
+
+/**
  * Remotion書き出しと同じ相対比率(telop_font_size / 基準解像度幅)で、プレビュー上の
  * 「通常(sizeRatio=1.0)」相当のフォントサイズ(px)を算出する。
  * `telopStyleToCssProperties(style, baseFontSizePx)`のbaseFontSizePxにそのまま渡す想定。

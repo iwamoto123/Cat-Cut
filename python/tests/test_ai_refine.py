@@ -144,6 +144,50 @@ class ApplyRefineResponseTests(unittest.TestCase):
             self.assertNotIn("。", page.body[0])
 
 
+class NotationVariantsKanjiTests(unittest.TestCase):
+    """2026-07-06: 漢字語の同音異字揺れ (夏期講習/夏季講習) の機械抽出。"""
+
+    def test_detects_kanji_one_char_variants(self):
+        text = "夏期講習に参加した。" * 3 + "夏季講習はどうでしたか。" * 2
+        candidates = ai_refine.extract_notation_variants(text)
+        pair = next(
+            (c for c in candidates if {v for v, _ in c["variants"]} == {"夏期講習", "夏季講習"}),
+            None,
+        )
+        self.assertIsNotNone(pair)
+        self.assertEqual(pair["canonical"], "夏期講習")  # 多数派
+
+    def test_ignores_kanji_words_with_different_length_or_edges(self):
+        # 長さ違い・先頭/末尾違いはペアにしない (別の語)
+        text = "個別指導が良い。" * 2 + "個別面談も良い。" * 2 + "集団指導も良い。" * 2
+        candidates = ai_refine.extract_notation_variants(text)
+        for c in candidates:
+            variants = {v for v, _ in c["variants"]}
+            self.assertNotEqual(variants, {"個別指導", "個別面談"})  # 中間2文字違い
+            # 個別指導/集団指導 は先頭が違うのでペアにしない
+            self.assertNotEqual(variants, {"個別指導", "集団指導"})
+
+
+class FinalPassTests(unittest.TestCase):
+    """2026-07-06: 最終検品パス(2周目)。"""
+
+    def test_apply_final_pass_corrections_keeps_structure(self):
+        _, pages = parse_telop(SAMPLE_TELOP_TXT)
+        new_pages, changed = ai_refine.apply_final_pass_corrections(
+            pages, {"テーマですです": "テーマです"},
+        )
+        self.assertEqual(len(new_pages), len(pages))
+        self.assertEqual([p.page_id for p in new_pages], [p.page_id for p in pages])
+        self.assertEqual(changed, 1)
+        self.assertIn("テーマです", new_pages[0].body[1])
+        self.assertNotIn("テーマですです", new_pages[0].body[1])
+
+    def test_build_final_pass_prompt_forbids_repagination(self):
+        prompt = ai_refine.build_final_pass_prompt("全文", [{"cut_id": "cut_001", "pages": ["本文"]}])
+        self.assertIn("ページの分割・結合・移動は禁止", prompt)
+        self.assertIn("corrections", prompt)
+
+
 class RunStepTests(unittest.TestCase):
     def setUp(self):
         import tempfile
@@ -212,6 +256,60 @@ class RunStepTests(unittest.TestCase):
         self.assertFalse(result["enabled"])
         self.assertIn("api_error", result["reason"])
         self.assertEqual(self.telop_path.read_text(encoding="utf-8"), original)
+
+    def test_final_pass_applies_residual_corrections(self):
+        # 1周目は変更なし、2周目(最終検品)が残存ミス「わね→はね」を拾うシナリオ
+        calls = []
+
+        def fake_caller(api_key, model, prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                return {"corrections": {}, "cuts": []}
+            return {"corrections": {"今日わね": "今日はね"}, "needs_review": []}
+
+        result = ai_refine.run_step(
+            str(self.run_dir), str(self.stt_path), str(self.output_path),
+            api_key="dummy-key", call_claude_fn=fake_caller,
+        )
+        self.assertTrue(result["enabled"])
+        self.assertEqual(len(calls), 2)
+        self.assertIn("最終検品者", calls[1])
+        self.assertEqual(result["final_pass"]["corrections"], 1)
+        self.assertEqual(result["final_pass"]["pages_changed"], 1)
+        self.assertIn("今日はね", self.telop_path.read_text(encoding="utf-8"))
+
+    def test_final_pass_disabled_calls_llm_once(self):
+        calls = []
+
+        def fake_caller(api_key, model, prompt):
+            calls.append(prompt)
+            return {"corrections": {}, "cuts": []}
+
+        result = ai_refine.run_step(
+            str(self.run_dir), str(self.stt_path), str(self.output_path),
+            api_key="dummy-key", call_claude_fn=fake_caller, final_pass=False,
+        )
+        self.assertTrue(result["enabled"])
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("final_pass", result)
+
+    def test_final_pass_failure_keeps_first_pass_output(self):
+        # 2周目が失敗しても1周目の結果は維持され、ステップは成功扱い
+        calls = []
+
+        def fake_caller(api_key, model, prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                return {"corrections": {}, "cuts": [{"cut_id": "cut_002", "pages": ["急遽お願いします"]}]}
+            raise RuntimeError("network down")
+
+        result = ai_refine.run_step(
+            str(self.run_dir), str(self.stt_path), str(self.output_path),
+            api_key="dummy-key", call_claude_fn=fake_caller,
+        )
+        self.assertTrue(result["enabled"])
+        self.assertEqual(result["final_pass"]["failed_chunks"], 1)
+        self.assertIn("急遽お願いします", self.telop_path.read_text(encoding="utf-8"))
 
     def test_malformed_response_is_caught_and_pipeline_continues(self):
         def bad_caller(api_key, model, prompt):

@@ -12,6 +12,7 @@ import {
   buildLowConfidenceSuspicions,
   buildProperNounSuspicions,
   buildShortCutSuspicions,
+  buildSuspectWordSuspicions,
   buildSuspicionQueue,
   buildTelopReviewSuspicions,
   buildWordSplitSuspicions,
@@ -455,6 +456,75 @@ test("buildSuspicionQueue: wordSplitFlags 未指定でも壊れない", () => {
     keepSegments: [{ startMs: 0, endMs: 200 }],
   });
   assert.equal(items.some((item) => item.type === "word_split"), false);
+});
+
+// --- W5-3: AI疑義ワード(suspect_word) ---
+
+test("buildSuspectWordSuspicions: suspect_words を high / suspect_word で返す", () => {
+  const items = buildSuspectWordSuspicions(
+    {
+      enabled: true,
+      suspectWords: [
+        {
+          word_ids: ["w2", "w3"],
+          start_ms: 130,
+          end_ms: 340,
+          text: "んに",
+          reason: "文脈と合わない可能性",
+          suggestion: "ンニ",
+        },
+      ],
+    },
+    words,
+  );
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, "suspect_word");
+  assert.equal(items[0].severity, "high");
+  assert.equal(items[0].label, "文脈上あやしい語");
+  assert.equal(items[0].text, "んに");
+  assert.deepEqual(items[0].wordIds, ["w2", "w3"]);
+  assert.equal(items[0].timestampMs, 130);
+  assert.equal(items[0].detail, "文脈と合わない可能性（候補: ンニ）");
+});
+
+test("buildSuspectWordSuspicions: suggestion無しはreasonのみ、start_ms無しは先頭wordのstartMsを使う", () => {
+  const items = buildSuspectWordSuspicions(
+    { enabled: true, suspectWords: [{ word_ids: ["w2"], text: "ん", reason: "誤変換の疑い" }] },
+    words,
+  );
+  assert.equal(items.length, 1);
+  assert.equal(items[0].detail, "誤変換の疑い");
+  assert.equal(items[0].timestampMs, 130);
+});
+
+test("buildSuspectWordSuspicions: 実在しないword_idのみの項目は捨てる・enabled=falseは空", () => {
+  const missing = buildSuspectWordSuspicions(
+    { enabled: true, suspectWords: [{ word_ids: ["w-missing"], text: "x", reason: "r" }] },
+    words,
+  );
+  assert.equal(missing.length, 0);
+  const disabled = buildSuspectWordSuspicions(
+    { enabled: false, suspectWords: [{ word_ids: ["w2"], text: "ん", reason: "r" }] },
+    words,
+  );
+  assert.equal(disabled.length, 0);
+  assert.equal(buildSuspectWordSuspicions(undefined, words).length, 0);
+});
+
+test("buildSuspicionQueue: suspectWords が suspect_word 項目としてキューに統合される", () => {
+  const items = buildSuspicionQueue({
+    words,
+    keepSegments: [{ startMs: 0, endMs: 500 }],
+    aiReview: {
+      enabled: true,
+      suspectWords: [
+        { word_ids: ["w2"], start_ms: 130, text: "ん", reason: "誤変換の疑い", suggestion: "ン" },
+      ],
+    },
+  });
+  const suspectItems = items.filter((item) => item.type === "suspect_word");
+  assert.equal(suspectItems.length, 1);
+  assert.equal(suspectItems[0].severity, "high");
 });
 
 // --- 改善21-B: AI校正失敗を要確認キューの先頭項目に統合 ---

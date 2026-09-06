@@ -1,5 +1,7 @@
 // 実行時(値)importのため、node --experimental-strip-types でテストを直接実行できるよう拡張子を明示する。
 import type { Scene } from "./scenes.ts";
+import type { ActiveSpeakerColors } from "./speakerColors.ts";
+import type { VideoEffectOverride } from "./videoEffectCatalog.ts";
 import {
   isSemanticType,
   resolveStyleForType,
@@ -25,7 +27,11 @@ import {
  *  color はスタイルバッジの色見本(telop_presets.yamlの文字色/箱色の代表色)。 */
 export const DIRECTED_STYLE_OPTIONS: Array<{ id: string; label: string; color: string }> = [
   { id: "fact_yellow", label: "事実", color: "#ffdd00" },
+  // フェーズU2: 使用シーン(Vlog系)向けに座布団(帯)系を選択肢へ追加
+  // (python/shared/direction.py の ALLOWED_DIRECTIVE_STYLES と同期)
+  { id: "fact_yellow_band", label: "事実(座布団)", color: "#ffdd00" },
   { id: "neutral_white", label: "中立", color: "#ffffff" },
+  { id: "neutral_white_band", label: "中立(座布団)", color: "#ffffff" },
   { id: "neutral_white_pink", label: "中立(ピンク)", color: "#ffc0cb" },
   { id: "emotion_red", label: "感情", color: "#ff3b30" },
   { id: "question_blue", label: "質問", color: "#4da6ff" },
@@ -37,6 +43,36 @@ export const DIRECTED_STYLE_OPTIONS: Array<{ id: string; label: string; color: s
   // フェーズT2.5-3: 明朝体プリセット
   { id: "serif_quote", label: "名言(明朝)", color: "#f5f5f5" },
   { id: "serif_harsh", label: "辛辣(明朝)", color: "#333333" },
+  // フェーズU5: ジャンル別プロプリセット
+  // (python/shared/direction.py の ALLOWED_DIRECTIVE_STYLES と同期)
+  { id: "biz_white", label: "ビジネス白", color: "#ffffff" },
+  { id: "biz_blue", label: "ビジネス青", color: "#2e86e0" },
+  { id: "biz_navy_box", label: "ビジネス見出し(紺箱)", color: "#16305e" },
+  { id: "vlog_caption", label: "Vlog字幕", color: "#e8e8e8" },
+  { id: "vlog_caption_strong", label: "Vlog字幕(強調)", color: "#ffffff" },
+  { id: "variety_yellow", label: "バラエティ黄", color: "#ffe600" },
+  { id: "variety_pop_red", label: "バラエティ赤(極太)", color: "#ff3b00" },
+  { id: "variety_hand_shock", label: "バラエティ手書き", color: "#e60028" },
+  { id: "beauty_serif", label: "美容白(明朝)", color: "#fafafa" },
+  { id: "beauty_pink", label: "美容ピンク(明朝)", color: "#f2a6c5" },
+  { id: "beauty_gold", label: "美容ゴールド(明朝)", color: "#c9a227" },
+  { id: "game_neon_cyan", label: "ゲームネオン水色", color: "#00e5ff" },
+  { id: "game_neon_magenta", label: "ゲームネオン桃", color: "#ff2ed2" },
+  { id: "game_retro_dot", label: "ゲームレトロ(ドット)", color: "#b6ff3d" },
+  // フェーズW1: 話者カラー用プリセット(fact_yellowの色違い。
+  // python/shared/direction.py の ALLOWED_DIRECTIVE_STYLES と同期)
+  { id: "fact_cyan", label: "事実(水色)", color: "#7fdff5" },
+  { id: "fact_green", label: "事実(薄緑)", color: "#a8eca0" },
+  // フェーズW24/W26: 縦型ショート広告のデザインシステム(4スタイル。
+  // 縦型のvertical_type_stylesが自動割当し、ここから手動でも選べる)
+  { id: "ad_gothic_impact", label: "広告・標準(ゴシック)", color: "#ffffff" },
+  { id: "ad_mincho_impact", label: "広告・決めゼリフ(明朝)", color: "#ffe600" },
+  { id: "ad_highlight_band", label: "広告・CTA(黄帯)", color: "#ffe600" },
+  { id: "ad_urgent_band", label: "広告・緊急(赤帯)", color: "#de1c24" },
+  // フェーズW27: 縦型ショートのアクセント3種(短い決め語へ自動割当。手動でも選べる)
+  { id: "ad_mega_impact", label: "広告・特大文字", color: "#ffffff" },
+  { id: "ad_slant_impact", label: "広告・斜め文字", color: "#ffe600" },
+  { id: "ad_vertical_mincho", label: "広告・縦書き(明朝)", color: "#ffffff" },
 ];
 
 export const DEFAULT_DIRECTED_STYLE_ID = "fact_yellow";
@@ -61,14 +97,27 @@ export function directedStyleColor(styleId: string | null | undefined): string {
  * シーンの有効directedスタイルID。優先順位(python/shared/direction.py の
  * effective_slot_style と同じ):
  * 1. directedStyleId(個別プリセット上書き。T2旧runのstyleスナップショットも含む)
- * 2. directedType × type→presetマッピング
- * 3. 既定 fact_yellow
+ * 2. フェーズW1: 話者カラー(speakerColors 発動時、apply_types のtypeのみ)
+ * 3. directedType × type→presetマッピング
+ * 4. 既定 fact_yellow
+ * speakerColors は発動条件(有効+シェア10%以上の話者2人以上)を満たした場合のみ
+ * 非null を渡す(resolveActiveSpeakerColors の戻り値)。null なら完全に従来解決。
  */
 export function effectiveDirectedStyleId(
-  scene: Pick<Scene, "directedStyleId" | "directedType">,
+  scene: Pick<Scene, "directedStyleId" | "directedType" | "speaker">,
   typeMapping?: Partial<TelopTypeMapping> | null,
+  speakerColors?: ActiveSpeakerColors | null,
 ): string {
   if (scene.directedStyleId) return scene.directedStyleId;
+  if (
+    speakerColors &&
+    scene.speaker &&
+    isSemanticType(scene.directedType) &&
+    speakerColors.applyTypes.has(scene.directedType) &&
+    speakerColors.styles[scene.speaker]
+  ) {
+    return speakerColors.styles[scene.speaker];
+  }
   if (isSemanticType(scene.directedType)) return resolveStyleForType(scene.directedType, typeMapping);
   return DEFAULT_DIRECTED_STYLE_ID;
 }
@@ -91,6 +140,8 @@ export type DirectedSlotEdit = {
    * null なら上書きなし(type→マッピング → プリセット既定へフォールバック)。
    */
   animationIn: string | null;
+  /** 省略=自動、none/pinch/zoom=シーン検品での明示指定。 */
+  videoEffectOverride?: VideoEffectOverride;
   highlightWords: string[];
 };
 
@@ -105,6 +156,7 @@ export type DirectedSlotEdit = {
 export function deriveDirectedSlots(
   scenes: Scene[],
   typeMapping?: Partial<TelopTypeMapping> | null,
+  speakerColors?: ActiveSpeakerColors | null,
 ): DirectedSlotEdit[] {
   return [...scenes]
     .sort((a, b) => a.sourceStartMs - b.sourceStartMs)
@@ -117,10 +169,12 @@ export function deriveDirectedSlots(
         startMs: scene.sourceStartMs,
         endMs: scene.sourceEndMs,
         text,
-        styleId: effectiveDirectedStyleId(scene, typeMapping),
+        // フェーズW1: スナップショットも話者カラー込みで解決する(typeを読めない旧経路との一致)
+        styleId: effectiveDirectedStyleId(scene, typeMapping, speakerColors),
         typeId: isSemanticType(scene.directedType) ? scene.directedType : null,
         styleOverridden: Boolean(scene.directedStyleId),
         animationIn: scene.directedAnimationIn ?? null,
+        ...(scene.videoEffectOverride ? { videoEffectOverride: scene.videoEffectOverride } : {}),
         highlightWords,
       };
     })

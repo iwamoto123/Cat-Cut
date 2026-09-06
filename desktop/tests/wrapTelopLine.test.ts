@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { weightedTelopLineLength, wrapTelopLine } from "../src/lib/wrapTelopLine.ts";
+import { isBadLineBreak } from "../src/lib/telopLineBreak.ts";
 
 /**
  * 改善20-B(行バジェット超過時の明示的な改行位置制御)のテスト。
@@ -80,6 +81,41 @@ test("wrapTelopLine maxLines: バジェット以内・maxLines以内なら結果
   assert.deepEqual(wrapTelopLine("こんにちは", 16, 2), ["こんにちは"]);
   const text = "インスタなのかYouTubeなのかXなのかいろいろ";
   assert.deepEqual(wrapTelopLine(text, 16, 2), wrapTelopLine(text, 16));
+});
+
+// --- 実機FB(名詞＋助詞の間で改行される)対応: 行頭に付属語を置かない ---
+
+test("wrapTelopLine: 名詞と助詞の間で折り返さない", () => {
+  const cases: Array<[string, number]> = [
+    ["第1回ベネッセ駿台共通テスト模試を受けられると思うんですけども", 12],
+    ["いろんな共通テスト対策の動画を上げています", 12],
+    ["高校3年生まで野球部でキャプテンをしてて", 12],
+    ["私の個人LINEのこう追加のページが出てくるので", 12],
+  ];
+  for (const [text, budget] of cases) {
+    const lines = wrapTelopLine(text, budget, 2);
+    assert.equal(lines.join(""), text);
+    for (let index = 1; index < lines.length; index += 1) {
+      const before = lines.slice(0, index).join("");
+      assert.ok(
+        !isBadLineBreak(before, lines[index]),
+        `付属語が行頭に来ている: ${JSON.stringify(lines)}`,
+      );
+    }
+  }
+});
+
+test("wrapTelopLine: 「模試を / 受けられる」のように文節末で折り返す", () => {
+  const lines = wrapTelopLine("第1回ベネッセ駿台共通テスト模試を受けられると思うんですけども", 12, 2);
+  assert.deepEqual(lines, ["第1回ベネッセ駿台共通テスト模試を", "受けられると思うんですけども"]);
+});
+
+test("wrapTelopLine: 名詞+補助動詞(担当+して)の間で折り返さない", () => {
+  const lines = wrapTelopLine("私が国語の共通テスト対策担当してまして", 12, 2);
+  assert.ok(
+    lines.every((line) => !line.startsWith("して")),
+    `付属語が行頭に来ている: ${JSON.stringify(lines)}`,
+  );
 });
 
 test("wrapTelopLine maxLines: maxLines=1は必ず1行(幅フィット縮小に委ねる)", () => {

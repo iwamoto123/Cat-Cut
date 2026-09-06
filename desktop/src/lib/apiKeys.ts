@@ -98,8 +98,35 @@ export function parseDotenvContent(content: string): Record<string, string> {
   return env;
 }
 
-export function formatElevenTestError(statusCode: number | null, networkError: boolean): string {
-  if (networkError) return "インターネット接続を確認してください";
+/** 貼り付け時に混ざる不可視文字を除去する。 */
+export function normalizeApiKey(key: string): string {
+  return String(key || "")
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, "")
+    .trim();
+}
+
+export function formatNetworkError(error: unknown): string {
+  if (!error || typeof error !== "object") return "インターネット接続を確認してください";
+  const err = error as { code?: string; message?: string };
+  const code = err.code || "";
+  if (code === "ENOTFOUND") return "api.elevenlabs.io に接続できません（DNS/ネットワークを確認してください）";
+  if (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT" || err.message === "timeout") {
+    return "接続がタイムアウトしました。VPN/ファイアウォール/プロキシを確認してください";
+  }
+  if (code === "ECONNREFUSED") return "接続が拒否されました。ファイアウォールを確認してください";
+  if (code === "CERT_HAS_EXPIRED" || code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE") {
+    return "SSL証明書エラーです。Macの日時設定とmacOSアップデートを確認してください";
+  }
+  if (code === "ECONNRESET") return "接続が切断されました。VPNを切るか、別のネットワークで再試行してください";
+  return `接続に失敗しました（${code || err.message || "unknown"}）。インターネット接続を確認してください`;
+}
+
+export function formatElevenTestError(
+  statusCode: number | null,
+  networkError: boolean,
+  errorDetail?: string,
+): string {
+  if (networkError) return errorDetail || "インターネット接続を確認してください";
   if (statusCode === 401) return "キーが正しくありません。コピーし直してください";
   if (statusCode === 403) return "このキーではAPIにアクセスできません。権限を確認してください";
   if (statusCode === 429) return "リクエストが多すぎます。少し待ってから再試行してください";
@@ -155,48 +182,52 @@ async function fetchWithTimeout(
   ]);
 }
 
+export function parseElevenLabsErrorMessage(status: number, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as {
+      detail?: { status?: string; message?: string };
+    };
+    const statusTag = parsed?.detail?.status || "";
+    const apiMessage = String(parsed?.detail?.message || "");
+    if (statusTag === "missing_permissions") {
+      return "Speech to Text の権限がありません。キー作成時に Speech to Text をオンにしてください";
+    }
+    if (statusTag === "invalid_api_key") {
+      return "ElevenLabsが「無効なAPIキー」と返しました。全文コピーし直してください";
+    }
+    if (apiMessage) return apiMessage;
+  } catch {
+    // JSON parse failure is non-fatal.
+  }
+  if (status === 403) return "IP制限やスコープ制限を確認してください";
+  return "";
+}
+
 export async function testElevenLabsConnection(
   apiKey: string,
   fetchFn: HttpFetchFn,
 ): Promise<ApiKeyTestResult> {
-  const trimmed = apiKey.trim();
+  const trimmed = normalizeApiKey(apiKey);
   if (!trimmed) {
     return { ok: false, message: "APIキーを入力してください" };
   }
   try {
-    const { status, body } = await fetchWithTimeout(fetchFn, "https://api.elevenlabs.io/v1/user", {
-      headers: { "xi-api-key": trimmed },
-    });
+    const { status, body } = await fetchWithTimeout(
+      fetchFn,
+      "https://api.elevenlabs.io/v1/speech-to-text",
+      { headers: { "xi-api-key": trimmed } },
+      30000,
+    );
     if (status === 200) {
-      let detail = "";
-      try {
-        const parsed = JSON.parse(body) as {
-          subscription?: { tier?: string };
-          subscription_tier?: string;
-          character_count?: number;
-          character_limit?: number;
-        };
-        const tier = parsed.subscription?.tier || parsed.subscription_tier || "";
-        const used = parsed.character_count;
-        const limit = parsed.character_limit;
-        const parts: string[] = [];
-        if (tier) parts.push(`プラン: ${tier}`);
-        if (typeof used === "number" && typeof limit === "number") {
-          parts.push(`残クレジット目安: ${Math.max(0, limit - used).toLocaleString()} / ${limit.toLocaleString()}`);
-        }
-        detail = parts.join(" · ");
-      } catch {
-        // JSON parse failure is non-fatal for a successful connection.
-      }
-      return {
-        ok: true,
-        message: "接続できました",
-        detail: detail || undefined,
-      };
+      return { ok: true, message: "接続できました（文字起こしAPI）" };
     }
-    return { ok: false, message: formatElevenTestError(status, false) };
-  } catch {
-    return { ok: false, message: formatElevenTestError(null, true) };
+    const detailMessage = parseElevenLabsErrorMessage(status, body);
+    return {
+      ok: false,
+      message: detailMessage || formatElevenTestError(status, false),
+    };
+  } catch (error) {
+    return { ok: false, message: formatElevenTestError(null, true, formatNetworkError(error)) };
   }
 }
 

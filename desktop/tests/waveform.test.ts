@@ -73,13 +73,10 @@ test("scaleWaveformPeaksLocal: ローカル最大値を1.0に正規化する", (
   assert.equal(scaled[1], 1, "最大値は正規化後ちょうど1になる");
 });
 
-test("scaleWaveformPeaksLocal: 小音量を非線形カーブ(既定0.6乗)で持ち上げる", () => {
-  // 全体が小音量(グローバル基準では0.05〜0.1程度)でも、ローカル正規化後に0.6乗すると
-  // 生の値より大きく持ち上がる(=視覚的に見えるようになる)ことを確認する。
+test("scaleWaveformPeaksLocal: 非線形カーブ(既定1.2乗)で音量差を強調する", () => {
   const scaled = scaleWaveformPeaksLocal([0.05, 0.1]);
-  assert.ok(scaled[0] > 0.05, "非線形カーブにより生の正規化値より持ち上がっているはず");
-  // 期待値: (0.05/0.1)^0.6 = 0.5^0.6 ≈ 0.6598
-  assert.ok(Math.abs(scaled[0] - Math.pow(0.5, 0.6)) < 1e-9);
+  assert.ok(scaled[0] < 0.5, "指数が1を超えるため中間音量は線形値より低くなる");
+  assert.ok(Math.abs(scaled[0] - Math.pow(0.5, 1.2)) < 1e-9);
 });
 
 test("scaleWaveformPeaksLocal: globalMax省略時はローカル最大の2%未満を無音扱いにする(フォールバック)", () => {
@@ -104,21 +101,26 @@ test("scaleWaveformPeaksLocal: globalMaxを渡すと録音全体で見て無音�
   assert.deepEqual(withGlobalMax, [0, 0, 0], "録音全体のグローバルピーク基準では無音区間のまま");
 });
 
+test("scaleWaveformPeaksLocal: 全体ピークより小さい区間はローカル最大でも低く描画される", () => {
+  const scaled = scaleWaveformPeaksLocal([0.07, 0.1], { globalMax: 1 });
+  assert.ok(scaled[1] < 0.3, "ローカル最大でも全体ピーク35%を分母にするため画面いっぱいまで伸びない");
+  assert.ok(Math.abs(scaled[1] - Math.pow(0.1 / 0.35, 1.2)) < 1e-9);
+});
+
 test("scaleWaveformPeaksGlobal: 完全無音(全て0)は0のまま", () => {
   assert.deepEqual(scaleWaveformPeaksGlobal([0, 0]), [0, 0]);
 });
 
 test("scaleWaveformPeaksGlobal: 再正規化はせず非線形カーブだけを適用する", () => {
   const scaled = scaleWaveformPeaksGlobal([0.1, 0.5, 1]);
-  assert.ok(Math.abs(scaled[0] - Math.pow(0.1, 0.6)) < 1e-9);
-  assert.ok(Math.abs(scaled[1] - Math.pow(0.5, 0.6)) < 1e-9);
+  assert.ok(Math.abs(scaled[0] - Math.pow(0.1, 1.2)) < 1e-9);
+  assert.ok(Math.abs(scaled[1] - Math.pow(0.5, 1.2)) < 1e-9);
   assert.equal(scaled[2], 1);
 });
 
-test("scaleWaveformPeaksGlobal: ノイズフロア(観測されたグローバルピークの2%)未満は0のまま無音として区別する", () => {
-  // 録音全体の観測最大値(このケースでは1)の2%を下回る値だけが無音扱いになる。
-  const scaled = scaleWaveformPeaksGlobal([0.01, 1]);
-  assert.equal(scaled[0], 0, "グローバルピーク(1)の2%(0.02)未満なので無音扱い");
+test("scaleWaveformPeaksGlobal: ノイズフロア(観測されたグローバルピークの6%)以下は0のまま無音として区別する", () => {
+  const scaled = scaleWaveformPeaksGlobal([0.06, 1]);
+  assert.equal(scaled[0], 0, "グローバルピーク(1)の6%(0.06)以下なので無音扱い");
   assert.equal(scaled[1], 1);
 });
 

@@ -53,7 +53,12 @@ class OversizedChunkSplitTests(unittest.TestCase):
         self.assertGreaterEqual(len(pages), 2)
         for page in pages:
             for line in page["lines"]:
-                self.assertLessEqual(len(line), 16, f"行バジェット超過: {line!r}")
+                # 行DPは付属語が行頭に来るのを避けるため、バジェットの上限比(1.4倍)までは
+                # 許容する（超過ぶんは描画側の幅フィット縮小で吸収される）
+                self.assertLessEqual(len(line), 16 * 1.4, f"行バジェット超過: {line!r}")
+        # 「インスタなのかYouTube / なのかX...」のように付属語で行を始めない
+        for page in pages[1:]:
+            self.assertFalse(page["lines"][0].startswith("なのか"), page["lines"])
 
     def test_split_does_not_break_alnum_run(self):
         pages = split_pages(
@@ -106,6 +111,24 @@ class KanjiNumberImprove20Tests(unittest.TestCase):
 
     def test_oku_regression(self):
         self.assertEqual(_normalize_kanji_numbers("一億人"), "1億人")
+
+    def test_new_counters_shuu_and_miss(self):
+        # 2026-07-06: 「四周」「一ミス」が変換されず残っていたFB対応
+        self.assertEqual(_normalize_kanji_numbers("確か四周ぐらい"), "確か4周ぐらい")
+        self.assertEqual(_normalize_kanji_numbers("一ミス二ミスぐらい"), "1ミス2ミスぐらい")
+
+    def test_normalization_applies_without_text_rules(self):
+        # 2026-07-06: 学習ルール(text_rules)の無いrunで漢数字算用化が丸ごと
+        # スキップされていたバグの回帰テスト (text_rules=None でも既定で適用)
+        pages = build_telop_pages(
+            "五割いかないぐらいでした",
+            cut_id="cut_001",
+            max_chars_per_line=16,
+            max_lines_per_page=1,
+            text_rules=None,
+        )
+        joined = "".join(line for page in pages for line in page["lines"])
+        self.assertIn("5割", joined)
 
     def test_build_telop_pages_applies_man_conversion(self):
         pages = build_telop_pages(

@@ -1,13 +1,78 @@
 /* フェーズT2.5-3: Shippori Mincho B1(明朝プリセット)・Dela Gothic One(極太)・Yuji Syuku(毛筆 op_brush)を追加。
+   フェーズU5: BIZ UDPGothic(ビジネス系プリセット biz_*)を追加(remotion Root.tsx のロード済みフォントとの同期)。
    オフライン時はimportが失敗してもプリセットのfont-familyフォールバック(ヒラギノ明朝等のシステムフォント)で描画される。 */
-@import url("https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Caveat:wght@400;700&family=Dela+Gothic+One&family=DotGothic16&family=Hina+Mincho&family=Klee+One:wght@400;600&family=M+PLUS+Rounded+1c:wght@400;700;800;900&family=Mochiy+Pop+One&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Reggae+One&family=RocknRoll+One&family=Shippori+Mincho:wght@400;700;800&family=Shippori+Mincho+B1:wght@400;700;800&family=Train+One&family=Yuji+Syuku&family=Zen+Kaku+Gothic+Antique:wght@400;700;900&family=Zen+Maru+Gothic:wght@400;700;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=BIZ+UDPGothic:wght@400;700&family=Bebas+Neue&family=Caveat:wght@400;700&family=Dela+Gothic+One&family=DotGothic16&family=Hina+Mincho&family=Klee+One:wght@400;600&family=M+PLUS+Rounded+1c:wght@400;700;800;900&family=Mochiy+Pop+One&family=Noto+Sans+JP:wght@400;700;900&family=Noto+Serif+JP:wght@400;700;900&family=Reggae+One&family=RocknRoll+One&family=Shippori+Mincho:wght@400;700;800&family=Shippori+Mincho+B1:wght@400;700;800&family=Train+One&family=Yuji+Syuku&family=Zen+Kaku+Gothic+Antique:wght@400;700;900&family=Zen+Maru+Gothic:wght@400;700;900&display=swap");
+
+/* テロップ向けローカルフォント(desktop/public/fonts/。remotion/public/fonts/ と同一ファイル)。
+   源暎ゴシック/極みゴ/ぽっぷる=SIL OFL 1.1、けいふぉんと=Apache 2.0、ラノベPOP=M+ FONTSライセンス。 */
+@font-face {
+  font-family: "GenEi Gothic N U-KL";
+  src: url("/fonts/GenEiGothicN-U-KL.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "GenEi Gothic N H-KL";
+  src: url("/fonts/GenEiGothicN-H-KL.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "GenEi Kiwami Go";
+  src: url("/fonts/GenEiKiwamiGo.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "GenEi POPle Bk";
+  src: url("/fonts/GenEiPOPle-Bk.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Keifont";
+  src: url("/fonts/keifont.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "LanobePOP";
+  src: url("/fonts/LanobePOP.otf") format("opentype");
+  font-display: swap;
+}
 
 :root {
-  color: #1f2328;
-  background: #f5f6f8;
+  /* デザイントークン(UI全体で共有)。テロップ描画用の色はプリセット由来のため対象外 */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-strong: #1e4fc2;
+  --accent-soft: #93b4f5;
+  --accent-bg: #eef4fe;
+  --text: #1c2128;
+  --text-strong: #333f52;
+  --text-secondary: #48566c;
+  --text-muted: #64748b;
+  --text-faint: #98a2b3;
+  --bg-app: #f4f5f7;
+  --bg-subtle: #f8fafc;
+  --bg-muted: #eef1f5;
+  --bg-hover: #f1f4f8;
+  --border: #e3e7ed;
+  --border-strong: #ced5df;
+  --surface: #ffffff;
+  --danger: #d92d20;
+  --danger-bg: #fef3f2;
+  --success: #1f7a3a;
+  --success-bg: #eefaf2;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.16);
+  --shadow-modal: 0 24px 64px rgba(15, 23, 42, 0.26);
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  color: var(--text);
+  background: var(--bg-app);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Hiragino Sans", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -17,11 +82,38 @@
   box-sizing: border-box;
 }
 
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+}
+
 body {
   margin: 0;
   min-width: 980px;
   min-height: 660px;
-  background: #f5f6f8;
+  background: var(--bg-app);
+}
+
+/* 細めのスクロールバーでツールらしい密度感に(WebKit=Electron前提) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.55);
+  background-clip: content-box;
+  border: 3px solid transparent;
 }
 
 button,
@@ -33,6 +125,16 @@ textarea {
 
 button {
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 button:disabled,
@@ -76,7 +178,7 @@ textarea:disabled {
 }
 
 .browserNoticeHint {
-  color: #5c6570;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -86,13 +188,80 @@ textarea:disabled {
   min-height: 100vh;
 }
 
+/* フェーズW23(改善2): 検品中(editing)は左ペインを隠して1カラム全幅にする */
+.appShell.appShellEditing {
+  grid-template-columns: 1fr;
+}
+
+/* フェーズW23(改善1): テロップデザインパネル内のOP有無チェックボックス */
+.opStartToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-strong);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.opStartToggle input {
+  accent-color: var(--accent);
+}
+
+.silenceTightnessPanel {
+  display: grid;
+  gap: 9px;
+}
+
+.silenceTightnessSegments {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+}
+
+.silenceTightnessSegments button {
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.silenceTightnessSegments button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.silenceTightnessSegments button.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-card);
+}
+
+.silenceTightnessHint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
 .leftPane {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-height: 100vh;
+  overflow-y: auto;
   padding: 22px;
-  border-right: 1px solid #d9dde3;
-  background: #ffffff;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .rightPane {
@@ -114,22 +283,45 @@ textarea:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px 16px;
+  /* 左ペインが狭いときはボタン列をタイトルの下へ折り返す(ボタン内の文字を折り返させない) */
+  flex-wrap: wrap;
 }
 
 .topBar h1 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   margin: 0;
-  color: #14181f;
-  font-size: 26px;
+  color: var(--text);
+  font-size: 21px;
   font-weight: 760;
-  letter-spacing: 0;
+  letter-spacing: -0.01em;
+}
+
+/* ブランドマーク: 耳のシルエットだけの控えめな猫アイコン */
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+}
+
+.brandMark svg {
+  display: block;
 }
 
 .topBar p {
   max-width: 290px;
   margin: 4px 0 0;
   overflow: hidden;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -141,43 +333,85 @@ textarea:disabled {
   gap: 10px;
 }
 
-.apiSettingsButton {
+/* トップバーのボタン(API設定/キャッシュ/ライセンス)。.secondaryButton の height:42px を
+   打ち消すため2クラスの詳細度で上書きし、「キャッシュ」等のラベルが折り返して
+   ボタンからはみ出さないよう nowrap+縮小禁止にする */
+.topBarActions .apiSettingsButton {
+  height: 30px;
   min-height: 30px;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  flex: none;
 }
 
 .runBadge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   min-width: 74px;
-  height: 30px;
-  border: 1px solid #ccd2da;
-  border-radius: 6px;
-  background: #f7f8fa;
-  color: #475467;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 700;
+  /* 「待機中」等のステータスがバッジ内で折り返し・はみ出ししないようにする */
+  white-space: nowrap;
+  flex: none;
+}
+
+.runBadge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
 }
 
 .runBadge.active {
-  border-color: #8fb4ff;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: rgba(37, 99, 235, 0.3);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+.runBadge.active::before {
+  background: var(--accent);
+  animation: badgePulse 1.4s ease-in-out infinite;
 }
 
 .runBadge.done {
-  border-color: #86c89b;
-  background: #eefaf2;
-  color: #1f7a3a;
+  border-color: rgba(31, 122, 58, 0.3);
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.runBadge.done::before {
+  background: var(--success);
 }
 
 .runBadge.review {
-  border-color: #e3b76b;
+  border-color: rgba(181, 71, 8, 0.28);
   background: #fff8e8;
   color: #9a6400;
+}
+
+.runBadge.review::before {
+  background: #d69412;
+}
+
+@keyframes badgePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .panel,
@@ -185,9 +419,10 @@ textarea:disabled {
 .logPanel,
 .reviewPanel,
 .previewPanel {
-  border: 1px solid #d9dde3;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 
 .panel {
@@ -201,7 +436,7 @@ textarea:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #2f3744;
+  color: var(--text-strong);
   font-size: 13px;
   font-weight: 760;
 }
@@ -214,24 +449,94 @@ textarea:disabled {
   margin-top: 10px;
 }
 
-input,
+/* W13-2: type=range を除外する。:not() 連結で詳細度(0,2,1)が上がり、後述の
+   input[type="range"](0,1,1)のモダン化スタイルを上書きして、シークスライダーの
+   つまみが38px高の枠付きボックスに崩れる回帰があったため */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 select {
   width: 100%;
   height: 38px;
   min-width: 0;
-  border: 1px solid #cfd6df;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #1f2328;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
   padding: 0 10px;
   outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-input:focus,
+/* フェーズW5-7: チェックボックスのモダン化(全画面共通)。テキスト入力向けの共通スタイル
+   (width:100%・height:38px)が当たって崩れていたため、type=checkbox を除外した上で
+   appearance:none のカスタム描画(角丸+アクセント塗り+チェックマークのスケールイン)に統一する */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  vertical-align: -2px;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.15s ease;
+}
+
+input[type="checkbox"]::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(13% 50%, 34% 66%, 81% 2%, 100% 18%, 39% 100%, 0 71%);
+  background: #ffffff;
+  transform: scale(0);
+  transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input[type="checkbox"]:hover:not(:disabled):not(:checked) {
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+}
+
+input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+input[type="checkbox"]:checked::before {
+  transform: scale(1);
+}
+
+input[type="checkbox"]:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+input:not([type="checkbox"]):hover:not(:disabled):not(:focus),
+select:hover:not(:disabled):not(:focus),
+textarea:hover:not(:disabled):not(:focus) {
+  border-color: var(--text-faint);
+}
+
+input:not([type="checkbox"]):focus,
 select:focus,
 textarea:focus {
-  border-color: #4c7dff;
-  box-shadow: 0 0 0 3px rgba(76, 125, 255, 0.12);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .iconButton {
@@ -240,14 +545,15 @@ textarea:focus {
   justify-content: center;
   width: 38px;
   height: 38px;
-  border: 1px solid #cfd6df;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #26313f;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-secondary);
 }
 
 .iconButton:hover:not(:disabled) {
-  background: #f3f6fa;
+  border-color: var(--text-faint);
+  background: var(--bg-hover);
 }
 
 .settingsGrid {
@@ -263,7 +569,7 @@ textarea:focus {
 .field label {
   display: block;
   margin-bottom: 6px;
-  color: #586174;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -287,7 +593,7 @@ textarea:focus {
 }
 
 .outputField > span {
-  color: #586174;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -302,10 +608,10 @@ textarea:focus {
 
 .outputPreviewPath {
   overflow: hidden;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #f8fafc;
-  color: #667085;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   padding: 8px 10px;
   font-size: 12px;
   text-overflow: ellipsis;
@@ -318,7 +624,7 @@ textarea:focus {
 
 .truthStartPanel p {
   margin: 0;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -328,13 +634,13 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 760;
 }
 
 .truthStartSummary em {
-  color: #667085;
+  color: var(--text-muted);
   font-style: normal;
   font-weight: 700;
 }
@@ -342,16 +648,16 @@ textarea:focus {
 .learningReportBox {
   display: grid;
   gap: 5px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fbfcfe;
-  color: #475467;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   padding: 8px 10px;
   font-size: 12px;
 }
 
 .learningReportBox strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
 }
 
@@ -370,10 +676,10 @@ textarea:focus {
 .fontStartChoices button,
 .exportModeChoices button {
   min-height: 42px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 760;
@@ -382,9 +688,9 @@ textarea:focus {
 
 .fontStartChoices button.active,
 .exportModeChoices button.active {
-  border-color: #245eda;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .fontProfilePicker {
@@ -396,7 +702,7 @@ textarea:focus {
 
 .fontProfilePicker label {
   min-width: 0;
-  color: #586174;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 760;
 }
@@ -409,7 +715,7 @@ textarea:focus {
 
 .fontProfilePicker span,
 .fontStartNote {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -436,28 +742,36 @@ textarea:focus {
   justify-content: center;
   gap: 8px;
   height: 42px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   font-weight: 760;
 }
 
 .primaryButton {
-  border: 1px solid #255fd8;
-  background: #245eda;
+  border: 1px solid var(--accent);
+  background: var(--accent);
   color: #ffffff;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.3);
 }
 
 .primaryButton:hover:not(:disabled) {
-  background: #1d51c0;
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.primaryButton:active:not(:disabled) {
+  box-shadow: none;
 }
 
 .secondaryButton {
-  border: 1px solid #cfd6df;
-  background: #ffffff;
-  color: #344054;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-card);
 }
 
 .secondaryButton:hover:not(:disabled) {
-  background: #f3f6fa;
+  border-color: var(--text-faint);
+  background: var(--bg-hover);
 }
 
 .compactPanel {
@@ -473,7 +787,7 @@ textarea:focus {
 }
 
 .metaLine span {
-  color: #667085;
+  color: var(--text-muted);
   font-weight: 760;
 }
 
@@ -482,7 +796,7 @@ textarea:focus {
   overflow: hidden;
   border: 0;
   background: transparent;
-  color: #245eda;
+  color: var(--accent);
   padding: 0;
   text-align: left;
   text-overflow: ellipsis;
@@ -516,17 +830,17 @@ textarea:focus {
 .outputs button {
   height: 34px;
   overflow: hidden;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #245eda;
+  color: var(--accent);
   padding: 0 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .outputs button:hover {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .outputs .wideOutputButton {
@@ -543,24 +857,84 @@ textarea:focus {
 }
 
 .stepsHeader strong {
-  color: #245eda;
+  color: var(--accent);
   font-size: 13px;
 }
 
-.progressTrack {
-  width: 100%;
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e8edf4;
-  margin: -2px 0 12px;
+/* 進行バー: 実行中ステップ名+%を上段に、下段はシマー入りのスリムなバー */
+.jobProgress {
+  display: grid;
+  gap: 7px;
+  margin: 2px 0 14px;
 }
 
-.progressFill {
+.jobProgressMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jobProgressLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobProgressPercent {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.jobProgressTrack {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-muted);
+}
+
+.jobProgressFill {
+  position: relative;
   height: 100%;
+  overflow: hidden;
   border-radius: inherit;
-  background: #245eda;
-  transition: width 0.2s ease;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  transition: width 0.4s ease;
+}
+
+.jobProgressFill.animated::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 80%
+  );
+  animation: progressShimmer 1.6s ease-in-out infinite;
+}
+
+.jobProgressFill.finished {
+  background: linear-gradient(90deg, #4ade80, #16a34a);
+}
+
+@keyframes progressShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .stepsList {
@@ -575,13 +949,17 @@ textarea:focus {
   gap: 8px;
   min-width: 0;
   height: 38px;
-  border: 1px solid #d9dde3;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #475467;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   padding: 0 10px;
   font-size: 13px;
   font-weight: 650;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 .stepItem span {
@@ -591,9 +969,9 @@ textarea:focus {
 }
 
 .stepItem.running {
-  border-color: #9bbcff;
-  background: #f0f6ff;
-  color: #205dcf;
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .stepItem.done {
@@ -625,7 +1003,7 @@ textarea:focus {
 }
 
 .stepIcon.pending {
-  color: #98a2b3;
+  color: var(--text-faint);
 }
 
 .reviewPanel {
@@ -646,7 +1024,7 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #d9dde3;
+  border-bottom: 1px solid var(--border);
   padding: 12px 14px;
 }
 
@@ -676,9 +1054,9 @@ textarea:focus {
 }
 
 .emptyFindings {
-  border: 1px dashed #cfd6df;
+  border: 1px dashed var(--border-strong);
   border-radius: 7px;
-  color: #667085;
+  color: var(--text-muted);
   padding: 14px;
   font-size: 13px;
   text-align: center;
@@ -687,9 +1065,9 @@ textarea:focus {
 .findingItem {
   display: block;
   width: 100%;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 10px;
   color: inherit;
   text-align: left;
@@ -707,15 +1085,15 @@ textarea:focus {
 }
 
 .findingItem.active {
-  border-color: #4c7dff;
-  box-shadow: 0 0 0 3px rgba(76, 125, 255, 0.12);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .findingMeta {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
@@ -727,7 +1105,7 @@ textarea:focus {
 .findingMeta code {
   min-width: 0;
   overflow: hidden;
-  color: #667085;
+  color: var(--text-muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 11px;
   font-weight: 500;
@@ -737,10 +1115,10 @@ textarea:focus {
 
 .findingMeta em {
   flex: 0 0 auto;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #667085;
+  color: var(--text-muted);
   padding: 2px 7px;
   font-size: 10px;
   font-style: normal;
@@ -749,7 +1127,7 @@ textarea:focus {
 
 .findingText {
   margin-top: 8px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -806,10 +1184,10 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 760;
 }
@@ -825,9 +1203,9 @@ textarea:focus {
 }
 
 .findingActions button.ignored {
-  border-color: #cfd6df;
-  background: #f3f6fa;
-  color: #667085;
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
 .telopEditor {
@@ -835,10 +1213,10 @@ textarea:focus {
   min-width: 0;
   min-height: 180px;
   resize: vertical;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
-  color: #1f2328;
+  color: var(--text);
   padding: 12px;
   outline: none;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -849,15 +1227,15 @@ textarea:focus {
 .localAiReviewBox {
   display: grid;
   gap: 8px;
-  border-top: 1px solid #d9dde3;
-  background: #fbfcfe;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
   padding: 12px;
 }
 
 .groundTruthBox {
   display: grid;
   gap: 8px;
-  border-top: 1px solid #d9dde3;
+  border-top: 1px solid var(--border);
   background: #f8fbff;
   padding: 12px;
 }
@@ -873,7 +1251,7 @@ textarea:focus {
 .localAiReviewHeader strong,
 .groundTruthHeader strong {
   flex: 0 0 auto;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
@@ -881,7 +1259,7 @@ textarea:focus {
 .localAiReviewBox p,
 .groundTruthBox p {
   margin: 0;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -907,10 +1285,10 @@ textarea:focus {
   justify-content: center;
   gap: 6px;
   min-height: 34px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 6px 8px;
   font-size: 12px;
   font-weight: 760;
@@ -918,18 +1296,18 @@ textarea:focus {
 }
 
 .groundTruthActions .primarySmall {
-  border-color: #245eda;
-  background: #245eda;
+  border-color: var(--accent);
+  background: var(--accent);
   color: #ffffff;
 }
 
 .localAiReviewActions button:hover:not(:disabled),
 .groundTruthActions button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .groundTruthActions .primarySmall:hover:not(:disabled) {
-  background: #1d51c0;
+  background: var(--accent-hover);
 }
 
 .groundTruthStats {
@@ -937,7 +1315,7 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -949,7 +1327,7 @@ textarea:focus {
 }
 
 .groundTruthStats em {
-  color: #344054;
+  color: var(--text-strong);
   font-style: normal;
   font-weight: 760;
 }
@@ -957,10 +1335,10 @@ textarea:focus {
 .localAiReviewStatus {
   min-height: 28px;
   overflow: hidden;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   padding: 7px 9px;
   font-size: 12px;
   line-height: 1.35;
@@ -982,7 +1360,7 @@ textarea:focus {
 .ruleLabSummary div {
   display: grid;
   gap: 3px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #ffffff;
   padding: 8px;
@@ -990,27 +1368,27 @@ textarea:focus {
 
 .ruleLabSummary span,
 .ruleLabLayerTitle span {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
 }
 
 .ruleLabSummary strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 17px;
 }
 
 .ruleLabLayer {
   display: grid;
   gap: 8px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #ffffff;
   padding: 10px;
 }
 
 .ruleLabLayer.compact {
-  background: #f8fafc;
+  background: var(--bg-subtle);
 }
 
 .ruleLabLayerTitle {
@@ -1021,7 +1399,7 @@ textarea:focus {
 }
 
 .ruleLabLayerTitle strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 13px;
 }
 
@@ -1033,19 +1411,19 @@ textarea:focus {
 
 .ruleLabFilters button,
 .ruleTypeGrid button {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   padding: 5px 9px;
   font-size: 11px;
   font-weight: 760;
 }
 
 .ruleLabFilters button.active {
-  border-color: #4c7dff;
-  background: #eef4ff;
-  color: #2451cc;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .ruleDiffList {
@@ -1058,9 +1436,9 @@ textarea:focus {
 .ruleDiffItem {
   display: grid;
   gap: 7px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 8px;
   text-align: left;
 }
@@ -1080,13 +1458,13 @@ textarea:focus {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 760;
 }
 
 .ruleDiffMeta code {
-  color: #344054;
+  color: var(--text-strong);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
@@ -1099,7 +1477,7 @@ textarea:focus {
 
 .ruleDiffMeta em {
   margin-left: auto;
-  color: #98a2b3;
+  color: var(--text-faint);
   font-style: normal;
 }
 
@@ -1116,7 +1494,7 @@ textarea:focus {
   border-radius: 6px;
   background: #ffffff;
   padding: 7px;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -1129,7 +1507,7 @@ textarea:focus {
 .ruleDiffTexts b {
   display: block;
   margin-bottom: 4px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 10px;
 }
 
@@ -1147,7 +1525,7 @@ textarea:focus {
 }
 
 .ruleTypeGrid strong {
-  color: #344054;
+  color: var(--text-strong);
 }
 
 .ruleProposalList {
@@ -1160,19 +1538,19 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr) 210px;
   gap: 10px;
   align-items: center;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 9px;
 }
 
 .ruleProposalItem span {
   display: inline-flex;
   width: fit-content;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #667085;
+  color: var(--text-muted);
   padding: 2px 7px;
   font-size: 10px;
   font-weight: 760;
@@ -1181,7 +1559,7 @@ textarea:focus {
 .ruleProposalItem strong {
   display: block;
   margin-top: 6px;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 13px;
 }
 
@@ -1190,7 +1568,7 @@ textarea:focus {
 }
 
 .ruleProposalItem em {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-style: normal;
   font-weight: 700;
@@ -1206,10 +1584,10 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   min-height: 32px;
   padding: 6px 8px;
   font-size: 12px;
@@ -1225,7 +1603,7 @@ textarea:focus {
 .ruleEditorBox {
   display: grid;
   gap: 8px;
-  border-top: 1px solid #d9dde3;
+  border-top: 1px solid var(--border);
   background: #ffffff;
   padding: 12px;
 }
@@ -1238,14 +1616,14 @@ textarea:focus {
 }
 
 .ruleEditorHeader strong {
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
 
 .ruleEditorBox p {
   margin: 0;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -1267,10 +1645,10 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 0 9px;
   font-size: 12px;
   font-weight: 760;
@@ -1292,28 +1670,28 @@ textarea:focus {
   grid-template-columns: 58px minmax(0, 1fr) 18px minmax(0, 1fr) 56px;
   gap: 7px;
   align-items: center;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 7px;
   font-size: 12px;
 }
 
 .ruleItem span {
-  color: #667085;
+  color: var(--text-muted);
   font-weight: 760;
 }
 
 .ruleItem strong {
   overflow: hidden;
-  color: #344054;
+  color: var(--text-strong);
   font-weight: 760;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ruleItem em {
-  color: #98a2b3;
+  color: var(--text-faint);
   font-style: normal;
   text-align: center;
 }
@@ -1325,7 +1703,7 @@ textarea:focus {
 .fontDesignBox {
   display: grid;
   gap: 10px;
-  border-top: 1px solid #d9dde3;
+  border-top: 1px solid var(--border);
   padding: 12px;
 }
 
@@ -1339,7 +1717,7 @@ textarea:focus {
 .fontDesignHeader strong {
   min-width: 0;
   overflow: hidden;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 650;
   text-align: right;
@@ -1352,15 +1730,15 @@ textarea:focus {
   grid-template-columns: 72px minmax(0, 1fr) 68px;
   gap: 8px;
   align-items: center;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 8px 10px;
 }
 
 .savedFontSummary span,
 .savedFontSummary em {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-style: normal;
   font-weight: 760;
@@ -1369,7 +1747,7 @@ textarea:focus {
 .savedFontSummary strong {
   min-width: 0;
   overflow: hidden;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1388,7 +1766,7 @@ textarea:focus {
 .fontBuilderGrid label,
 .fontSceneControls label {
   min-width: 0;
-  color: #586174;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 760;
 }
@@ -1422,7 +1800,7 @@ textarea:focus {
   display: grid;
   gap: 8px;
   min-width: 0;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #ffffff;
   padding: 10px;
@@ -1442,14 +1820,14 @@ textarea:focus {
 }
 
 .fontSceneHead strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 800;
 }
 
 .fontSceneHead span,
 .fontSceneHead code {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -1483,7 +1861,7 @@ textarea:focus {
 }
 
 .fontSizeMeter span {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 760;
 }
@@ -1499,7 +1877,7 @@ textarea:focus {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #245eda;
+  background: var(--accent);
 }
 
 .fontSceneControls {
@@ -1538,10 +1916,10 @@ textarea:focus {
 .fontSaveRow textarea {
   min-height: 74px;
   resize: vertical;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
-  background: #fbfcfe;
-  color: #344054;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
   padding: 9px 10px;
   font-size: 12px;
   line-height: 1.45;
@@ -1552,21 +1930,21 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #255fd8;
+  border: 1px solid var(--accent);
   border-radius: 7px;
-  background: #245eda;
+  background: var(--accent);
   color: #ffffff;
   font-size: 12px;
   font-weight: 760;
 }
 
 .fontDirectiveBox {
-  border-top: 1px solid #d9dde3;
+  border-top: 1px solid var(--border);
   padding: 10px 12px;
 }
 
 .telopStyleBox {
-  border-top: 1px solid #d9dde3;
+  border-top: 1px solid var(--border);
   padding: 10px 12px;
 }
 
@@ -1585,17 +1963,17 @@ textarea:focus {
 
 .designSectionHeader p {
   margin: 5px 0 0;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .applyBadge {
   flex: 0 0 auto;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: #f8fafc;
-  color: #667085;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   padding: 4px 9px;
   font-size: 11px;
   font-weight: 760;
@@ -1615,10 +1993,10 @@ textarea:focus {
 
 .designWorkflow span {
   min-width: 0;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fbfcfe;
-  color: #344054;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
   padding: 7px 9px;
   font-size: 12px;
   font-weight: 760;
@@ -1632,10 +2010,10 @@ textarea:focus {
 }
 
 .specChips span {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   padding: 5px 8px;
   font-size: 11px;
   font-weight: 760;
@@ -1646,13 +2024,13 @@ textarea:focus {
   grid-template-columns: 148px minmax(0, 1fr);
   gap: 8px;
   align-items: baseline;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .controlLead strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 800;
 }
@@ -1664,10 +2042,10 @@ textarea:focus {
 .fontStatusLine,
 .assignmentSummary,
 .applyImpact {
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #fbfcfe;
-  color: #667085;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.45;
@@ -1681,14 +2059,14 @@ textarea:focus {
 }
 
 .fontStatusLine span {
-  color: #475467;
+  color: var(--text-secondary);
   font-weight: 760;
 }
 
 .fontStatusLine strong {
   min-width: 0;
   overflow: hidden;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 760;
   text-overflow: ellipsis;
@@ -1717,7 +2095,7 @@ textarea:focus {
 }
 
 .previewDecisionHeader strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 800;
 }
@@ -1725,7 +2103,7 @@ textarea:focus {
 .previewDecisionHeader span {
   min-width: 0;
   overflow: hidden;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 650;
   text-overflow: ellipsis;
@@ -1734,11 +2112,11 @@ textarea:focus {
 
 .previewDecisionHeader > span {
   flex: 0 0 auto;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
   padding: 4px 8px;
-  color: #475467;
+  color: var(--text-secondary);
   font-weight: 760;
 }
 
@@ -1753,7 +2131,7 @@ textarea:focus {
 .fontDirectiveHeader strong {
   min-width: 0;
   overflow: hidden;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 650;
   text-align: right;
@@ -1769,18 +2147,18 @@ textarea:focus {
 
 .fontModeTabs button {
   height: 32px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
 
 .fontModeTabs button.active {
-  border-color: #245eda;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .fontParamGrid,
@@ -1798,7 +2176,7 @@ textarea:focus {
 .fontSelectGrid label {
   display: block;
   min-width: 0;
-  color: #586174;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 760;
 }
@@ -1816,10 +2194,10 @@ textarea:focus {
 .fontParamGrid button {
   align-self: end;
   height: 32px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 760;
 }
@@ -1829,7 +2207,7 @@ textarea:focus {
   min-width: 0;
   margin: 0 0 6px;
   overflow: hidden;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1840,10 +2218,10 @@ textarea:focus {
   min-width: 0;
   height: 72px;
   resize: none;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
-  color: #1f2328;
+  color: var(--text);
   padding: 9px 10px;
   outline: none;
   font-size: 13px;
@@ -1887,10 +2265,10 @@ textarea:focus {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 7px;
-  background: #fbfcfe;
-  color: #344054;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
   padding: 0 10px;
   font-size: 12px;
   font-weight: 760;
@@ -1907,10 +2285,10 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 760;
   min-width: 0;
@@ -1923,7 +2301,7 @@ textarea:focus {
 .telopAssignmentRow button:hover:not(:disabled),
 .telopStylePreviewRow button:hover:not(:disabled),
 .telopParamGrid button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .fontPreviewBox button svg {
@@ -1948,10 +2326,10 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 760;
   min-width: 0;
@@ -1970,7 +2348,7 @@ textarea:focus {
 .telopAssignmentRow label {
   display: block;
   min-width: 0;
-  color: #586174;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 760;
 }
@@ -2033,7 +2411,7 @@ textarea:focus {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  border-top: 1px solid #d9dde3;
+  border-top: 1px solid var(--border);
   padding: 10px 12px;
 }
 
@@ -2043,14 +2421,14 @@ textarea:focus {
 }
 
 .reviewActions .primaryButton {
-  border-color: #255fd8;
-  background: #245eda;
+  border-color: var(--accent);
+  background: var(--accent);
   color: #ffffff;
 }
 
 .telopConfirmStatus {
   margin-right: auto;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 760;
 }
@@ -2089,12 +2467,12 @@ textarea:focus {
 
 .previewHeader {
   justify-content: space-between;
-  border-bottom: 1px solid #d9dde3;
+  border-bottom: 1px solid var(--border);
   padding: 12px 14px;
 }
 
 .previewHeader strong {
-  color: #667085;
+  color: var(--text-muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   font-weight: 600;
@@ -2184,27 +2562,27 @@ textarea:focus {
 }
 
 .pageStrip button {
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
 
 .pageStrip button.active {
-  border-color: #245eda;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .boundaryEditor {
   display: grid;
   grid-column: 1 / -1;
   gap: 8px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 10px;
 }
 
@@ -2212,13 +2590,13 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
 
 .boundaryHeader strong {
-  color: #667085;
+  color: var(--text-muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 11px;
   font-weight: 650;
@@ -2232,10 +2610,10 @@ textarea:focus {
 
 .boundaryActions button {
   min-height: 34px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 6px 8px;
   font-size: 12px;
   font-weight: 760;
@@ -2243,7 +2621,7 @@ textarea:focus {
 }
 
 .boundaryActions button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .pageTelopEditor {
@@ -2253,7 +2631,7 @@ textarea:focus {
 }
 
 .pageTelopEditor span {
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 760;
 }
@@ -2261,7 +2639,7 @@ textarea:focus {
 .pageTelopEditor textarea {
   min-height: 76px;
   resize: vertical;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: #ffffff;
   color: #1f2937;
@@ -2271,9 +2649,9 @@ textarea:focus {
 }
 
 .pageTelopEditor textarea:focus {
-  border-color: #4c7dff;
+  border-color: var(--accent);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(76, 125, 255, 0.12);
+  box-shadow: var(--focus-ring);
 }
 
 .logPanel {
@@ -2293,15 +2671,15 @@ textarea:focus {
 
 .logHeader {
   justify-content: space-between;
-  border-bottom: 1px solid #d9dde3;
+  border-bottom: 1px solid var(--border);
   padding: 12px 14px;
 }
 
 .logHeader button {
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 5px 10px;
   font-size: 12px;
   font-weight: 700;
@@ -2321,8 +2699,8 @@ textarea:focus {
 }
 
 .transcriptWorkspace {
-  border: 1px solid #d9dde3;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: #ffffff;
   padding: 12px;
 }
@@ -2343,25 +2721,80 @@ textarea:focus {
 
 .transcriptWorkspaceActions button {
   height: 30px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 0 10px;
   font-size: 12px;
   font-weight: 700;
 }
 
 .transcriptWorkspaceActions button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
+/* フェーズW23(改善2-3): 検品ツールバー内のコンパクト進捗バー(適用・書き出し)。
+   editing では左ペインを隠すため、書き出しの停止導線もここに置く(1行高に収める) */
+.inspectJobProgress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspectJobProgressLabel {
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.inspectJobProgressTrack {
+  position: relative;
+  width: 120px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-muted);
+}
+
+.inspectJobProgressFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  transition: width 0.4s ease;
+}
+
+.inspectJobProgressFill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  animation: progressShimmer 1.6s ease-in-out infinite;
+}
+
+.transcriptWorkspaceActions .inspectJobStopButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* フェーズW6(モダン化): 左の3pxボーダーを廃止し、淡いアクセント背景の角丸カードにする。 */
 .transcriptGuide {
   margin-bottom: 10px;
   padding: 8px 12px;
-  border-left: 3px solid #458bc3;
-  background: #f4f8fb;
-  color: #33414f;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--text-strong);
   font-size: 12.5px;
   line-height: 1.7;
 }
@@ -2370,13 +2803,13 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #458bc3 !important;
-  border-color: #9dc2e2 !important;
+  color: var(--accent) !important;
+  border-color: var(--accent-soft) !important;
   font-weight: 700;
 }
 
 .followAlongStartButton:hover:not(:disabled) {
-  background: #eef5ff !important;
+  background: var(--accent-bg) !important;
 }
 
 .followAlongBar {
@@ -2386,9 +2819,9 @@ textarea:focus {
   gap: 12px;
   margin-bottom: 10px;
   padding: 8px 12px;
-  border: 1px solid #9dc2e2;
+  border: 1px solid var(--accent-soft);
   border-radius: 7px;
-  background: #eef5ff;
+  background: var(--accent-bg);
 }
 
 .followAlongBadge {
@@ -2396,7 +2829,7 @@ textarea:focus {
   align-items: center;
   gap: 5px;
   border-radius: 999px;
-  background: #458bc3;
+  background: var(--accent);
   color: #ffffff;
   padding: 3px 10px;
   font-size: 11.5px;
@@ -2409,7 +2842,7 @@ textarea:focus {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  color: #33414f;
+  color: var(--text-strong);
   font-size: 11.5px;
 }
 
@@ -2421,10 +2854,10 @@ textarea:focus {
 }
 
 .followAlongKeyGuide kbd {
-  border: 1px solid #9dc2e2;
+  border: 1px solid var(--accent-soft);
   border-radius: 4px;
   background: #ffffff;
-  color: #2e6a9e;
+  color: var(--accent-strong);
   padding: 1px 5px;
   font-family: inherit;
   font-size: 10.5px;
@@ -2440,24 +2873,24 @@ textarea:focus {
 .followAlongSpeedControl button {
   height: 24px;
   min-width: 34px;
-  border: 1px solid #9dc2e2;
+  border: 1px solid var(--accent-soft);
   border-radius: 5px;
   background: #ffffff;
-  color: #2e6a9e;
+  color: var(--accent-strong);
   font-size: 11px;
   font-weight: 700;
 }
 
 .followAlongSpeedControl button.active {
-  background: #458bc3;
-  border-color: #458bc3;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #ffffff;
 }
 
 .followAlongProgress {
   font-size: 11.5px;
   font-weight: 700;
-  color: #2e6a9e;
+  color: var(--accent-strong);
   white-space: nowrap;
 }
 
@@ -2466,10 +2899,10 @@ textarea:focus {
   align-items: center;
   gap: 4px;
   height: 26px;
-  border: 1px solid #9dc2e2;
+  border: 1px solid var(--accent-soft);
   border-radius: 6px;
   background: #ffffff;
-  color: #33414f;
+  color: var(--text-strong);
   padding: 0 10px;
   font-size: 11.5px;
   font-weight: 700;
@@ -2483,16 +2916,16 @@ textarea:focus {
 
 .transcriptGuideStrike {
   text-decoration: line-through;
-  color: #98a2b3;
+  color: var(--text-faint);
 }
 
 .cutCardsPanel {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 8px 10px;
 }
 
@@ -2500,13 +2933,13 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 12.5px;
   font-weight: 700;
 }
 
 .cutCardsPanelStatus {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 500;
 }
@@ -2526,7 +2959,7 @@ textarea:focus {
 
 .cutCardsEmpty {
   padding: 8px;
-  color: #98a2b3;
+  color: var(--text-faint);
   font-size: 12px;
 }
 
@@ -2534,7 +2967,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #ffffff;
   padding: 6px 8px;
@@ -2553,12 +2986,12 @@ textarea:focus {
   align-items: baseline;
   gap: 8px;
   font-size: 11px;
-  color: #667085;
+  color: var(--text-muted);
 }
 
 .cutCardIndex {
   font-weight: 700;
-  color: #458bc3;
+  color: var(--accent);
 }
 
 .cutCardRange {
@@ -2566,7 +2999,7 @@ textarea:focus {
 }
 
 .cutCardDuration {
-  color: #98a2b3;
+  color: var(--text-faint);
 }
 
 .cutCardText {
@@ -2617,9 +3050,9 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 10px;
   min-height: 0;
 }
@@ -2633,23 +3066,23 @@ textarea:focus {
 
 .suspicionQueueHeader h3 {
   margin: 0;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 14px;
 }
 
 .suspicionQueueProgress {
   font-size: 11px;
-  color: #667085;
+  color: var(--text-muted);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .suspicionEmpty {
   padding: 10px 8px;
-  border: 1px dashed #d9dde3;
+  border: 1px dashed var(--border);
   border-radius: 7px;
   background: #ffffff;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.6;
 }
@@ -2666,8 +3099,8 @@ textarea:focus {
 .suspicionItem {
   display: grid;
   gap: 4px;
-  border: 1px solid #e4e7ec;
-  border-left: 3px solid #cfd6df;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
   padding: 8px;
@@ -2683,12 +3116,12 @@ textarea:focus {
 }
 
 .suspicionItem.low {
-  border-left-color: #98a2b3;
+  border-left-color: var(--text-faint);
 }
 
 .suspicionItem.active {
-  border-color: #8fb4ff;
-  background: #eef5ff;
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
 }
 
 .suspicionItem.resolved {
@@ -2699,14 +3132,14 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
 }
 
 .suspicionItemMeta time {
   margin-left: auto;
-  color: #98a2b3;
+  color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2717,7 +3150,7 @@ textarea:focus {
 }
 
 .suspicionItemDetail {
-  color: #98a2b3;
+  color: var(--text-faint);
   font-size: 11px;
 }
 
@@ -2732,7 +3165,7 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
@@ -2741,17 +3174,17 @@ textarea:focus {
   align-items: center;
   gap: 4px;
   height: 24px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 0 8px;
   font-size: 11px;
   font-weight: 700;
 }
 
 .suspicionItemActions button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .suspicionItemActions button:disabled {
@@ -2762,22 +3195,22 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 10px;
 }
 
 .aiSuggestionPanel h3 {
   margin: 0;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 14px;
 }
 
 .aiStatItem {
   display: grid;
   gap: 4px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #ffffff;
   padding: 8px;
@@ -2787,12 +3220,12 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .aiStatItem strong {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 13px;
 }
 
@@ -2804,25 +3237,25 @@ textarea:focus {
 .aiActions button,
 .transcriptApplyButton {
   min-height: 34px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 6px 8px;
   font-size: 12px;
   font-weight: 700;
 }
 
 .aiActions button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .transcriptEditor {
   min-height: 0;
   overflow: auto;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 10px;
 }
 
@@ -2830,7 +3263,7 @@ textarea:focus {
   display: grid;
   gap: 8px;
   margin-bottom: 10px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #ffffff;
   padding: 8px;
@@ -2841,7 +3274,7 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
 }
@@ -2864,23 +3297,23 @@ textarea:focus {
 }
 
 .wordChip:hover {
-  border-color: #cfd6df;
-  background: #f8fafc;
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
 }
 
 .wordChip.cut {
-  color: #98a2b3;
+  color: var(--text-faint);
   text-decoration: line-through;
 }
 
 .wordChip.active {
-  border-color: #8fb4ff;
-  background: #eef5ff;
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
 }
 
 .wordChip.corrected {
   text-decoration: underline;
-  text-decoration-color: #458bc3;
+  text-decoration-color: var(--accent);
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
 }
@@ -2902,7 +3335,7 @@ textarea:focus {
 
 .wordEditInput {
   min-width: 32px;
-  border: 1px solid #458bc3;
+  border: 1px solid var(--accent);
   border-radius: 4px;
   background: #ffffff;
   color: #1f2937;
@@ -2916,10 +3349,10 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #667085;
+  color: var(--text-muted);
   padding: 2px 8px;
 }
 
@@ -2937,38 +3370,77 @@ textarea:focus {
 
 .transcriptPreviewPanel {
   position: relative;
+  min-width: 0;
   min-height: 0;
   align-self: start;
   overflow: hidden;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #111827;
 }
 
+/* フェーズW8: キャンバス基準のプレビューステージ。高さはaspect-ratio(インラインstyle)と
+   max-heightで決まり、キャンバス矩形(containedBox)はJS側で中央寄せされる。
+   横型の上限は画面の低い環境でも下のトランスポートバー・キー操作ガイドが
+   見切れないようビューポート連動でクランプする。 */
+.transcriptPreviewStage {
+  position: relative;
+  width: 100%;
+  max-height: min(420px, calc(100vh - 320px));
+  background: #0f172a;
+  overflow: hidden;
+}
+
+/* キャンバス領域ラッパー: ステージ+全オーバーレイ(テロップ・画像・OP・フレーミング)の
+   絶対配置の基準。縦型はfit-contentで中央寄せし、ステージ外の余白を出さない
+   (オーバーレイもラッパーごと動くため、containedBox基準の配置は崩れない)。 */
+.previewCanvasArea {
+  position: relative;
+}
+
+.previewCanvasAreaVertical {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* 縦型キャンバス: 旧max-height:60vh固定+幅100%は「下が見切れる」「左右に大きな黒帯」の
+   両方を生んでいたため、高さをビューポート連動(下のバー・ガイドぶんを差し引く)で確定し、
+   幅は aspect-ratio(インラインstyle)から導出する=キャンバスにフィットした縦長ステージになる。
+   ステージはラッパー先頭に置かれたままなので、containedBox基準のオーバーレイ配置は変わらない。 */
+.transcriptPreviewStageVertical {
+  width: auto;
+  /* 上限600px=9:16で幅約338px。プレビュー列(最大340px)を幅超過しない高さに抑える */
+  height: clamp(280px, calc(100vh - 380px), min(72vh, 600px));
+  max-height: none;
+  max-width: 100%;
+}
+
 .transcriptPreviewVideo {
   display: block;
-  width: 100%;
-  max-height: 420px;
   background: #0f172a;
-  object-fit: contain;
+  /* W8: 書き出し(Remotionのvideo_fit: cover)と同じフィット。要素ボックス=キャンバス矩形 */
+  object-fit: cover;
 }
 
 .commandPaletteBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 70;
   display: grid;
-  place-items: start center;
-  background: rgba(17, 24, 39, 0.36);
-  padding-top: 12vh;
+  /* ダイアログ全般をこのbackdropで開くため中央寄せ(旧: コマンドパレット用に上寄せ) */
+  place-items: center;
+  background: rgba(15, 20, 28, 0.5);
+  backdrop-filter: blur(3px);
+  padding: 24px;
 }
 
 .commandPalette {
   width: min(720px, 88vw);
-  border: 1px solid #d9dde3;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: #ffffff;
-  box-shadow: 0 18px 48px rgba(16, 24, 40, 0.24);
+  box-shadow: var(--shadow-modal);
   padding: 10px;
 }
 
@@ -2984,10 +3456,10 @@ textarea:focus {
 
 .commandList button {
   height: 36px;
-  border: 1px solid #dbe2ea;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   text-align: left;
   padding: 0 10px;
   font-size: 13px;
@@ -2995,11 +3467,11 @@ textarea:focus {
 }
 
 .commandList button:hover {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .commandEmpty {
-  color: #98a2b3;
+  color: var(--text-faint);
   font-size: 12px;
   text-align: center;
   padding: 8px 0;
@@ -3019,7 +3491,7 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: #ffffff;
   padding: 10px 12px;
@@ -3032,7 +3504,7 @@ textarea:focus {
 }
 
 .sceneThemeBarLabel {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
   margin-right: 2px;
@@ -3043,15 +3515,15 @@ textarea:focus {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  border: 2px solid #e4e7ec;
+  border: 2px solid var(--border);
   border-radius: 8px;
   background: #1f2937;
   padding: 6px 14px;
 }
 
 .sceneThemeCard.active {
-  border-color: #458bc3;
-  box-shadow: 0 0 0 3px rgba(69, 139, 195, 0.18);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .sceneThemeCardSample {
@@ -3063,7 +3535,7 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  color: #d0d5dd;
+  color: var(--border-strong);
   font-size: 11px;
   font-weight: 700;
 }
@@ -3079,7 +3551,7 @@ textarea:focus {
 }
 
 .sceneThemeBarProgress {
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
@@ -3091,18 +3563,18 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 2px solid #e4e7ec;
+  border: 2px solid var(--border);
   border-radius: 8px;
   background: #1f2937;
   padding: 6px 12px 6px 14px;
 }
 
 .sceneThemeOpenButton:hover {
-  border-color: #458bc3;
+  border-color: var(--accent);
 }
 
 .sceneThemeOpenButtonHint {
-  color: #98a2b3;
+  color: var(--text-faint);
   font-size: 11px;
   font-weight: 600;
 }
@@ -3110,11 +3582,12 @@ textarea:focus {
 .themeGalleryBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 70;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 20, 28, 0.55);
+  background: rgba(15, 20, 28, 0.5);
+  backdrop-filter: blur(3px);
   padding: 24px;
 }
 
@@ -3124,9 +3597,9 @@ textarea:focus {
   gap: 12px;
   width: min(880px, 100%);
   max-height: min(720px, 92vh);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: #ffffff;
-  box-shadow: 0 20px 60px rgba(15, 20, 28, 0.35);
+  box-shadow: var(--shadow-modal);
   padding: 18px 20px 20px;
 }
 
@@ -3139,7 +3612,7 @@ textarea:focus {
 .themeGalleryTitle {
   font-size: 15px;
   font-weight: 800;
-  color: #1f2328;
+  color: var(--text);
 }
 
 .themeGalleryCloseButton {
@@ -3149,36 +3622,36 @@ textarea:focus {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #667085;
+  color: var(--text-muted);
   padding: 4px;
 }
 
 .themeGalleryCloseButton:hover {
-  background: #f2f4f7;
-  color: #1f2328;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .themeGalleryTabs {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  border-bottom: 1px solid #e4e7ec;
+  border-bottom: 1px solid var(--border);
   padding-bottom: 10px;
 }
 
 .themeGalleryTab {
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
   padding: 5px 14px;
 }
 
 .themeGalleryTab.active {
-  border-color: #458bc3;
-  background: #458bc3;
+  border-color: var(--accent);
+  background: var(--accent);
   color: #ffffff;
 }
 
@@ -3195,15 +3668,15 @@ textarea:focus {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  border: 2px solid #e4e7ec;
+  border: 2px solid var(--border);
   border-radius: 10px;
   background: #1f2937;
   padding: 12px 8px;
 }
 
 .themeGalleryCard.active {
-  border-color: #458bc3;
-  box-shadow: 0 0 0 3px rgba(69, 139, 195, 0.18);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 .themeGalleryCardSample {
@@ -3215,7 +3688,7 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  color: #d0d5dd;
+  color: var(--border-strong);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
@@ -3257,7 +3730,7 @@ textarea:focus {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.35);
-  color: #d0d5dd;
+  color: var(--border-strong);
 }
 
 .themeGalleryCardDelete:hover {
@@ -3300,7 +3773,7 @@ textarea:focus {
   margin: 0 0 4px;
   font-size: 13px;
   font-weight: 700;
-  color: #205dcf;
+  color: var(--accent-strong);
 }
 
 .sceneAiUsageSummary {
@@ -3308,7 +3781,33 @@ textarea:focus {
   margin: 0 0 6px;
   font-size: 11px;
   font-weight: 400;
-  color: #667085;
+  color: var(--text-muted);
+}
+
+/* W14-2: AI校正コスト表示付近の「学習済み修正: N件」(クリックで一覧・削除モーダル) */
+.sceneLearnedCorrectionsButton {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sceneLearnedCorrectionsButton:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-strong);
+}
+
+/* W14-2: 学習済み修正モーダルの頻度カウント */
+.correctionHistoryCount {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .sceneInspectionCopyButton {
@@ -3317,18 +3816,18 @@ textarea:focus {
   gap: 4px;
   margin-left: auto;
   padding: 4px 10px;
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
 }
 
 .sceneInspectionCopyButton:hover:not(:disabled) {
-  border-color: #98a2b3;
-  color: #344054;
-  background: #f9fafb;
+  border-color: var(--text-faint);
+  color: var(--text-strong);
+  background: var(--bg-subtle);
 }
 
 .sceneInspectionCopyButton:disabled {
@@ -3342,34 +3841,46 @@ textarea:focus {
   z-index: 12000;
   transform: translateX(-50%);
   padding: 10px 16px;
-  border-radius: 8px;
-  background: rgba(31, 35, 40, 0.92);
+  border-radius: 999px;
+  background: rgba(28, 33, 40, 0.92);
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
   pointer-events: none;
-  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.18);
+  box-shadow: var(--shadow-pop);
+  animation: toastRise 0.22s ease;
+}
+
+@keyframes toastRise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .sceneTabs button {
   height: 32px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: #ffffff;
-  color: #475467;
+  color: var(--text-secondary);
   padding: 0 14px;
   font-size: 13px;
   font-weight: 700;
 }
 
 .sceneTabs button:hover:not(:disabled) {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .sceneTabs button.active {
-  border-color: #458bc3;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 /* 改善5-7(一括置換ポップアップ): CommandPaletteのbackdropを共有し、モーダル本体だけ独自スタイルにする */
@@ -3377,10 +3888,10 @@ textarea:focus {
   width: min(440px, 88vw);
   display: grid;
   gap: 12px;
-  border: 1px solid #d9dde3;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   background: #ffffff;
-  box-shadow: 0 18px 48px rgba(16, 24, 40, 0.24);
+  box-shadow: var(--shadow-modal);
   padding: 18px;
 }
 
@@ -3394,9 +3905,14 @@ textarea:focus {
 .telopReplaceModalOption {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
-  color: #344054;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.telopReplaceModalOption input[type="checkbox"] {
+  margin-top: 2px;
 }
 
 .telopReplaceModalActions {
@@ -3407,10 +3923,10 @@ textarea:focus {
 
 .telopReplaceModalActions button {
   height: 34px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 7px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   padding: 0 14px;
   font-size: 13px;
   font-weight: 700;
@@ -3425,33 +3941,46 @@ textarea:focus {
 .telopReplaceModalSubtitle {
   margin: 0;
   font-size: 12px;
-  color: #667085;
+  color: var(--text-muted);
 }
 
 .telopReplaceOccurrenceList {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px;
   display: grid;
-  gap: 8px;
+  gap: 2px;
   max-height: 280px;
   overflow-y: auto;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
-  background: #f9fafb;
+  background: var(--bg-subtle);
 }
 
 .telopReplaceOccurrenceItem {
   margin: 0;
 }
 
+/* フェーズW5-7: チェックボックスのモダン化にあわせて行全体をホバー可能なカード風に整える */
 .telopReplaceOccurrenceLabel {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
   font-size: 13px;
-  color: #344054;
+  color: var(--text-strong);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.telopReplaceOccurrenceLabel:hover {
+  background: var(--accent-bg);
+}
+
+.telopReplaceOccurrenceLabel input[type="checkbox"] {
+  margin-top: 2px;
 }
 
 .telopReplaceOccurrenceText {
@@ -3462,7 +3991,7 @@ textarea:focus {
 .telopReplaceOccurrenceScene {
   font-size: 11px;
   font-weight: 700;
-  color: #458bc3;
+  color: var(--accent);
 }
 
 .telopReplaceOccurrenceContext {
@@ -3480,7 +4009,7 @@ textarea:focus {
 .telopReplaceModalNote {
   margin: 0;
   font-size: 12px;
-  color: #667085;
+  color: var(--text-muted);
   line-height: 1.5;
 }
 
@@ -3488,7 +4017,7 @@ textarea:focus {
   margin-left: 6px;
   border: none;
   background: none;
-  color: #458bc3;
+  color: var(--accent);
   font-size: 12px;
   font-weight: 700;
   padding: 0;
@@ -3500,25 +4029,53 @@ textarea:focus {
   width: min(480px, 90vw);
   display: grid;
   gap: 12px;
-  border: 1px solid #d9dde3;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   background: #ffffff;
-  box-shadow: 0 18px 48px rgba(16, 24, 40, 0.24);
+  box-shadow: var(--shadow-modal);
   padding: 18px;
 }
 
 .userDictionaryModalTitle {
   font-size: 15px;
-  font-weight: 700;
-  color: #1f2937;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.01em;
 }
 
 .userDictionaryModalHint,
 .userDictionaryModalEmpty {
   margin: 0;
   font-size: 12px;
-  color: #667085;
+  color: var(--text-muted);
   line-height: 1.5;
+}
+
+/* --- W16-2(ユーザー辞書の手動追加フォーム): 誤→正の2入力+追加ボタン --- */
+.userDictionaryAddRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.userDictionaryAddRow input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.userDictionaryAddArrow {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.userDictionaryAddError {
+  margin: 0;
+  font-size: 12px;
+  color: #d92d20;
 }
 
 .userDictionaryList {
@@ -3537,19 +4094,19 @@ textarea:focus {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 10px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #f9fafb;
+  background: var(--bg-subtle);
 }
 
 .userDictionaryPair {
   font-size: 13px;
-  color: #344054;
+  color: var(--text-strong);
 }
 
 .userDictionaryListItem button {
   height: 28px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: #ffffff;
   color: #b42318;
@@ -3572,15 +4129,20 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* W20: 列の中身(動画+トグル+キー操作ヒント)が画面高を超えると下側が永久に画面外へ
+     はみ出すため、ビューポート内に収めて列単体で縦スクロールできるようにする。 */
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sceneRowListPane {
   max-height: calc(100vh - 260px);
   min-height: 320px;
   overflow-y: auto;
-  border: 1px solid #dbe2ea;
-  border-radius: 8px;
-  background: #fbfcfe;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
   padding: 8px;
 }
 
@@ -3592,42 +4154,513 @@ textarea:focus {
 
 .sceneRowListEmpty {
   padding: 24px 12px;
-  border: 1px dashed #d9dde3;
+  border: 1px dashed var(--border);
   border-radius: 8px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 13px;
   text-align: center;
 }
 
+/* フェーズW6(モダン化): 左ボーダーの色分けを廃止し、均一な1pxボーダーのカードに統一する。
+   現在行はアクセント色のリング、要注意度(severity)は行番号チップの色で伝える。 */
 .sceneRow {
   position: relative;
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr);
   gap: 10px;
-  border: 1px solid #e4e7ec;
-  border-left: 3px solid #d9dde3;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
   padding: 10px 12px;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.sceneRow:hover:not(.current) {
+  border-color: var(--border-strong);
 }
 
 .sceneRow.current {
-  border-color: #8fb4ff;
-  background: #f5f9ff;
+  border-color: var(--accent);
+  background: #f8fbff;
+  box-shadow:
+    0 0 0 3px var(--accent-bg),
+    var(--shadow-card);
 }
 
-.sceneRow.severity-high {
-  border-left-color: #d92d20;
+.sceneRow.current .sceneRowIndex {
+  background: var(--accent);
+  color: #ffffff;
 }
 
-.sceneRow.severity-medium {
-  border-left-color: #f79009;
+/* --- W10-1(シーン単位の選択): 選択中の行はアクセントリング、行番号チップはボタン化 --- */
+.sceneRow.selectedScene {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--shadow-card);
 }
 
-.sceneRowIndex {
-  padding-top: 2px;
-  color: #98a2b3;
+/* W17: 元テキスト/表示テキストを操作中の行。行番号のチェック選択とは区別する。 */
+.sceneRow.activeScene:not(.selectedScene) {
+  border-color: #9fc5e3;
+  background: #f8fbff;
+  box-shadow:
+    0 0 0 1px #d7e9f7,
+    var(--shadow-card);
+}
+
+.sceneRowIndexButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sceneRowIndexButton .sceneRowIndexCheck {
+  display: none;
+}
+
+/* ホバーで数字→チェック枠に切り替えて「選択できる」ことを示す */
+.sceneRowIndexButton:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.sceneRowIndexButton:hover .sceneRowIndexNumber,
+.sceneRowIndexButton.selected .sceneRowIndexNumber {
+  display: none;
+}
+
+.sceneRowIndexButton:hover .sceneRowIndexCheck,
+.sceneRowIndexButton.selected .sceneRowIndexCheck {
+  display: inline-block;
+}
+
+.sceneRowIndexButton.selected {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* --- W10-1: 丸ごと削除済みシーンの低いスタブ行(復元アイコン付き) --- */
+.sceneRowDeletedStub {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  padding: 4px 12px;
+  min-height: 30px;
+}
+
+.sceneRowDeletedStub .sceneRowIndex {
+  height: 20px;
+  line-height: 20px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.sceneRowDeletedStubLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sceneRowDeletedStubRestore {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.sceneRowDeletedStubRestore:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sceneRow.severity-high .sceneRowIndex {
+  background: #fef3f2;
+  color: #d92d20;
+}
+
+.sceneRow.severity-medium .sceneRowIndex {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+/* --- フェーズW5-5(要確認パネル): ジャンプ先シーンの2秒フェードハイライト --- */
+.sceneRow.jumpFlash {
+  animation: sceneJumpFlash 2s ease-out;
+}
+
+@keyframes sceneJumpFlash {
+  0% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    background-color: var(--accent-bg);
+  }
+  100% {
+    box-shadow: var(--shadow-card);
+    background-color: var(--surface);
+  }
+}
+
+/* --- フェーズW5-5: 要確認パネル(シーン検品リスト上部に常設)。
+   シーン一覧と視覚的に区別するため、amber系の枠+薄い警告色のヘッダ帯にする
+   (W6モダン化: 左の3pxボーダーは廃止) --- */
+.reviewHotspotsPanel {
+  margin-bottom: 10px;
+  border: 1px solid #fedf89;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.reviewHotspotsPanelEmpty {
+  padding: 8px 12px;
+  border-color: var(--border);
+}
+
+.reviewHotspotsEmptyText {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.reviewHotspotsHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: #fffaeb;
+  color: #b54708;
+  padding: 8px 12px;
   font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reviewHotspotsHeader:hover {
+  background: #fef0c7;
+}
+
+/* W19-B3: ヘッダー行(折りたたみボタン + AI修正一括適用ボタン) */
+.reviewHotspotsHeaderRow {
+  display: flex;
+  align-items: center;
+  background: #fffaeb;
+}
+
+.reviewHotspotsHeaderRow .reviewHotspotsHeader {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* W25: 折りたたみトグルの気づきやすさ改善(ヘッダ右端に常時ヒントを出す) */
+.reviewHotspotsToggleHint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: #b54708;
+  opacity: 0.65;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.reviewHotspotsHeader:hover .reviewHotspotsToggleHint {
+  opacity: 1;
+}
+
+.reviewHotspotsBulkApplyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  height: 26px;
+  margin: 0 10px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reviewHotspotsBulkApplyButton:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.reviewHotspotsBulkApplyButton:disabled {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/* 空状態(要確認なし)でもボタンは常設する(無効化表示) */
+.reviewHotspotsPanelEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reviewHotspotsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+}
+
+/* W5-8: カードの見た目は埋め込んだ本物の.sceneRowに任せ、外枠はメタ行との束ねだけにする */
+.reviewHotspotCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reviewHotspotMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+/* W5-8: カード左端の再生ボタン(このシーンだけ再生。軽いゴースト調) */
+.reviewHotspotPlayButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.reviewHotspotPlayButton:hover {
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+/* フェーズW5-7: ジャンプは「シーンXへ↓」ボタンのみ(下の一覧へ飛ぶことがわかるボタン形状) */
+.reviewHotspotJumpButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  border: 1px solid var(--accent-soft);
+  border-radius: 6px;
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.reviewHotspotJumpButton:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* --- W28(2026-08-22 実機フィードバック): 確認済みチェック・戻すボタン・レイアウト切替 --- */
+.reviewHotspotResolveCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reviewHotspotResolveCheck:hover {
+  color: var(--accent-strong);
+}
+
+.reviewHotspotResolveCheck input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.reviewHotspotsHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding-right: 10px;
+}
+
+.reviewHotspotsHeaderActions .reviewHotspotsBulkApplyButton {
+  margin: 0;
+}
+
+.reviewHotspotsRestoreButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reviewHotspotsRestoreButton:hover {
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+/* --- 実機FB 2026-09-03: W28の左右レイアウトは「横に並べると見づらい」ため廃止。
+   要確認(折りたたみ)→OP→通常シーンの縦積みに一本化し、カラムのラッパーは
+   display:contents で透過させてペイン直下に直接積んだDOMと同じレイアウトを維持する --- */
+.sceneRowListPane > .reviewHotspotsColumn,
+.sceneRowListPane > .sceneListColumn {
+  display: contents;
+}
+
+.reviewHotspotJumpButton svg {
+  flex: 0 0 auto;
+}
+
+.reviewHotspotDetail {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.reviewHotspotSuggestionButton {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--accent-strong);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reviewHotspotSuggestionButton:hover {
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+}
+
+/* W16-7: AI最終チェックの指摘の「無視」ボタン(適用ボタンの控えめ版) */
+.reviewHotspotIgnoreButton {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reviewHotspotIgnoreButton:hover {
+  background: #f3f4f6;
+}
+
+/* W16-7: AI最終チェックの実行結果メッセージ(検品ツールバー内) */
+.finalCheckStatus {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- フェーズW5-10: シーン一覧の左下に出る「↑」丸ボタン(先頭=要確認パネルへ戻る)。
+   スクロールコンテナ(.sceneRowListPane)内の末尾に置き、stickyで可視領域の下端に張り付かせる --- */
+.sceneListScrollTopButton {
+  position: sticky;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-top: 10px;
+  margin-left: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.18);
+  cursor: pointer;
+  z-index: 5;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sceneListScrollTopButton:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* フェーズW6(モダン化): 行番号は角丸チップにし、severity・現在行の色をここへ載せる
+   (旧: カード左端の3px色ボーダー)。 */
+.sceneRowIndex {
+  align-self: start;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 7px;
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+  font-size: 12px;
   font-weight: 800;
   text-align: center;
 }
@@ -3660,10 +4693,16 @@ textarea:focus {
   gap: 4px;
 }
 
+.sceneChipWithCaret {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
 .sceneChip {
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: #f8fafc;
+  background: var(--bg-subtle);
   color: #1f2937;
   padding: 2px 6px;
   font-size: 14px;
@@ -3674,16 +4713,29 @@ textarea:focus {
 }
 
 .sceneChip:hover {
-  border-color: #cfd6df;
+  border-color: var(--border-strong);
   background: #eef2f7;
 }
 
 .sceneChip.deleted {
   border-style: dashed;
-  background: #f2f4f7;
-  color: #98a2b3;
+  background: var(--bg-hover);
+  color: var(--text-faint);
   text-decoration: line-through;
   cursor: pointer;
+}
+
+/* --- W16-1(無音チップ): 単語間の長い無音を [...] のグレー点線チップで表す --- */
+.sceneChip.silence {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-faint);
+  letter-spacing: 1px;
+}
+
+.sceneChip.silence.deleted {
+  opacity: 0.6;
 }
 
 .sceneChip.flagged {
@@ -3695,23 +4747,48 @@ textarea:focus {
 /* --- 改善3(再生中のチップハイライト): 再生バーの代わりにテキスト側で「現在位置」を示す --- */
 .sceneChip.playing {
   border-color: #2f6690;
-  background: #458bc3;
+  background: var(--accent);
   color: #ffffff;
   transform: scale(1.07);
 }
 
 /* --- 改善5-2(チップのドラッグ複数選択): 選択範囲は青ハイライト --- */
 .sceneChip.selected {
-  border-color: #458bc3;
+  border-color: var(--accent);
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+/* --- W16-5(自動保存インジケータ): ツールバー隅の保存状態表示 --- */
+.draftSaveIndicator {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.draftSaveIndicator.error {
+  color: #d92d20;
+  font-weight: 700;
+}
+
+/* --- W18: クリック/←→で確定したチップ間位置。赤い削除候補ではなく縦線で示す --- */
+.chipConfirmedCaretLine {
+  align-self: stretch;
+  width: 2px;
+  min-height: 28px;
+  margin-left: -3px;
+  margin-right: 1px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 6;
 }
 
 /* --- 改善3(チップ間ホバーキャレット): テキストキャレット風の縦線。点滅なし --- */
 .chipCaretLine {
   position: absolute;
   width: 2px;
-  background: #458bc3;
+  background: var(--accent);
   border-radius: 1px;
   pointer-events: none;
   transform: translateX(-1px);
@@ -3744,8 +4821,8 @@ textarea:focus {
 }
 
 .sceneSuspicionBadge.low {
-  background: #f2f4f7;
-  color: #667085;
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
 
 /* --- T-2(感情タグの自動付与): バッジ+変更メニュー --- */
@@ -3759,10 +4836,10 @@ textarea:focus {
   align-items: center;
   gap: 4px;
   white-space: nowrap;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: #f8fafc;
-  color: #475467;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   padding: 3px 10px;
   font-size: 11px;
   font-weight: 800;
@@ -3780,10 +4857,10 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   min-width: 108px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.18);
+  box-shadow: var(--shadow-pop);
   padding: 4px;
   gap: 2px;
 }
@@ -3794,7 +4871,7 @@ textarea:focus {
   gap: 6px;
   border-radius: 6px;
   background: transparent;
-  color: #344054;
+  color: var(--text-strong);
   padding: 6px 8px;
   font-size: 12px;
   font-weight: 700;
@@ -3802,12 +4879,12 @@ textarea:focus {
 }
 
 .sceneEmotionMenuItem:hover {
-  background: #f3f6fa;
+  background: var(--bg-hover);
 }
 
 .sceneEmotionMenuItem.active {
-  background: #eef5ff;
-  color: #205dcf;
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 /* フェーズT2.5-4: typeバッジのドロップダウン(種類10種+プリセット個別指定) */
@@ -3821,18 +4898,261 @@ textarea:focus {
   padding: 6px 8px 2px;
   font-size: 10px;
   font-weight: 700;
-  color: #98a2b3;
+  color: var(--text-faint);
   letter-spacing: 0.04em;
 }
 
 /* フェーズT2.5-4: 設定「テロップデザイン」(シーンの種類→プリセット割り当て) */
+/* フェーズU6: テロップスタイル詳細エディタ */
+.telopStyleEditorModal {
+  width: min(760px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  background: #ffffff;
+  box-shadow: var(--shadow-modal);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.styleEditorBaseId {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* 市松模様の上にプレビューを載せる(透明度・光彩が視認できるように) */
+.styleEditorPreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 24px 12px;
+  border-radius: 10px;
+  background:
+    linear-gradient(rgba(40, 44, 52, 0.92), rgba(40, 44, 52, 0.92)),
+    repeating-conic-gradient(#3a3f4a 0% 25%, #2f3440 0% 50%) 0 0 / 24px 24px;
+  overflow: hidden;
+}
+
+.styleEditorToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.styleEditorToolbar select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.styleEditorResetButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.styleEditorSections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.styleEditorSection {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 0 12px 0;
+  transition: border-color 0.15s ease;
+}
+
+.styleEditorSection[open] {
+  padding-bottom: 12px;
+}
+
+.styleEditorSection > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 -12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+  cursor: pointer;
+  user-select: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  list-style: none;
+  transition: background-color 0.15s ease;
+}
+
+.styleEditorSection > summary::-webkit-details-marker {
+  display: none;
+}
+
+.styleEditorSection > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.8px solid var(--text-faint);
+  border-bottom: 1.8px solid var(--text-faint);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.styleEditorSection[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.styleEditorSection > summary:hover {
+  background: var(--bg-hover);
+}
+
+.styleEditorSection[open] > summary {
+  border-radius: 10px 10px 0 0;
+}
+
+.styleEditorSection > *:not(summary) {
+  margin-top: 6px;
+}
+
+.styleEditorSliderRow,
+.styleEditorColorRow,
+.styleEditorStrokeRow,
+.styleEditorSelectRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.styleEditorSliderRow input[type="range"],
+.styleEditorColorRow input[type="range"],
+.styleEditorStrokeRow input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.styleEditorSliderLabel {
+  width: 88px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.styleEditorSliderValue {
+  width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-strong);
+}
+
+.styleEditorColorRow input[type="color"],
+.styleEditorStrokeRow input[type="color"] {
+  width: 34px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.styleEditorRadioRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.styleEditorRadioRow label,
+.styleEditorToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.styleEditorToggle {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.styleEditorStrokeRow .styleEditorToggle {
+  width: 150px;
+  flex-shrink: 0;
+}
+
+.styleEditorFontList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.styleEditorFontOption {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.styleEditorFontOption.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.styleEditorSelectRow select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.styleEditorActions {
+  position: sticky;
+  bottom: -20px;
+  background: #ffffff;
+  border-top: 1px solid var(--border);
+  padding: 12px 0 2px;
+  margin: 0 -2px;
+}
+
 .telopTypeMappingModal {
-  width: min(680px, 92vw);
+  width: min(900px, 94vw);
   max-height: 84vh;
   overflow-y: auto;
-  border-radius: 14px;
+  border-radius: var(--radius-xl);
   background: #ffffff;
-  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.28);
+  box-shadow: var(--shadow-modal);
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -3845,30 +5165,37 @@ textarea:focus {
   gap: 8px;
 }
 
+/* フェーズT3: デザイン+アニメーション+効果音の3ドロップダウン構成。 */
 .telopTypeMappingRow {
   display: grid;
-  grid-template-columns: 170px 1fr 190px;
+  grid-template-columns: 150px 1fr 130px 130px 170px;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 10px;
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--border);
   border-radius: 10px;
+  background: var(--surface);
+  transition: border-color 0.15s ease;
+}
+
+.telopTypeMappingRow:hover {
+  border-color: var(--border-strong);
 }
 
 .telopTypeMappingName {
   font-size: 13px;
   font-weight: 800;
-  color: #1d2939;
+  color: var(--text);
 }
 
 .telopTypeMappingDescription {
   font-size: 11px;
-  color: #667085;
+  color: var(--text-muted);
 }
 
 .telopTypeMappingSelect {
   height: 32px;
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   padding: 0 8px;
   font-size: 12px;
@@ -3887,8 +5214,32 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/* フェーズU6: 行の「編集」ボタン(スタイル詳細エディタへの入口) */
+.telopTypeMappingEditButton {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-strong);
+}
+
+.telopTypeMappingEditButton:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* フェーズU6: スタイルバッジメニューの「デザインを編集…」(通常項目より強調) */
+.sceneDirectedEditDesign {
+  font-weight: 700;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+
 .telopTypeMappingPreviewMissing {
-  color: #98a2b3;
+  color: var(--text-faint);
   font-size: 11px;
 }
 
@@ -3899,9 +5250,149 @@ textarea:focus {
   gap: 6px;
 }
 
-.sceneTelopInputRow .sceneTelopInput {
+.sceneTelopInputRow .sceneTelopEditorCol,
+.sceneTelopInputRow .sceneTelopEditor {
   flex: 1;
   min-width: 0;
+}
+
+.sceneTelopEditorCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sceneTelopEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sceneTelopInputStack {
+  position: relative;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+}
+
+.sceneTelopHighlightLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px 6px 7px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: inherit;
+  color: #1f2937;
+}
+
+.sceneTelopInputStack:has(.edited) .sceneTelopHighlightLayer {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.sceneTelopInputStack:has(.isComposing) .sceneTelopHighlightLayer {
+  visibility: hidden;
+}
+
+.telopHlYellow {
+  color: #c59200;
+}
+
+.sceneTelopInput.isOverlayed {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: #1f2937;
+  background: transparent;
+}
+
+.sceneTelopInput.isOverlayed.edited {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--accent-strong);
+}
+
+.sceneTelopInput.isComposing {
+  color: #1f2937;
+  -webkit-text-fill-color: #1f2937;
+  background: #ffffff;
+}
+
+.sceneTelopInput.isComposing.edited {
+  color: var(--accent-strong);
+  -webkit-text-fill-color: var(--accent-strong);
+}
+
+.sceneTelopColorActions,
+.sceneTelopToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.sceneTelopEffectLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sceneTelopEffectSelect,
+.sceneTelopToolButton,
+.sceneTelopColorButton {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sceneTelopEffectSelect {
+  border-radius: 8px;
+  padding-right: 6px;
+}
+
+.sceneTelopToolButton,
+.sceneTelopColorButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.sceneTelopToolButton:hover,
+.sceneTelopColorButton:hover:not(:disabled),
+.sceneTelopEffectSelect:hover {
+  background: #eef2f7;
+}
+
+.sceneTelopToolButton.isOn,
+.sceneTelopColorButton.yellow.isActive {
+  border-color: #c59200;
+  background: #fff6d6;
+  color: #8a6a00;
+}
+
+.sceneTelopColorButton.yellow {
+  color: #8a6a00;
+}
+
+.sceneTelopColorButton:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .sceneStyleSwatchWrap {
@@ -3913,7 +5404,7 @@ textarea:focus {
 .sceneStyleSwatch {
   width: 20px;
   height: 20px;
-  border: 2px solid #d9dde3;
+  border: 2px solid var(--border);
   border-radius: 50%;
   cursor: pointer;
 }
@@ -3926,10 +5417,10 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: #ffffff;
-  box-shadow: 0 16px 36px rgba(16, 24, 40, 0.2);
+  box-shadow: var(--shadow-pop);
   padding: 10px;
   width: max-content;
 }
@@ -3947,14 +5438,14 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #e4e7ec;
+  border: 2px solid var(--border);
   border-radius: 8px;
   background: #2b2b2b;
   line-height: 1;
 }
 
 .sceneStylePaletteItem:hover {
-  border-color: #8fb4ff;
+  border-color: var(--accent-soft);
 }
 
 .sceneStylePaletteCheck {
@@ -3962,13 +5453,13 @@ textarea:focus {
   top: -6px;
   right: -6px;
   border-radius: 50%;
-  background: #458bc3;
+  background: var(--accent);
   color: #ffffff;
   padding: 2px;
 }
 
 .sceneStylePaletteApplyAll {
-  color: #205dcf;
+  color: var(--accent-strong);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
@@ -3979,8 +5470,8 @@ textarea:focus {
   width: 100%;
   min-height: 34px;
   resize: vertical;
-  border: 1px solid #dbe2ea;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #1f2937;
   /* 改善5-3(左オフセット廃止): 左パディングをsceneChip(border 1px+padding-left 6px=7px)の
@@ -3990,19 +5481,37 @@ textarea:focus {
   line-height: 1.6;
   font-family: inherit;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .sceneTelopInput:focus {
   outline: none;
-  border-color: #8fb4ff;
-  box-shadow: 0 0 0 3px rgba(69, 139, 195, 0.15);
+  border-color: var(--accent-soft);
+  box-shadow: var(--focus-ring);
   cursor: text;
 }
 
 .sceneTelopInput.edited {
-  border-color: #458bc3;
-  color: #205dcf;
+  border-color: var(--accent);
+  color: var(--accent-strong);
   font-weight: 700;
+}
+
+.sceneTelopInput.isOverlayed,
+.sceneTelopInput.isOverlayed.edited {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: transparent;
+}
+
+.sceneTelopInput.isOverlayed {
+  caret-color: #1f2937;
+}
+
+.sceneTelopInput.isOverlayed.edited {
+  caret-color: var(--accent-strong);
 }
 
 .sceneRowBottom {
@@ -4047,7 +5556,7 @@ textarea:focus {
   bottom: 2px;
   width: 8px;
   border-radius: 4px;
-  background: rgba(69, 139, 195, 0.35);
+  background: rgba(37, 99, 235, 0.35);
   opacity: 1;
   pointer-events: none;
   transition: opacity 0.12s ease, background 0.12s ease, width 0.12s ease;
@@ -4064,13 +5573,13 @@ textarea:focus {
 
 .sceneEdgeHandle.visible {
   width: 10px;
-  background: rgba(69, 139, 195, 0.75);
+  background: rgba(37, 99, 235, 0.75);
 }
 
 .sceneEdgeHandle.dragging {
-  background: #458bc3;
+  background: var(--accent);
   width: 10px;
-  box-shadow: 0 0 0 2px rgba(69, 139, 195, 0.25);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
 
 .sceneEdgeHandle.linkedHighlight {
@@ -4111,11 +5620,40 @@ textarea:focus {
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 1px solid #458bc3;
+  border: 1px solid var(--accent);
   border-radius: 999px;
   background: #ffffff;
-  color: #458bc3;
+  color: var(--accent);
   z-index: 3;
+}
+
+/* --- W20-1(範囲選択カット): 波形本体の横ドラッグ中に表示する選択範囲オーバーレイ。
+   赤系半透明+両端1px線で「この区間が消える」ことを示し、上部にカット尺ラベルを出す。 --- */
+.sceneRangeCutOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(220, 38, 38, 0.25);
+  border-left: 1px solid rgba(220, 38, 38, 0.9);
+  border-right: 1px solid rgba(220, 38, 38, 0.9);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.sceneRangeCutLabel {
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
 }
 
 /* --- 改善5-6(ハサミモード): 波形上ホバー中の切り込み線プレビュー(実際の再生バーとは独立)。
@@ -4151,22 +5689,22 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  border-top: 1px dashed #e4e7ec;
+  border-top: 1px dashed var(--border);
   padding-top: 6px;
 }
 
 .sceneSuspicionDetail {
-  color: #98a2b3;
+  color: var(--text-faint);
   font-size: 11px;
 }
 
 /* 改善21-B: AI校正未実行項目内の「⚙API設定を開く」ボタン */
 .sceneSuspicionActionButton {
   flex: 0 0 auto;
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 11px;
   padding: 3px 8px;
   cursor: pointer;
@@ -4174,23 +5712,23 @@ textarea:focus {
 }
 
 .sceneSuspicionActionButton:hover {
-  border-color: #458bc3;
-  color: #2e6a9e;
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .sceneNavBar {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #d9dde3;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: #ffffff;
   padding: 8px 12px;
 }
 
 .sceneNavBarTime {
   flex: none;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -4199,12 +5737,1096 @@ textarea:focus {
 .sceneNavBarWaveformWrap {
   flex: 1;
   min-width: 0;
+  position: relative;
+}
+
+/* W19-A1: 全体ナビバーの再生ヘッド。canvas再描画から分離したCSSオーバーレイ(left:%)。
+   見た目は旧canvas描画(赤・2px・全高)と同一。 */
+.sceneNavBarPlayhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #d92d20;
+  pointer-events: none;
+  transform: translateX(-1px);
 }
 
 .sceneNavBarCanvas {
   display: block;
   width: 100%;
   cursor: pointer;
+}
+
+/* --- フェーズU9: サムネイル帯(フィルムストリップ) + BGMトラック --- */
+
+.navTracksStack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ============================================================
+ * フェーズV1: 統合タイムラインView(マルチトラック)
+ * モックアップ assets/timeline-view-mockup-v2.png 準拠:
+ * 白パネル・角丸・青(var(--accent))の選択枠と再生ヘッド・紫OPブロック・橙BGMクリップ
+ * (旧U9のFilmstripStrip/BgmTrackのCSSはこのViewへの統合をもって撤去済み)
+ * ============================================================ */
+
+/* --- タブ(シーン検品｜タイムライン) --- */
+.reviewViewTabs {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-muted);
+  padding: 4px;
+}
+
+.reviewViewTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  padding: 7px 18px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.timelineSpeedControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.timelineSpeedControl button {
+  min-width: 38px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.timelineSpeedControl button.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+.timelineSpeedControl .timelineSpeedApplyAll {
+  min-width: auto;
+  margin-left: 3px;
+}
+
+.tlVideoSpeed {
+  flex: 0 0 auto;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.68);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.reviewViewTabs button.active {
+  background: #ffffff;
+  color: var(--accent-strong);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
+
+/* --- タイムラインタブ時のレイアウト: プレビューを上部中央、タイムラインを下に全幅 --- */
+.sceneMainAreaTimeline {
+  display: flex;
+  flex-direction: column;
+  /* .sceneMainArea(グリッド用)の align-items:start を打ち消す。start のままだと
+     flex子のtimelineViewが横方向にstretchせずコンテンツ(キャンバス)幅で決まり、
+     ズームのたびにビュー全体が横へ膨張 → timelineBodyの内部横スクロールが効かず、
+     さらにResizeObserverが広がった幅を拾ってfitが増える→また膨張する、という
+     「勝手にズームし続ける」自走ループの根になる(実機で再現確認済み) */
+  align-items: stretch;
+  gap: 12px;
+  /* プレビューを上部に固定し、タイムラインだけが内部スクロールする。
+     ページ全体を止めるのではなく「このブロックを画面高に収める」ことで、
+     ズーム中でもプレビューとズームスライダーが常に視界に残る */
+  height: calc(100vh - 220px);
+  min-height: 480px;
+  overflow: hidden;
+}
+
+.sceneMainAreaTimeline .scenePreviewColumn {
+  flex: 0 0 auto;
+  position: static;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  /* タイムラインタブは親(.sceneMainAreaTimeline)が高さを管理するため列スクロールは無効化 */
+  max-height: none;
+  overflow: visible;
+}
+
+/* タイムラインタブのプレビュー: 親の高さ(100vh-220px)をプレビューが食いつぶして
+   タイムライン本体が見切れないよう、ステージ上限を通常タブより低めにクランプする。
+   縦型はさらにパネルを中央寄せしてフィット表示にする */
+.sceneMainAreaTimeline .transcriptPreviewPanel {
+  align-self: center;
+  max-width: 100%;
+}
+
+.sceneMainAreaTimeline .transcriptPreviewStage {
+  max-height: clamp(200px, calc(100vh - 560px), 420px);
+}
+
+.sceneMainAreaTimeline .transcriptPreviewStageVertical {
+  height: clamp(220px, calc(100vh - 560px), 52vh);
+  max-height: none;
+}
+
+/* --- View本体 --- */
+.timelineView {
+  position: relative; /* V6-4: D&Dの「非対応の形式」メッセージの配置基準 */
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  /* flexアイテムの min-width:auto を殺す。これがないとズーム時にキャンバス幅へ
+     つられてView全体が膨張し、timelineBodyの内部横スクロールが発生しなくなる
+     (=横スクロール不能・プレビューが画面外へ・ResizeObserverのズーム暴走の根) */
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  /* overflow: hidden はツールバーの position: sticky を殺すため使わない
+     (角丸のクリップはツールバー/ボディ側の個別 border-radius で担う) */
+}
+
+.timelineToolbar {
+  /* ズームスライダーを常に触れる位置に: 縦スクロールしてもタイムライン上端に貼り付く */
+  position: sticky;
+  top: 8px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  padding: 6px 12px;
+  border-radius: 8px 8px 0 0;
+}
+
+.timelineBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* min-width:auto(flexアイテム既定)だと中身のキャンバス幅までボディが膨らみ、
+     overflow:auto が効かず横スクロール不能+ズーム暴走の温床になる */
+  min-width: 0;
+  border-radius: 0 0 8px 8px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.timelineToolbarTitle {
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timelineToolbarDuration {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timelineZoomControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.timelineZoomControl input[type="range"] {
+  width: 140px;
+  accent-color: var(--accent);
+}
+
+/* V6-1: ズーム −/+/全体表示ボタン(スライダ・ピンチと併用できる明示的な導線) */
+.timelineZoomButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: #ffffff;
+  padding: 3px 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.timelineZoomButton:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.timelineZoomButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.timelineBody {
+  display: flex;
+  align-items: stretch;
+}
+
+/* --- 左のトラックラベル列 --- */
+.timelineLabels {
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  flex: 0 0 96px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.timelineLabelCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #eef1f5;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.timelineBgmAddButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: #ffffff;
+  padding: 2px 5px;
+  color: var(--text-strong);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.timelineBgmAddButton:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* --- スクロール領域とキャンバス --- */
+.timelineViewport {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: visible;
+}
+
+.timelineCanvas {
+  position: relative;
+  cursor: pointer;
+}
+
+/* 全トラックを貫く再生ヘッド(プレビューの現在位置と双方向連動) */
+.timelinePlayhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent-strong);
+  pointer-events: none;
+  z-index: 20;
+}
+
+.timelinePlayheadHandle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 10px;
+  transform: translateX(-50%);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  background: var(--accent-strong);
+}
+
+/* W11-3: プレイヘッドを掴むための透明なグラブ帯(線・ハンドルより広い当たり判定)。
+   親(.timelinePlayhead)は pointer-events: none のままここだけ受ける */
+.timelinePlayheadGrab {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 14px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.timelinePlayheadGrab.scrubbing {
+  cursor: grabbing;
+}
+
+/* --- ルーラー --- */
+.tlRuler {
+  position: relative;
+  height: 30px;
+  border-bottom: 1px solid var(--border);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.tlRulerTick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 6px;
+  background: #cdd5df;
+}
+
+.tlRulerTickMajor {
+  height: 10px;
+  background: var(--text-faint);
+}
+
+.tlRulerLabel {
+  position: absolute;
+  bottom: 10px;
+  left: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- トラック共通 --- */
+.tlLane {
+  position: absolute;
+  inset: 0;
+  border-bottom: 1px solid #eef1f5;
+  background: #ffffff;
+}
+
+.tlLanePlaceholder {
+  position: sticky;
+  left: 12px;
+  display: inline-block;
+  margin-top: 12px;
+  color: #b6bec9;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+/* --- テロップトラック: プリセット色付きブロック --- */
+.tlTelopBlock {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0 8px;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.tlTelopBlock.selected {
+  border: 2px solid var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.tlTelopBlockText {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tlTelopEditButton {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 2px 4px;
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.tlTelopEditButton:hover {
+  border-color: var(--accent);
+  background: #f0f7fc;
+}
+
+/* --- 映像トラック: シーンごとの分割ブロック --- */
+.tlVideoBlock {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 4px;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.tlVideoBlock.selected {
+  border: 2px solid var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.tlVideoThumb {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #101828;
+  pointer-events: none;
+  user-select: none;
+}
+
+.tlVideoLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 11px;
+}
+
+.tlVideoIndex {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.tlVideoText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --- OPグループブロック(紫系。映像トラック先頭) --- */
+.tlOpBlock {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  overflow: hidden;
+  border: 1px solid #9f7fd1;
+  border-radius: 6px;
+  background: #f1eafb;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.tlOpBlock.clickable {
+  cursor: pointer;
+}
+
+.tlOpBlock.clickable:hover {
+  background: #e9defa;
+}
+
+.tlOpBlockLabel {
+  display: block;
+  color: #6d3fc0;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.tlOpClips {
+  position: absolute;
+  top: 16px;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.tlOpClip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin-left: 2px;
+  border: 1px solid #b79ae0;
+  border-radius: 4px;
+  background: linear-gradient(160deg, #c9b2ec, #9f7fd1);
+  box-sizing: border-box;
+}
+
+.tlOpClipLabel {
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+
+/* --- V8-2: シーン検品一覧の先頭に常設するOP(冒頭ダイジェスト)カード ---
+   通常シーン行と混ざらないよう、タイムラインのOPブロックと同じ紫系にする */
+/* --- フェーズW6: シーン検品先頭のOP行(OpClipRows。旧OpSummaryCardの後継)。
+   紫系のパネルにOPクリップを1行ずつ並べ、波形の端ドラッグ(幅変更)・文言編集・
+   再生ボタン/波形クリックのプレビュー連動を提供する --- */
+.opClipRows {
+  margin: 4px 8px 10px;
+  border: 1px solid #d9caf2;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.opClipRowsHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8f5fd;
+}
+
+.opClipRowsBadge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #6d3fc0;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.opClipRowsTitle {
+  color: #6d3fc0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.opClipRowsMeta {
+  color: #7a5fae;
+  font-size: 12px;
+}
+
+.opClipRowsEditButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid #c9b3ea;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #6d3fc0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.opClipRowsEditButton:hover {
+  border-color: #9f7fd1;
+  background: #f6f0fe;
+}
+
+.opClipRowList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+}
+
+/* シーン行(.sceneRow)と同じ26px+本文のグリッド・カード体裁(操作感を揃える) */
+.opClipRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+  transition: border-color 0.15s ease;
+}
+
+.opClipRow:hover {
+  border-color: #c9b3ea;
+}
+
+.opClipRowIndex {
+  align-self: start;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 7px;
+  background: #f3edfb;
+  color: #6d3fc0;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.opClipRowBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.opClipRowTop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opClipRowPlayButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.opClipRowPlayButton:hover {
+  border-color: #b394e3;
+  background: #f6f0fe;
+  color: #6d3fc0;
+}
+
+.opClipRowMeta {
+  flex: 0 0 auto;
+  color: #7a5fae;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.opClipRowJumpButton {
+  flex: 0 0 auto;
+  border: 1px solid #d8c8f0;
+  border-radius: 6px;
+  background: #faf7ff;
+  color: #6d3fc0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.opClipRowJumpButton:hover {
+  border-color: #b394e3;
+  background: #f3ebff;
+}
+
+.opClipRowTextInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.opClipRowTextInput:hover {
+  border-color: var(--border-strong);
+}
+
+.opClipRowTextInput:focus {
+  outline: none;
+  border-color: #9f7fd1;
+  box-shadow: 0 0 0 3px #f3edfb;
+}
+
+/* --- BGMトラック: 橙クリップ+音量エンベロープ --- */
+/* --- 画像トラック(フェーズV4): 緑系クリップバー。操作系はBGMクリップと同じ規約 --- */
+/* V6-5: top/heightはレーンindexからインラインで指定する(1クリップ=1レーンの段積み) */
+.tlImageClip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  overflow: visible;
+  border: 1px solid #3f9d63;
+  border-radius: 6px;
+  background: rgba(134, 220, 169, 0.35);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.tlImageClip.selected {
+  background: rgba(134, 220, 169, 0.55);
+  box-shadow: 0 0 0 2px rgba(63, 157, 99, 0.35);
+}
+
+.tlImageClipLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  /* V6-5: 左端はレーン入替えグリップの分だけ空ける */
+  padding: 0 8px 0 20px;
+  color: #1c6b3d;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* V6-5: 左端グリップ(上下ドラッグでレーン順=前後関係の入替え) */
+.tlLaneReorderHandle {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  transform: translateY(-50%);
+  color: rgba(52, 64, 84, 0.55);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.tlLaneReorderHandle:hover {
+  color: var(--text-strong);
+}
+
+/* V6-4: D&D中のドロップ先を示す円形「＋」インジケータ(該当トラックの中央) */
+.tlDropIndicator {
+  position: absolute;
+  top: 50%;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: #eef5fb;
+  color: var(--accent-strong);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* V6-4: 非対応拡張子のドロップ時メッセージ(タイムラインView中央に浮かせる) */
+.tlDropUnsupported {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 30;
+  border: 1px solid #d92d20;
+  border-radius: 6px;
+  background: #fef3f2;
+  padding: 6px 12px;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.tlImageResizeHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.tlImageResizeHandleStart {
+  left: -2px;
+  border-radius: 6px 0 0 6px;
+}
+
+.tlImageResizeHandleEnd {
+  right: -2px;
+  border-radius: 0 6px 6px 0;
+}
+
+.tlImageResizeHandle:hover {
+  background: rgba(63, 157, 99, 0.45);
+}
+
+.tlImageDeleteButton {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 2px 4px;
+  color: #b42318;
+  cursor: pointer;
+  z-index: 6;
+}
+
+.tlImageDeleteButton:hover {
+  border-color: #d92d20;
+  background: #fef3f2;
+}
+
+/* V6-5: top/heightはレーンindexからインラインで指定する(1クリップ=1レーンの段積み) */
+.tlBgmClip {
+  position: absolute;
+  overflow: visible;
+  border: 1px solid #df8d33;
+  border-radius: 6px;
+  background: rgba(247, 178, 103, 0.35);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.tlBgmClip.selected {
+  background: rgba(247, 178, 103, 0.5);
+  box-shadow: 0 0 0 2px rgba(223, 141, 51, 0.35);
+}
+
+.tlBgmClipLabel {
+  position: absolute;
+  top: 3px;
+  /* V6-5: 左端はレーン入替えグリップの分だけ空ける */
+  left: 20px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: #8a4b08;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.tlBgmEnvelope {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.tlBgmVolumeLabel {
+  position: absolute;
+  transform: translateX(-50%);
+  color: #b45309;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.tlBgmVolumeInspector {
+  position: sticky;
+  left: 8px;
+  top: 4px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  padding: 3px 7px;
+  border: 1px solid #f0b35c;
+  border-radius: 6px;
+  background: rgba(255, 251, 235, 0.96);
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(146, 64, 14, 0.12);
+}
+
+.tlBgmVolumeInspector input[type="number"] {
+  width: 56px;
+  height: 24px;
+  padding: 2px 4px;
+  border: 1px solid #d9a047;
+  border-radius: 4px;
+  background: #fff;
+  color: #78350f;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 音量水平線の上下ドラッグ用ヒットエリア(線の上下4pxずつ) */
+.tlBgmVolumeHit {
+  position: absolute;
+  height: 10px;
+  margin-top: -6px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+/* フェード角の丸つまみ */
+.tlBgmFadeKnob {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin-top: -6px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #d97706;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.3);
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 5;
+}
+
+.tlBgmFadeKnob:hover {
+  background: #b45309;
+}
+
+.tlBgmResizeHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.tlBgmResizeHandleStart {
+  left: -2px;
+  border-radius: 6px 0 0 6px;
+}
+
+.tlBgmResizeHandleEnd {
+  right: -2px;
+  border-radius: 0 6px 6px 0;
+}
+
+.tlBgmResizeHandle:hover {
+  background: rgba(223, 141, 51, 0.45);
+}
+
+.tlBgmDeleteButton {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 2px 4px;
+  color: #b42318;
+  cursor: pointer;
+  z-index: 6;
+}
+
+.tlBgmDeleteButton:hover {
+  border-color: #d92d20;
+  background: #fef3f2;
+}
+
+/*
+ * フェーズV4(画像挿入トラック): プレビュー上の画像オーバーレイ。配置(%座標)は
+ * imageOverlayStyle(Remotionと同一計算)のインラインstyleが担い、ここでは操作系
+ * (ドラッグカーソル・選択枠・四隅ハンドル)だけを持つ。
+ */
+.previewImageClip {
+  pointer-events: none;
+}
+
+.previewImageClip.editable {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* ホバーで「触れる」ことが分かる控えめな破線枠(選択中は下のselectedの実線が勝つ) */
+.previewImageClip.editable:not(.selected):hover {
+  outline: 1px dashed rgba(255, 255, 255, 0.65);
+  outline-offset: 1px;
+}
+
+.previewImageClip.editable:active {
+  cursor: grabbing;
+}
+
+.previewImageClip img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.previewImageClip.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.previewImageHandle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.4);
+  touch-action: none;
+  z-index: 5;
+}
+
+.previewImageHandle:hover {
+  background: var(--accent-strong);
 }
 
 /*
@@ -4229,17 +6851,387 @@ textarea:focus {
  * 改善8-B-4(プレビューのテロップ描画をプリセット忠実に): 行ごとの見た目(色・縁取り・背景帯・
  * フォントサイズ)は<TelopStyledText>(components/TelopStyledText.tsx)がインラインstyleで
  * 完全に制御するため、旧来の固定デザイン(.previewTelopLine)は廃止した。
- * 幅90%クランプ・2行折返しはtelopPreviewSize.tsのfitTelopTextToWidth()側で計算済みの値を使う。
+ * 折返し・幅フィットはRemotionと同一の telopLayout.computeTelopBlockLayout で計算済みの値を使う。
  */
+
+/*
+ * U1-6(テロップ登場アニメーションのCSS近似): Remotion(Telop.tsx getInAnim)のspringベースの
+ * 動きをCSS keyframesで近似する。厳密なspring再現はしない(仕様どおり「同じ種類の動き」が目標)。
+ * 移動量(--telop-anim-*)と長さ(--telop-anim-duration)はPreviewPlayer.tsxがインラインで渡す。
+ */
+.previewTelopAnimated {
+  animation-duration: var(--telop-anim-duration, 400ms);
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+/* pop_big: 画面中央に大きく(scale 1.8)バッと出て定位置へ縮みながら移動(強調・煽り系) */
+.previewTelopAnim-pop_big {
+  animation-name: telopAnimPopBig;
+  animation-timing-function: cubic-bezier(0.2, 1.1, 0.4, 1);
+}
+@keyframes telopAnimPopBig {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--telop-anim-center-offset, -40vh)) scale(1.8);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* slide_left: 左からスライドイン+フェード(名言・辛辣系。damping200=オーバーシュートなし) */
+.previewTelopAnim-slide_left {
+  animation-name: telopAnimSlideLeft;
+}
+@keyframes telopAnimSlideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--telop-anim-slide-distance, 120px)));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* slide_up: 下から浮き上がる(質問系) */
+.previewTelopAnim-slide_up {
+  animation-name: telopAnimSlideUp;
+}
+@keyframes telopAnimSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(var(--telop-anim-slide-up, 40px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* zoom: その場でズームイン(要点・オチ・CTA。springの軽いオーバーシュートを含む) */
+.previewTelopAnim-zoom {
+  animation-name: telopAnimZoom;
+  animation-timing-function: cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes telopAnimZoom {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* stamp: 大きい状態から勢いよく押される(scale 2.5→1、強バウンス) */
+.previewTelopAnim-stamp {
+  animation-name: telopAnimStamp;
+  animation-timing-function: cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes telopAnimStamp {
+  0% {
+    opacity: 0;
+    transform: scale(2.5);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* fade: 単純フェードイン */
+.previewTelopAnim-fade {
+  animation-name: telopAnimFade;
+  animation-timing-function: linear;
+}
+@keyframes telopAnimFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* W24 Phase B-1: blur_in: ぼかしが解けながら浮かび上がる(Remotionは blur 8px→0 の線形) */
+.previewTelopAnim-blur_in {
+  animation-name: telopAnimBlurIn;
+  animation-timing-function: linear;
+}
+@keyframes telopAnimBlurIn {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* W24 Phase B-1: wipe_up: 下からマスクで拭き上がる(Remotionは clip-path inset の線形) */
+.previewTelopAnim-wipe_up {
+  animation-name: telopAnimWipeUp;
+  animation-timing-function: linear;
+}
+@keyframes telopAnimWipeUp {
+  from {
+    clip-path: inset(100% 0% 0% 0%);
+  }
+  to {
+    clip-path: inset(0% 0% 0% 0%);
+  }
+}
+
+/* W24 Phase B-1: drop_settle: 上からストンと落ちて僅かに沈んで戻る(springの控えめオーバーシュート近似) */
+.previewTelopAnim-drop_settle {
+  animation-name: telopAnimDropSettle;
+  animation-timing-function: ease-out;
+}
+@keyframes telopAnimDropSettle {
+  0% {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--telop-anim-drop, 64px)));
+  }
+  20% {
+    opacity: 1;
+  }
+  62% {
+    transform: translateY(calc(var(--telop-anim-drop, 64px) * 0.07));
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* W26: slam: 画面全体級スケールから叩きつけて着地後に小さくシェイク(ショートの最強調) */
+.previewTelopAnim-slam {
+  animation-name: telopAnimSlam;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes telopAnimSlam {
+  0% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+  18% {
+    opacity: 1;
+  }
+  55% {
+    transform: scale(0.97);
+  }
+  70% {
+    transform: scale(1.01) translateX(5px);
+  }
+  82% {
+    transform: scale(1) translateX(-4px);
+  }
+  92% {
+    transform: translateX(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* W26: bounce_left/right: 画面外から大きくスライドして行き過ぎて戻る(バウンド) */
+.previewTelopAnim-bounce_left {
+  animation-name: telopAnimBounceLeft;
+  animation-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+@keyframes telopAnimBounceLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--telop-anim-bounce-x, 320px)));
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.previewTelopAnim-bounce_right {
+  animation-name: telopAnimBounceRight;
+  animation-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+@keyframes telopAnimBounceRight {
+  0% {
+    opacity: 0;
+    transform: translateX(var(--telop-anim-bounce-x, 320px));
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* W26: rise_bounce: 下から勢いよく上がって行き過ぎて戻る(slide_upの強化版) */
+.previewTelopAnim-rise_bounce {
+  animation-name: telopAnimRiseBounce;
+  animation-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+@keyframes telopAnimRiseBounce {
+  0% {
+    opacity: 0;
+    transform: translateY(var(--telop-anim-rise, 200px));
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* W26: drop_bounce: 上から落ちて沈み込んで戻る(drop_settleの強化版・移動量大) */
+.previewTelopAnim-drop_bounce {
+  animation-name: telopAnimDropBounce;
+  animation-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+@keyframes telopAnimDropBounce {
+  0% {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--telop-anim-drop-bounce, 250px)));
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * W24 Phase B-1: typewriter の文字出現(TelopStyledText がgrapheme単位のspanへ
+ * animation-delay を振る。出現順・タイミングの規則は lib/telopTypewriter.ts で
+ * Remotionのフレーム計算と共有)。
+ */
+@keyframes telopTypewriterCharIn {
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- U1-5/U1-6: プレビュー忠実化のトグル(オーバーレイ表示・効果音)とオーバーレイ文言編集 --- */
+.previewFidelityToolbar {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.previewFidelityToolbar button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.previewFidelityToolbar button.active {
+  border-color: var(--accent);
+  background: #eef5fb;
+  color: var(--accent-strong);
+}
+
+.overlayEditModal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 20, 28, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.overlayEditModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(480px, calc(100vw - 48px));
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: var(--shadow-pop);
+  padding: 16px;
+}
+
+.overlayEditModalTitle {
+  margin: 0;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* V8-5: 対象の表示時間帯(見出し直下のメタ情報) */
+.overlayEditModalMeta {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.overlayEditModalBody textarea {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px;
+  resize: vertical;
+}
+
+.overlayEditModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.overlayEditModalActions button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.overlayEditModalActions button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
 
 /* --- 検品UI v2(Phase 2): キーガイド --- */
 .sceneKeyGuide {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid #d9dde3;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
+  background: var(--bg-subtle);
   padding: 10px 12px;
 }
 
@@ -4247,7 +7239,7 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -4261,21 +7253,21 @@ textarea:focus {
   justify-content: center;
   min-width: 22px;
   height: 22px;
-  border: 1px solid #cfd6df;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
   box-shadow: 0 1px 0 rgba(16, 24, 40, 0.06);
   padding: 0 6px;
-  color: #344054;
+  color: var(--text-strong);
   font-family: inherit;
   font-size: 11px;
   font-weight: 800;
 }
 
 .sceneKeyGuideRow kbd.active {
-  border-color: #458bc3;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 @keyframes spin {
@@ -4299,7 +7291,8 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 20, 28, 0.62);
+  background: rgba(15, 20, 28, 0.5);
+  backdrop-filter: blur(3px);
   padding: 24px;
 }
 
@@ -4310,10 +7303,10 @@ textarea:focus {
   width: min(720px, 100%);
   max-height: min(92vh, 900px);
   overflow: auto;
-  border: 1px solid #d8dee6;
-  border-radius: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   background: #fff;
-  box-shadow: 0 24px 64px rgba(15, 20, 28, 0.22);
+  box-shadow: var(--shadow-modal);
   padding: 24px 28px;
 }
 
@@ -4326,7 +7319,7 @@ textarea:focus {
 
 .apiWizardHeader h2 {
   margin: 8px 0 0;
-  color: #14181f;
+  color: var(--text);
   font-size: 22px;
   font-weight: 760;
 }
@@ -4342,23 +7335,23 @@ textarea:focus {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid #ccd2da;
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
 }
 
 .apiWizardSteps > span.active {
-  border-color: #458bc3;
-  background: #458bc3;
+  border-color: var(--accent);
+  background: var(--accent);
   color: #fff;
 }
 
 .apiWizardSteps > span.done {
-  border-color: #458bc3;
-  background: #eef5ff;
-  color: #205dcf;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .apiWizardCloseButton {
@@ -4367,10 +7360,10 @@ textarea:focus {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border: 1px solid #d8dee6;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
-  color: #475467;
+  color: var(--text-secondary);
 }
 
 .apiWizardBody {
@@ -4381,7 +7374,7 @@ textarea:focus {
 
 .apiWizardLead {
   margin: 0;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 15px;
   line-height: 1.7;
 }
@@ -4394,13 +7387,13 @@ textarea:focus {
 
 .apiWizardCard {
   padding: 16px;
-  border: 1px solid #d8dee6;
-  border-radius: 12px;
-  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
 }
 
 .apiWizardCard.required {
-  border-color: #458bc3;
+  border-color: var(--accent);
   background: #f5f9ff;
 }
 
@@ -4412,21 +7405,21 @@ textarea:focus {
 
 .apiWizardCard p {
   margin: 0;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .apiWizardCost {
   margin-top: 8px !important;
-  color: #667085 !important;
+  color: var(--text-muted) !important;
   font-size: 12px !important;
 }
 
 .apiWizardStepsList {
   margin: 0;
   padding-left: 1.3rem;
-  color: #344054;
+  color: var(--text-strong);
   font-size: 14px;
   line-height: 1.8;
 }
@@ -4438,7 +7431,7 @@ textarea:focus {
 .apiWizardStepNote {
   display: block;
   margin-top: 4px;
-  color: #667085;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -4449,7 +7442,7 @@ textarea:focus {
 }
 
 .apiWizardKeyLabel {
-  color: #344054;
+  color: var(--text-strong);
   font-size: 13px;
   font-weight: 700;
 }
@@ -4465,7 +7458,7 @@ textarea:focus {
   min-width: 0;
   height: 40px;
   padding: 0 12px;
-  border: 1px solid #d0d5dd;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
 }
 
@@ -4552,7 +7545,7 @@ textarea:focus {
 
 .apiWizardActiveProviderHint {
   margin: 6px 0 0;
-  color: #475467;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -4568,7 +7561,7 @@ textarea:focus {
   align-items: flex-start;
   gap: 6px;
   padding: 12px 14px;
-  border: 1px solid #d8dee6;
+  border: 1px solid var(--border);
   border-radius: 10px;
   background: #fafbfc;
   text-align: left;
@@ -4577,13 +7570,13 @@ textarea:focus {
 }
 
 .apiWizardProviderCard:hover {
-  border-color: #458bc3;
+  border-color: var(--accent);
 }
 
 .apiWizardProviderCard.selected {
-  border-color: #458bc3;
-  background: #eef5ff;
-  box-shadow: 0 0 0 1px #458bc3;
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .apiWizardProviderCardHeader {
@@ -4595,7 +7588,7 @@ textarea:focus {
 }
 
 .apiWizardProviderName {
-  color: #14181f;
+  color: var(--text);
   font-size: 14px;
   font-weight: 700;
 }
@@ -4615,15 +7608,15 @@ textarea:focus {
 }
 
 .apiWizardProviderBadge.neutral {
-  border: 1px solid #98a2b3;
-  background: #f9fafb;
-  color: #475467;
+  border: 1px solid var(--text-faint);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
 }
 
 .apiWizardProviderBadge.quality {
-  border: 1px solid #458bc3;
-  background: #eef5ff;
-  color: #205dcf;
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
 }
 
 .apiWizardProviderConfigured {
@@ -4660,8 +7653,2236 @@ textarea:focus {
   padding: 0;
   border: 0;
   background: none;
-  color: #458bc3;
+  color: var(--accent);
   font-size: inherit;
   font-weight: 700;
   text-decoration: underline;
+}
+
+/* --- フェーズU2: 起動フロー=テロップデザイン選択 --- */
+
+.designThemePicker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.designThemeCards {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.designThemeCard {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 128px;
+  padding: 8px 10px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.designThemeCard.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+.designThemeCard:disabled,
+.designThemeCard button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* 保存済みテーマは カード本体(選択) + 削除ボタン の複合のため内側ボタンで組む */
+.designThemeCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.designThemeCardName {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ミニプレビュー: 代表3種のスウォッチ(書き出しと同じTelopStyledText描画) */
+.designSwatchRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: #1f242e;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.designSwatch {
+  flex: 0 0 auto;
+}
+
+.designSwatchMissing {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+/* 削除はホバー時のみ表示(誤操作防止しつつ導線は欠落させない) */
+.designThemeDeleteButton {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #f2c1bd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #b42318;
+  cursor: pointer;
+}
+
+.designThemeCard:hover .designThemeDeleteButton,
+.designThemeDeleteButton:focus-visible {
+  display: inline-flex;
+}
+
+/* フェーズU6: 選択中カードの「調整」(種類ごとの割り当て+詳細エディタへの常設入口) */
+.designThemeAdjustButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border: 1px solid #b3ccf5;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.designThemeAdjustButton:hover {
+  background: #eff4ff;
+}
+
+.designThemeNewCard {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+  border-style: dashed;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 新規作成フロー: 使用シーン4択 */
+.designSceneGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.designSceneCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.designSceneCard:hover {
+  border-color: var(--accent);
+}
+
+.designSceneCardLabel {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* テーマ名の入力行(新規作成・名前をつけて保存) */
+.themeNamingRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.themeNamingRow input {
+  flex: 1;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.themeNamingRow button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* --- フェーズU4: 説明のホバー開示・詳細設定の折りたたみ --- */
+
+/* 常時表示の説明文の代わりに置く「?」アイコン(title属性で開示) */
+.helpIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: help;
+  flex: 0 0 auto;
+}
+
+.userDictionaryModalTitle {
+  display: flex;
+  align-items: center;
+}
+
+.advancedSettings {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.advancedSettings summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 760;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.advancedSettings[open] summary {
+  margin-bottom: 10px;
+}
+
+.advancedSettings > .field,
+.advancedSettings > .exportModeChoices {
+  margin-top: 8px;
+}
+
+/* U4: 保存先未指定時の短い表示(詳細はホバーで開示) */
+.outputPreviewPathUnset {
+  color: var(--text-faint);
+}
+
+/* 既定値から変更された詳細設定がある場合のバッジ(閉じたままでも分かるように) */
+.advancedSettingsBadge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #fff6e6;
+  border: 1px solid #f4cf87;
+  color: #a15c07;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- フェーズU7/U8: テーマ設計のシーンタイトル・オープニングセクション --- */
+
+.themeExtrasSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fcfcfd;
+}
+
+.themeExtrasSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.themeExtrasSectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.themeExtrasToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.themeExtrasDisabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.overlayTitlePatternRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* フェーズW1: 話者カラーセクション(2人目・3人目話者のプリセット選択) */
+.speakerColorsRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.speakerColorsSelectLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.speakerColorsSelectLabel select {
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.speakerColorsSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex: 0 0 auto;
+}
+
+/* フェーズW2: シーン演出(映像ギミック)セクションのpinch/zoomトグル並び */
+.videoEffectsRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.overlayTitlePatternCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  min-width: 132px;
+}
+
+.overlayTitlePatternCard.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.overlayTitlePatternCard:disabled {
+  cursor: default;
+}
+
+/* ミニ実描画の舞台。動画上の見え方に近いグレー背景で白文字系パターンも視認できるようにする */
+.overlayTitleSampleStage {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 8px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #8d97a5 0%, #6b7684 100%);
+  overflow: hidden;
+  min-height: 44px;
+}
+
+.overlayTitlePatternLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+  text-align: center;
+}
+
+.opPatternRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.opPatternCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.opPatternCard.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.opPatternLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.opPatternDuration {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.opPatternDescription {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* OPパターンの図解(CSSのみの構成イメージ) */
+.opFigure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.opFigureTitleCard {
+  flex-direction: column;
+  gap: 3px;
+  background: #16305e;
+}
+
+.opFigureTitle {
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.opFigureCatch {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 9px;
+}
+
+.opFigureTeaser {
+  gap: 2px;
+  background: #101828;
+  padding: 0 4px;
+}
+
+.opFigureClip {
+  flex: 1;
+  height: 34px;
+  border-radius: 3px;
+  background: linear-gradient(135deg, #5b6b83 0%, #38455c 100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.opFigureClipTitle {
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 800;
+  padding-bottom: 3px;
+}
+
+.opFigureQuestion {
+  background: #0b0b0d;
+}
+
+.opFigureQuestionText {
+  color: var(--bg-hover);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.opFigureNone {
+  background: #eef2f6;
+}
+
+.opFigureNoneText {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * フェーズV5: ハイライト予告の装飾4種(ミニ実描画カード)+テロップ登場アニメ3択
+ * ------------------------------------------------------------------------- */
+
+.opSubsectionLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.opDecorationBlock,
+.opTextAnimBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.opDecorationRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.opDecorationCard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.opDecorationCard.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* 装飾のミニ実描画(16:9の小さな舞台に各装飾の構図をCSSで描く) */
+.opDecoSample {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #5b6b83 0%, #38455c 100%);
+}
+
+.opDecoSampleTitleCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* flash_pop: 白フラッシュの残像を斜めのハイライトで示す */
+.opDecoSampleFlash {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 18%;
+  width: 22%;
+  transform: skewX(-16deg);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* cinema_bars: 上下黒帯+OPENING+クリップ番号 */
+.opDecoSampleBarTop,
+.opDecoSampleBarBottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 18%;
+  background: #000000;
+}
+
+.opDecoSampleBarTop {
+  top: 0;
+}
+
+.opDecoSampleBarBottom {
+  bottom: 0;
+}
+
+.opDecoSampleOpening {
+  position: absolute;
+  top: 3%;
+  left: 5%;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+}
+
+.opDecoSampleClipNo {
+  position: absolute;
+  bottom: 3%;
+  right: 5%;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+/* color_wipe: 斜めワイプ帯+下部ブランド色バー(タイトル常駐) */
+.opDecoSampleWipe {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  right: -6%;
+  width: 34%;
+  transform: skewX(-18deg);
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.opDecoSampleBrandBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+/* neon_frame: 縁のシアングロウ枠 */
+.opDecoSampleNeon {
+  position: absolute;
+  inset: 7%;
+  border: 1.5px solid #3de8ff;
+  border-radius: 3px;
+  box-shadow:
+    0 0 4px #3de8ff,
+    0 0 8px #3de8ff,
+    inset 0 0 4px #3de8ff;
+}
+
+.opTextAnimRow {
+  display: flex;
+  gap: 8px;
+}
+
+.opTextAnimChip {
+  padding: 5px 12px;
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.opTextAnimChip.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: #1d4ed8;
+}
+
+.opTextInputs {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.opTextInputLabel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.opTextInputLabel input {
+  height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------------------
+ * フェーズV2: OP編集モーダル(run単位 op_config.json のクリップ差し替えUI)
+ * ------------------------------------------------------------------------- */
+
+.opEditorModal {
+  width: min(720px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: #ffffff;
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.opEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e7ebf0;
+}
+
+.opEditorTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.opEditorCloseButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-secondary);
+}
+
+.opEditorBody {
+  padding: 12px 18px;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.opEditorClipsSection {
+  border-top: 1px solid #e7ebf0;
+  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.opEditorClipsHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.opEditorClipsMode {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.opEditorResetButton {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+}
+
+.opEditorResetButton:hover {
+  background: var(--bg-hover);
+}
+
+.opEditorEmpty {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.opEditorClipList {
+  display: grid;
+  gap: 8px;
+}
+
+.opEditorClipRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e4e8ee;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+}
+
+.opEditorClipOrder {
+  width: 18px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #6941c6;
+}
+
+.opEditorClipThumb {
+  width: 76px;
+  height: 44px;
+  border: 1px solid #d5dae2;
+  border-radius: 6px;
+  overflow: hidden;
+  padding: 0;
+  background: #101828;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.opEditorClipThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.opEditorClipThumbEmpty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1d2939 0%, var(--text-secondary) 100%);
+}
+
+.opEditorClipInfo {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.opEditorClipMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.opEditorClipTextInput {
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+/* フェーズW: クリップの表示方法(フックワード/発話テロップ)切替 */
+.opEditorClipDisplaySelect {
+  height: 22px;
+  margin-left: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* フェーズW: フックワード編集フィールド群 */
+.opEditorHookFields {
+  display: grid;
+  gap: 4px;
+}
+
+.opEditorHookTextInput {
+  height: auto;
+  min-height: 30px;
+  padding: 6px 9px;
+  resize: none;
+  font-weight: 700;
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+.opEditorHookMetaRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.opEditorHookKeywordInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.opEditorHookMetaRow .opEditorClipDisplaySelect {
+  margin-left: 0;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.opEditorClipActions {
+  display: flex;
+  gap: 4px;
+}
+
+.opEditorClipActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text-secondary);
+}
+
+.opEditorClipActions button:disabled {
+  opacity: 0.35;
+}
+
+.opEditorAddButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed var(--text-faint);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px;
+}
+
+.opEditorAddButton:hover {
+  background: var(--bg-hover);
+}
+
+.opEditorScenePicker {
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.opEditorScenePickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.opEditorScenePickerHeader button {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.opEditorScenePickerList {
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+}
+
+.opEditorScenePickerItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: none;
+  border-bottom: 1px solid #eef1f5;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.opEditorScenePickerItem:hover {
+  background: #f5f8ff;
+}
+
+.opEditorScenePickerItem img,
+.opEditorScenePickerItem .opEditorClipThumbEmpty {
+  width: 64px;
+  height: 36px;
+  border-radius: 5px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.opEditorScenePickerLabel {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.opEditorScenePickerNumber {
+  font-size: 11px;
+  font-weight: 800;
+  color: #6941c6;
+}
+
+.opEditorScenePickerText {
+  font-size: 12px;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opEditorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid #e7ebf0;
+}
+
+.opEditorFooter .primaryButton,
+.opEditorFooter .secondaryButton {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+/* フェーズV5-2: 保存失敗時のインラインエラー(成功時はモーダルを閉じてトースト表示) */
+.opEditorSaveError {
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b42318;
+}
+
+/*
+ * フェーズV3(OPのプレビュー再生): OPの映像外要素(ベタ背景・タイトル・キャッチ・フラッシュ)の
+ * DOM/CSS近似(OpPreviewOverlay.tsx)。Remotionのspringは厳密再現せず、U1のテロップアニメと
+ * 同方針で「同じ種類の動き」のkeyframesを使う。
+ */
+.opPreviewLayer {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.opPreviewCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* title_cardの奥行き用ビネット(Remotionと同じ配色) */
+.opPreviewVignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0.28) 100%);
+}
+
+/* タイトルのstamp(ドン)登場: scale2.5→1の強バウンス(Telopのstampと同じ味付け) */
+.opPreviewStamp {
+  animation: opPreviewStampIn 400ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes opPreviewStampIn {
+  0% {
+    opacity: 0;
+    transform: scale(2.5);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* キャッチコピー/問いテキストのフェード(Remotionは0.4〜0.5秒) */
+.opPreviewFadeIn {
+  animation: opPreviewFadeIn 450ms ease-out both;
+}
+@keyframes opPreviewFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* title_cardのアクセント下線: タイトル着地後に左から伸びる */
+.opPreviewBar {
+  width: 100%;
+  transform-origin: left center;
+  animation: opPreviewBarGrow 500ms ease-out 100ms both;
+}
+@keyframes opPreviewBarGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* teaserのタイトル被せ用の暗幕 */
+.opPreviewVeil {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  animation: opPreviewFadeIn 250ms ease-out both;
+}
+
+.opPreviewTitleCover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* クリップ切替の白フラッシュ(Remotion ClipFlash=先頭2フレームの近似) */
+.opPreviewFlash {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  animation: opPreviewFlash 120ms linear both;
+}
+@keyframes opPreviewFlash {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 転換の黒フェード(不透明度はJS側でフェーズ進行に応じて渡す) */
+.opPreviewOutro {
+  position: absolute;
+  inset: 0;
+  background: #000000;
+}
+
+/* ---------------------------------------------------------------------------
+ * フェーズV5: OP装飾のプレビュー近似(OpPreviewOverlay.tsx)
+ * ------------------------------------------------------------------------- */
+
+/* color_wipe: アクセント色の斜め帯が左→右へ抜ける(Remotion ClipColorWipe の近似) */
+.opPreviewWipe {
+  position: absolute;
+  top: -25%;
+  bottom: -25%;
+  left: -40%;
+  width: 170%;
+  transform: skewX(-18deg);
+  animation: opPreviewWipeAcross 280ms linear both;
+}
+@keyframes opPreviewWipeAcross {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 160% 0;
+  }
+}
+
+/* neon_frame: ズームイン転換の代替(映像は変形せず、シアンの縁パルスで転換を示す) */
+.opPreviewNeonPulse {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 60px #3de8ff;
+  animation: opPreviewFadeOutQuick 220ms ease-out both;
+}
+@keyframes opPreviewFadeOutQuick {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* cinema_bars: 上下黒帯と帯内ラベル */
+.opPreviewCinemaBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #000000;
+}
+
+.opPreviewCinemaLabel {
+  position: absolute;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  font-family: "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+
+/* color_wipe: 下部ブランド色バー(タイトル常駐) */
+.opPreviewBrandBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* neon_frame: 画面縁のネオンフレーム */
+.opPreviewNeonFrame {
+  position: absolute;
+  border-style: solid;
+}
+
+/* OP込みのタイムライン時刻表示(OPありrunのみ。ネイティブ再生バーは元動画基準のため補完する) */
+/* V6-3: 映像矩形の上に重ねず、映像の直下の帯に表示する(通常フロー。書き出しと誤解されない) */
+.previewTimelineClock {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111827;
+  padding: 3px 10px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* =============================================================================
+   フェーズW9: カスタムトランスポートバー(ネイティブcontrols代替)とフレーミング編集UI
+   ============================================================================= */
+
+/* 映像直下の再生コントロール帯(previewTimelineClockと同じ「映像に重ねない」方針) */
+.previewTransportBar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #111827;
+  padding: 5px 10px;
+}
+
+.previewTransportButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
+.previewTransportButton:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.previewTransportTime {
+  flex: none;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.previewTransportSeek {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: #7c5cbf;
+  cursor: pointer;
+}
+
+.previewTransportVolume {
+  flex: none;
+  width: 64px;
+  accent-color: #94a3b8;
+  cursor: pointer;
+}
+
+@media (max-width: 520px) {
+  .previewTransportVolume {
+    display: none;
+  }
+}
+
+/* W13-1: キャッシュ管理モーダル(apiWizardのダイアログ骨格を再利用) */
+.cacheTotalLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cacheOldHint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.cacheRunList {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.cacheRunRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cacheRunRow:last-child {
+  border-bottom: none;
+}
+
+.cacheRunName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cacheRunMeta {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.cacheRunBytes {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.cacheRunMore {
+  color: var(--text-muted);
+  justify-content: center;
+}
+
+.cacheDangerButton {
+  color: #b91c1c;
+}
+
+/* W10-10: グローバル range スライダーのモダン化(previewTransport・timelineZoom 等) */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent, #7c5cbf);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent, #7c5cbf);
+}
+
+.previewTransportSeek::-webkit-slider-runnable-track,
+.previewTransportVolume::-webkit-slider-runnable-track {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ステージ左下のモードボタン(変形/クロップ)。FCP風の控えめなダークオーバーレイ */
+.previewFramingModeButtons {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+  transform: translateY(-100%);
+}
+
+.previewFramingEditActions {
+  position: absolute;
+  z-index: 7;
+  display: flex;
+  gap: 4px;
+  transform: translateX(-100%);
+}
+
+.previewFramingModeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 5px;
+  background: rgba(17, 24, 39, 0.78);
+  padding: 3px 8px;
+  color: #e5e7eb;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.previewFramingModeButton:hover:not(:disabled) {
+  background: rgba(31, 41, 55, 0.92);
+}
+
+.previewFramingModeButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.previewFramingModeButton.isActive {
+  border-color: #a78bfa;
+  background: rgba(76, 53, 117, 0.85);
+  color: #ede9fe;
+}
+
+.previewFramingModeButton.isPrimary {
+  border-color: rgba(167, 139, 250, 0.7);
+  background: rgba(109, 40, 217, 0.75);
+}
+
+/* 編集レイヤー(編集モード中のみ)。pointer-events をここへ集約する */
+.previewFramingEditLayer {
+  z-index: 5;
+}
+
+.previewFramingMoveSurface {
+  position: absolute;
+  inset: 0;
+  cursor: move;
+}
+
+/* 有効映像(変形)・クロップ枠の外周 */
+.previewFramingFrame {
+  position: absolute;
+  border: 1.5px solid rgba(167, 139, 250, 0.95);
+  pointer-events: none;
+}
+
+.previewFramingFrameCrop {
+  border-color: rgba(255, 255, 255, 0.95);
+}
+
+/* W13-7: 画角(キャンバス=書き出し範囲)の枠線。はみ出し構図でも書き出し範囲が分かる */
+.previewFramingCanvasOutline {
+  position: absolute;
+  border: 1.5px solid rgba(96, 165, 250, 0.9);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* フル映像の輪郭(クロップモード) */
+.previewFramingVideoOutline {
+  position: absolute;
+  border: 1px dashed rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+/* クロップ外の半透明ディム */
+.previewFramingDim {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+/* ドラッグハンドル(変形=四隅 / クロップ=辺4+隅4) */
+.previewFramingHandle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(17, 24, 39, 0.9);
+  border-radius: 2px;
+  background: #fff;
+  pointer-events: auto;
+}
+
+.previewFramingHandle-nw {
+  left: -6px;
+  top: -6px;
+}
+
+.previewFramingHandle-ne {
+  right: -6px;
+  top: -6px;
+}
+
+.previewFramingHandle-sw {
+  left: -6px;
+  bottom: -6px;
+}
+
+.previewFramingHandle-se {
+  right: -6px;
+  bottom: -6px;
+}
+
+.previewFramingHandle-left {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.previewFramingHandle-right {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.previewFramingHandle-top {
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.previewFramingHandle-bottom {
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* V3: OPブロックの編集ボタン(ブロック本体クリック=OP内シークへ変更したため別導線にする) */
+.tlOpEditButton {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b79ae0;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 1px 3px;
+  color: #6d3fc0;
+  cursor: pointer;
+}
+
+.tlOpEditButton:hover {
+  border-color: #6d3fc0;
+  background: #f6f0ff;
+}
+
+/* ============================================================
+ * デザイン刷新(2026-07): モーダルの出現アニメーションを共通付与。
+ * バックドロップはフェード、ダイアログは軽い浮き上がり。
+ * ============================================================ */
+@keyframes uiBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes uiDialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.commandPaletteBackdrop,
+.themeGalleryBackdrop,
+.apiWizardBackdrop,
+.overlayEditModal {
+  animation: uiBackdropIn 0.16s ease;
+}
+
+.commandPalette,
+.telopReplaceModal,
+.userDictionaryModal,
+.themeGalleryDialog,
+.telopStyleEditorModal,
+.telopTypeMappingModal,
+.opEditorModal,
+.apiWizardDialog,
+.exportSettingsModal,
+.exportDoneModal,
+.orientationChoiceModal,
+.overlayEditModalBody {
+  animation: uiDialogIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- フェーズW7: プロジェクト一覧(検品段階からの再編集) --- */
+
+.projectListPage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.projectListHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.projectListTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.projectListCount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.projectListHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.projectListEmpty {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.projectListGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.projectCard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.projectCard:hover {
+  border-color: var(--accent-soft);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.1);
+  transform: translateY(-1px);
+}
+
+.projectCardOpening {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.projectCardThumb {
+  position: relative;
+  flex: 0 0 96px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-muted);
+  color: var(--text-faint);
+  overflow: hidden;
+}
+
+.projectCardThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.projectCardDuration {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(15, 20, 28, 0.72);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.projectCardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.projectCardName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.projectCardMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.projectCardBadge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.projectCardBadgeDone {
+  color: var(--success);
+  background: #ecfdf3;
+  border-color: #bbe7c9;
+}
+
+.projectCardBadgeSaved {
+  color: var(--accent-strong);
+  background: var(--accent-bg);
+  border-color: var(--accent-soft);
+}
+
+.projectCardBadgeWarn {
+  color: #b54708;
+  background: #fffaeb;
+  border-color: #f5d998;
+}
+
+.projectCardActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.projectCardIconButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.projectCardIconButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.projectCardDeleteButton:hover {
+  border-color: #f3c1bb;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.projectCardOpeningLabel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* 検品ヘッダの「プロジェクト一覧」戻りボタン */
+.sceneProjectsBackButton {
+  white-space: nowrap;
+}
+
+/* --- フェーズW7: 書き出し設定モーダル --- */
+
+.exportSettingsModal,
+.exportDoneModal {
+  width: min(520px, 92vw);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: #ffffff;
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.exportSettingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e7ebf0;
+}
+
+.exportSettingsTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.exportSettingsCloseButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.exportSettingsCloseButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.exportSettingsBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.exportSettingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.exportSettingsField input,
+.exportSettingsField select {
+  font-size: 13px;
+}
+
+.exportSettingsRow {
+  display: flex;
+  gap: 12px;
+}
+
+.exportSettingsPathPreview {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exportSettingsRadioGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.exportSettingsRadioOption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid #e7ebf0;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.exportSettingsRadioOption:has(input:checked) {
+  border-color: #c4b5fd;
+  background: #faf8ff;
+}
+
+.exportSettingsRadioOption input[type="radio"] {
+  margin-top: 2px;
+}
+
+.exportSettingsRadioLabel {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.exportSettingsRadioHint {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.exportSettingsFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid #e7ebf0;
+  background: var(--bg-subtle);
+}
+
+/* --- フェーズW8: 素材選択時の縦横選択モーダル --- */
+
+.orientationChoiceModal {
+  width: min(480px, 92vw);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: #ffffff;
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.orientationChoiceBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.orientationChoiceCards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.orientationChoiceCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.orientationChoiceCard:hover {
+  background: var(--bg-hover);
+}
+
+.orientationChoiceCard.selected {
+  border-color: var(--accent, #2563eb);
+  box-shadow: 0 0 0 1px var(--accent, #2563eb) inset;
+  background: #f5f9ff;
+  color: var(--text-strong);
+}
+
+/* 16:9 / 9:16 のミニ枠図解(CSSのみ) */
+.orientationChoiceFrame {
+  width: 64px;
+  height: 36px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  opacity: 0.85;
+}
+
+.orientationChoiceFrame.vertical {
+  width: 36px;
+  height: 64px;
+}
+
+.orientationChoiceCardTitle {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.orientationChoiceCardDescription {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.orientationChoiceAutoBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle);
+  padding: 1px 6px;
+}
+
+.orientationChoiceNote {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 10px;
+}
+
+/* 左ペイン: 動画パス入力+チップの横並びセル(.pathRowの1列目に収める) */
+.videoPathCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.videoPathCell input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 左ペイン: ファイル名横の選択結果チップ(クリックで再選択) */
+.orientationChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.orientationChip:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+/* --- フェーズW7: 書き出し完了モーダル(プロジェクト保存の確認) --- */
+
+.exportDoneHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.exportDoneHeader svg {
+  color: var(--success);
+}
+
+.exportDoneBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 18px 16px;
+}
+
+.exportDonePath {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exportDoneQuickActions {
+  display: flex;
+  gap: 8px;
+}
+
+.exportDoneLearningMessage {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.exportDoneQuickActions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.exportDoneQuickActions button:hover {
+  background: var(--bg-hover);
+  color: var(--text-strong);
+}
+
+.exportDoneQuestion {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.exportDoneWarn {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #b54708;
+  background: #fffaeb;
+  border: 1px solid #f5d998;
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 10px;
+}
+
+.exportDoneFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid #e7ebf0;
+  background: var(--bg-subtle);
+}
+
+.exportDoneFooterRight {
+  display: flex;
+  gap: 10px;
+}
+
+.exportDoneDeleteButton {
+  padding: 8px 14px;
+  border: 1px solid #f3c1bb;
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--danger);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exportDoneDeleteButton:hover {
+  background: var(--danger-bg);
 }

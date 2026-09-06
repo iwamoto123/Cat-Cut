@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = ROOT / ".venv" / "bin" / "python"
 sys.path.insert(0, str(ROOT / "python"))
-from shared.app_paths import default_user_dictionary_path
+from shared.app_paths import default_correction_history_path, default_user_dictionary_path
 from shared.project_config import load_project_config
 
 
@@ -255,6 +255,9 @@ def run_pipeline(
                 str(project.relative_to(ROOT)),
                 "--output",
                 str(rel_run / "step06b_ai_refine" / "refine.json"),
+                # W14-2: ユーザーが過去に確定した修正例(誤→正)をプロンプトへ注入(無ければ従来動作)
+                "--correction-history",
+                str(default_correction_history_path()),
             ],
             env=env,
         )

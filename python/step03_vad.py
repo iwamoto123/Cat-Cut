@@ -67,7 +67,13 @@ def run_step(
     ) = utils
 
     # 音声読み込み
-    waveform = read_audio(str(audio_path), sampling_rate=SAMPLING_RATE)
+    # silero-vad の read_audio は torchaudio のバージョンによって torchcodec を
+    # 要求することがある（Intel Mac には提供が無い）ため、失敗時は ffmpeg で読む
+    try:
+        waveform = read_audio(str(audio_path), sampling_rate=SAMPLING_RATE)
+    except Exception as e:
+        print(f"  read_audio failed ({type(e).__name__}); falling back to ffmpeg decode")
+        waveform = _read_audio_ffmpeg(str(audio_path), SAMPLING_RATE)
     audio_duration_ms = int(waveform.shape[-1] / SAMPLING_RATE * 1000)
 
     # VAD パラメータ
@@ -143,6 +149,24 @@ def run_step(
 
     print(f"[Step 3] Done: {output_path}")
     return result
+
+
+def _read_audio_ffmpeg(audio_path: str, sampling_rate: int) -> "torch.Tensor":
+    """ffmpeg で音声をデコードして 1D float32 テンソルを返す（read_audio の代替）。"""
+    import subprocess
+
+    import numpy as np
+
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error",
+        "-i", audio_path,
+        "-f", "f32le", "-acodec", "pcm_f32le",
+        "-ac", "1", "-ar", str(sampling_rate),
+        "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, check=True)
+    samples = np.frombuffer(proc.stdout, dtype=np.float32).copy()
+    return torch.from_numpy(samples)
 
 
 def _load_silero_model():

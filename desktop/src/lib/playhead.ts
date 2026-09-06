@@ -243,8 +243,8 @@ export function resolveMatchingCutMark(
 }
 
 /**
- * ↑/↓キー: 表示中のシーン一覧(要確認フィルタ中はフラグ行のみ)の中で、現在行から
- * 前後に隣接する行のidを返す。移動先が無ければnull。
+ * ↑/↓キー: 表示中のシーン一覧の中で、現在行から前後に隣接する行のidを返す。
+ * 移動先が無ければnull(W5-6: 要確認フィルタは廃止され、常に全シーンが対象)。
  */
 export function findAdjacentSceneId(
   displayedScenes: Scene[],
@@ -285,8 +285,24 @@ export type GroupChipCaretTarget = GroupChipTarget;
 export function resolveCaretDeleteLeftTarget(scene: Scene, groupIndex: number): GroupChipTarget | null {
   if (groupIndex <= 0) return null;
   const groups = buildWordGroups(scene);
-  const group = groups[groupIndex - 1];
-  return group ? { sceneId: scene.id, wordIds: group.wordIds } : null;
+  if (groupIndex > groups.length) return null;
+  // W18: Delete連打では削除済みグループを飛ばし、さらに左の未削除グループへ進む。
+  for (let index = Math.min(groupIndex - 1, groups.length - 1); index >= 0; index -= 1) {
+    const group = groups[index];
+    if (!group.deleted) return { sceneId: scene.id, wordIds: group.wordIds };
+  }
+  return null;
+}
+
+/** W16-4: キャレット右隣のグループを削除する対象を求める(行末=右隣が無い場合はnull)。 */
+export function resolveCaretDeleteRightTarget(scene: Scene, groupIndex: number): GroupChipTarget | null {
+  const groups = buildWordGroups(scene);
+  if (groupIndex < 0 || groupIndex >= groups.length) return null;
+  for (let index = Math.max(0, groupIndex); index < groups.length; index += 1) {
+    const group = groups[index];
+    if (!group.deleted) return { sceneId: scene.id, wordIds: group.wordIds };
+  }
+  return null;
 }
 
 /** キャレット位置でシーンを分割する対象(分割対象グループの先頭文字wordId)を求める。行頭/行末はnull。 */

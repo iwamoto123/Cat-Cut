@@ -158,6 +158,7 @@ test("deriveDirectedSlots: scenesから絶対ms範囲付きのスロット編集
     highlightWords: ["3万円"],
     typeId: null,
     styleOverridden: true,
+    animationIn: null,
   });
   assert.equal(slots[1].styleId, "question_blue");
 });

@@ -1,0 +1,56 @@
+# フェーズU8: OP(オープニング)パターン定義
+#
+# ネット調査の設計指針(仕様書 2026-07-06_catcut-ux-overhaul-spec.md フェーズU8):
+# - 長さは3〜7秒が鉄則(10秒超は離脱)
+# - 要素はタイトル・キャッチコピー・キメ音をテンポよく。文字は最小限・最大2行
+# - 音と絵の同期(タイトルが出る瞬間にキメ音)が印象を決める
+# - 動きは2〜3種類に絞る
+#
+# このファイルは python/shared/opening.py(step08のOP挿入)が読む「タイミング・音の正」。
+# 実描画は remotion/src/compositions/OpSequence.tsx、UIの選択カードは
+# desktop/src/lib/designExtras.ts(idと表示名の整合は desktop/tests/designExtras.test.ts が検証)。
+#
+# sfx_hit / sfx_transition は assets/sfx/ の効果音ID(don=ドン / hyu=ヒュッ=whoosh系)。
+
+version: 1
+patterns:
+  # OPなし(既定)。従来通り本編から始まる=完全後方互換
+  - id: none
+    label: OPなし
+    description: オープニングを付けず、従来どおり本編から始めます
+
+  # タイトルカード型(約4秒): ブランド色ベタ背景 → タイトルがドン(stamp+キメ音) →
+  # キャッチコピーfade → 短い黒フェード+whooshで本編へ
+  - id: title_card
+    label: タイトルカード
+    description: ブランド色の背景にタイトルがドンと出る定番型(約4秒)
+    duration_ms: 4000
+    sfx_hit: don
+    sfx_transition: hyu
+
+  # ハイライト先出し型(フェーズW: 3〜5クリップ・合計10〜15秒で統一):
+  # OPディレクター(step06cの第2パス)が動画全体から「開幕フック→畳みかけ→引き」の構成で
+  # クリップを最終選定し、各クリップに発話を1〜2語へ凝縮した「フックワード」
+  # (hook_text。核心語はkeyword/keyword_colorで色分け)を付ける。Remotion側は
+  # display=hook のクリップでフックワードを画面いっぱいの極太文字で表示し、
+  # display=verbatim では従来どおり発話テロップ(text/style)を横スライドで出す。
+  # クリップは runs/<run>/op_config.json の clips でユーザーが差し替え・並び替え・
+  # 文言編集できる(clips=null はAI自動選定)
+  - id: highlight_teaser
+    label: ハイライト先出し
+    description: 見どころをフックワード付きで畳みかけてからタイトル(10〜15秒)
+    clip_min_ms: 1500
+    clip_max_ms: 3500
+    max_clips: 5
+    # クリップ合計の目標上限(1クリップ上限=target_total_ms/クリップ数で自動調整)
+    target_total_ms: 15000
+    # タイトル被せ分の追い足し(クリップ合計に加算はしない。被せ表示は終端1.4秒)
+    sfx_hit: don
+
+  # 問いかけ・煽り型(約5秒): 暗背景+問いテキスト(catch_copy)fade → タイトル → 本編
+  - id: question_hook
+    label: 問いかけフック
+    description: 暗い背景に問いかけで引き込んでからタイトル(約5秒)
+    duration_ms: 5000
+    sfx_hit: don
+    sfx_transition: hyu

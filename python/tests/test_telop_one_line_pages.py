@@ -25,11 +25,12 @@ class DefaultConfigTests(unittest.TestCase):
         self.assertEqual(cfg["telop"]["max_lines_per_page"], 1)
         self.assertEqual(cfg["telop"]["max_chars_per_line"], 12)
 
-    def test_vertical_template_is_one_line_12_chars(self):
+    def test_vertical_template_is_one_line_11_chars(self):
+        # W30: 12→11字(フィット幅86%で84px級フォントが縮小なしで入る行長)
         project_root = Path(__file__).resolve().parents[2]
         cfg = load_project_config(str(project_root / "templates" / "vertical.yaml"))
         self.assertEqual(cfg["telop"]["max_lines_per_page"], 1)
-        self.assertEqual(cfg["telop"]["max_chars_per_line"], 12)
+        self.assertEqual(cfg["telop"]["max_chars_per_line"], 11)
 
     def test_horizontal_template_is_one_line_16_chars(self):
         project_root = Path(__file__).resolve().parents[2]

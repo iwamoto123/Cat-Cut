@@ -112,6 +112,59 @@ class ApplyTelopTests(unittest.TestCase):
         self.assertEqual(telops[1]["start"], 1.0)
         self.assertEqual(telops[1]["end"], 2.5)
 
+    def test_remap_preserves_direction_metadata(self):
+        """フェーズW31: type/アニメ/SFX/話者/上書きフラグはremapで剥がれない。
+
+        従来はここで毎回失われ、type別アニメ・SFX・W31アニメローテーションが
+        レンダリング(voice_data.cuts.telopsを読む)に一切反映されていなかった。
+        """
+        text = """# cut_001_p00 [00:00.00-00:01.00]
+決めゼリフです
+"""
+        page_map, style_map, timing_map = parse_telop(text)
+        comp = {
+            "timeline": {
+                "cuts": [
+                    {
+                        "cut_id": "cut_001",
+                        "timeline": {"start_ms": 0, "end_ms": 1000},
+                        "telop": {"pages": [{"id": "cut_001_p00", "lines": ["決めゼリフです"]}]},
+                    }
+                ]
+            },
+            "voice_data": {
+                "cuts": [
+                    {
+                        "id": "cut_001",
+                        "voice": {"words": [{"text": "決めゼリフです", "start": 0.0, "end": 1.0}]},
+                        "telops": [
+                            {
+                                "id": "cut_001_p00",
+                                "text": "決めゼリフです",
+                                "word_indices": [0],
+                                "segments": [],
+                                "type": "emphasis",
+                                "animation_in": "slam",
+                                "sfx": None,
+                                "speaker": "speaker_1",
+                                "animation_overridden": True,
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+
+        apply_to_composition(comp, page_map, style_map, timing_map)
+
+        telop = comp["voice_data"]["cuts"][0]["telops"][0]
+        self.assertEqual(telop["type"], "emphasis")
+        self.assertEqual(telop["animation_in"], "slam")
+        self.assertIn("sfx", telop)
+        self.assertIsNone(telop["sfx"])  # 明示的に鳴らさない指定を保持
+        self.assertEqual(telop["speaker"], "speaker_1")
+        self.assertTrue(telop["animation_overridden"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -82,9 +82,10 @@ def build_telop_pages(
     for i, raw in enumerate(raw_pages):
         # 改善9-A-3(a): 「。」のみ除去。「、」等は行中で保持する。
         cleaned_lines = [_remove_periods(line) for line in raw["lines"]]
-        # text_rules による正規化
-        if text_rules:
-            cleaned_lines = [_normalize_text(line, text_rules) for line in cleaned_lines]
+        # text_rules による正規化。text_rules 未設定(学習ルール無し)の run でも
+        # 漢数字の算用化・固有名詞の正式表記は常に適用する(2026-07-06: 「五割」「一万回」等が
+        # 学習ルールの無い run でそのまま残るバグの修正。normalize_* の既定はTrue)
+        cleaned_lines = [_normalize_text(line, text_rules or {}) for line in cleaned_lines]
         # 改善15-C: BudouX分割後の行末読点を除去
         cleaned_lines = [clean_telop_line(line) for line in cleaned_lines]
         # 空行を除外
@@ -181,7 +182,7 @@ _KANJI_NUM_CHARS = "〇零一二三四五六七八九十百千万億兆"
 _COUNTER_SUFFIXES_STR = (
     "円|個|本|人|回|件|枚|台|匹|頭|冊|杯|"
     "度|時|分|秒|時間|日|週間|ヶ月|か月|カ月|年|月|"
-    "点|パー|％|%|倍|問|割|語|"
+    "点|パー|％|%|倍|問|割|語|周|ミス|"
     "パーセント|"
     "キロ|キロメートル|キログラム|グラム|メートル|メーター|センチ|ミリ|トン|"
     "ヘルツ|ボルト|アンペア|ワット|リットル|"
@@ -369,6 +370,17 @@ def _normalize_proper_nouns(text: str) -> str:
         if wrong in text:
             text = text.replace(wrong, correct)
     return text
+
+
+def normalize_directed_display_text(text: str) -> str:
+    """directed テロップ文言の共通正規化(フェーズV8-4)。
+
+    fullモードの build_telop_pages が常時適用している _normalize_text
+    (漢数字→算用数字・固有名詞の正式表記)を、directed 経路の表示文言にも
+    かけるための公開ヘルパー。手動改行("\\n")は行の意図(V7)なので、
+    行ごとに正規化して改行位置を壊さない。
+    """
+    return "\n".join(_normalize_text(line, {}) for line in str(text or "").split("\n"))
 
 
 def build_voice_data(

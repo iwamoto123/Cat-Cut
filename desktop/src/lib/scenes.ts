@@ -4,6 +4,8 @@ import type { SuspicionItem } from "./suspicionQueue.ts";
 import { detectEmotionTag, type EmotionTag } from "./emotionTag.ts";
 import { type TelopThemeId, resolveEffectiveStyleId } from "./telopThemes.ts";
 import { normalizeTelopDisplayText } from "./telopTextNormalize.ts";
+import { isTrivialUtteranceText } from "./trivialUtterance.ts";
+import type { VideoEffectOverride } from "./videoEffectCatalog.ts";
 
 /**
  * シーン行UI（検品UI v2 Phase 1）のデータモデル。
@@ -30,6 +32,13 @@ export type SceneWord = {
    * (仕様書「トリムアウトの単語処理」節)。省略可能(未指定は手動削除と同じ扱い)。
    */
   autoTrimmed?: boolean;
+  /**
+   * W16-1(無音チップ): 単語間ギャップから生成された無音区間word。textは常に空文字
+   * (テロップ・書き出しテキストへ一切影響させない)。チップUIでは `[...]` ラベルで表示し、
+   * 削除すればその区間が書き出しからカットされる(computeSceneKeptSubRangesの既存規則)。
+   * 省略可能(silence無しの既存run/ドラフトは完全に従来動作)。
+   */
+  silence?: boolean;
 };
 
 export type Scene = {
@@ -80,7 +89,24 @@ export type Scene = {
    * null/undefined なら上書きなし(type→マッピング → プリセット既定で解決される)。
    */
   directedAnimationIn?: string | null;
+  /** シーン映像演出の手動指定。undefined/null=自動、none=明示的になし。 */
+  videoEffectOverride?: VideoEffectOverride | null;
+  /**
+   * フェーズW1(directedモード): スロットの話者ID("speaker_0"等。diarize由来の
+   * dominant speaker)。話者カラー発動時のスタイル解決に使う。旧run・fullモードでは未指定。
+   */
+  speaker?: string;
+  /** 素材再生速度。1=等速。書き出し・タイムライン尺に効く。未指定は1。 */
+  speed?: number;
 };
+
+export const SCENE_SPEEDS = [1, 1.25, 1.5, 2] as const;
+export type SceneSpeed = (typeof SCENE_SPEEDS)[number];
+
+export function normalizeSceneSpeed(speed: unknown): SceneSpeed {
+  const value = Number(speed);
+  return SCENE_SPEEDS.includes(value as SceneSpeed) ? (value as SceneSpeed) : 1;
+}
 
 export type SourceWord = {
   id: string;
@@ -88,6 +114,8 @@ export type SourceWord = {
   startMs: number;
   endMs: number;
   sentenceId?: string;
+  /** フェーズW1: diarize時の話者ID。旧runでは undefined。 */
+  speaker?: string;
 };
 
 export type SourceSentence = {
@@ -109,8 +137,16 @@ export type TelopPageBoundary = {
   typeId?: string;
   /** フェーズT2.5-4(directedモード): styleId が個別上書き(type→presetマッピングより優先)かどうか。 */
   styleOverridden?: boolean;
+  /**
+   * フェーズT3(directedモード): 登場アニメの個別上書き(UIピッカー由来のもののみ。
+   * マッピング・プリセット既定由来の解決結果は含まれない)。
+   */
+  animationIn?: string;
+  videoEffectOverride?: VideoEffectOverride;
   /** フェーズT2(directedモード): ディレクティブの部分強調語。 */
   highlightWords?: string[];
+  /** フェーズW1(directedモード): スロットの話者ID。旧runでは未指定。 */
+  speaker?: string;
 };
 
 export type InitializeScenesInput = {
@@ -150,21 +186,68 @@ export function autoTelopTextFromWords(words: SceneWord[]): string {
   return normalizeTelopDisplayText(joined);
 }
 
+/** W16-1(無音チップ): この長さ以上の単語間ギャップを無音チップとして挿入する(ms)。 */
+export const SILENCE_CHIP_MIN_MS = 500;
+
+/**
+ * W16-1(無音チップ): 隣接する単語間のギャップが minGapMs 以上なら、そのギャップ区間を
+ * 無音word(text空文字・silence: true)として挿入する。シーン先頭/末尾の無音は既存の
+ * 端トリムで扱えるため対象外。idは前の単語のidから決定的に導出する(単語idはrun内で
+ * 一意なため、無音idも一意になる)。
+ */
+export function insertSilenceChipWords(words: SceneWord[], minGapMs: number = SILENCE_CHIP_MIN_MS): SceneWord[] {
+  if (words.length < 2) return words;
+  const result: SceneWord[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    result.push(word);
+    const next = words[index + 1];
+    if (!next) continue;
+    const gapMs = next.startMs - word.endMs;
+    if (gapMs >= minGapMs) {
+      result.push({
+        id: `sil_${word.id}`,
+        text: "",
+        startMs: word.endMs,
+        endMs: next.startMs,
+        deleted: false,
+        silence: true,
+      });
+    }
+  }
+  return result;
+}
+
 function buildScene(
   words: SourceWord[],
   sourceStartMs: number,
   sourceEndMs: number,
   telopTextOverride?: string,
-  directedFields?: { styleId?: string; typeId?: string; styleOverridden?: boolean; highlightWords?: string[] },
+  directedFields?: {
+    styleId?: string;
+    typeId?: string;
+    styleOverridden?: boolean;
+    animationIn?: string;
+    videoEffectOverride?: VideoEffectOverride;
+    highlightWords?: string[];
+    speaker?: string;
+  },
 ): Scene {
-  const sceneWords: SceneWord[] = words.map((word) => ({
-    id: word.id,
-    text: word.text,
-    startMs: word.startMs,
-    endMs: word.endMs,
-    deleted: false,
-  }));
-  const telopText = telopTextOverride ?? autoTelopTextFromWords(sceneWords);
+  // W16-1: 単語間の長い無音をチップとして挿入する(テキストは空=テロップへ影響しない)。
+  const sceneWords: SceneWord[] = insertSilenceChipWords(
+    words.map((word) => ({
+      id: word.id,
+      text: word.text,
+      startMs: word.startMs,
+      endMs: word.endMs,
+      deleted: false,
+    })),
+  );
+  const rawTelopText = telopTextOverride ?? autoTelopTextFromWords(sceneWords);
+  // W10-7(相槌・極短シーンのテロップ空欄化): 「うん」「はい」「あのー」等の相槌・フィラーだけの
+  // シーンは、初期テロップを空欄にする(words・再生区間はそのまま=映像は残りテロップだけ非表示)。
+  // ユーザーがtextareaへ入力すればtelopEdited=true経路で表示される。
+  const telopText = isTrivialUtteranceText(rawTelopText) ? "" : rawTelopText;
   const scene: Scene = {
     id: nextSceneId(),
     sourceStartMs,
@@ -186,7 +269,12 @@ function buildScene(
     if (directedFields.styleId && (directedFields.styleOverridden || !directedFields.typeId)) {
       scene.directedStyleId = directedFields.styleId;
     }
+    // フェーズT3: アニメの個別上書き(animation_overridden由来)はシーンに復元する
+    if (directedFields.animationIn) scene.directedAnimationIn = directedFields.animationIn;
+    if (directedFields.videoEffectOverride) scene.videoEffectOverride = directedFields.videoEffectOverride;
     scene.directedHighlightWords = directedFields.highlightWords ?? [];
+    // フェーズW1: スロットの話者ID(話者カラー発動時のスタイル解決に使う)
+    if (directedFields.speaker) scene.speaker = directedFields.speaker;
   }
   return scene;
 }
@@ -465,12 +553,15 @@ function initializeScenesFromPageBoundaries(
       const sceneWords = segmentWords.filter((word) => word.startMs < endMs && word.endMs > startMs);
       const pageText = typeof page.text === "string" && page.text.trim() ? page.text.trim() : undefined;
       const directedFields =
-        page.styleId || page.typeId
+        page.styleId || page.typeId || page.videoEffectOverride
           ? {
               styleId: page.styleId,
               typeId: page.typeId,
               styleOverridden: page.styleOverridden,
+              animationIn: page.animationIn,
+              videoEffectOverride: page.videoEffectOverride,
               highlightWords: page.highlightWords,
+              speaker: page.speaker,
             }
           : undefined;
       if (sceneWords.length) scenes.push(buildScene(sceneWords, startMs, endMs, pageText, directedFields));
@@ -524,16 +615,32 @@ export function initializeScenes(input: InitializeScenesInput): Scene[] {
   return scenes;
 }
 
-/** シーン内で削除された単語区間を [sourceStartMs, sourceEndMs] から取り除いた残存区間(複数になり得る)。 */
+/** シーン内で削除された単語区間を [sourceStartMs, sourceEndMs] から取り除いた残存区間(複数になり得る)。
+ *
+ * V8追補(リップル削除の無音断片対策): 削除は「連続して削除された単語のラン」単位で
+ * [先頭単語のstart, 末尾単語のend] のスパンとして扱う(単語間のポーズも一緒に消す)。
+ * さらにランがシーン先頭/末尾の単語を含む場合はシーン境界まで拡張する。これをしないと、
+ * シーン丸ごと削除(全単語deleted)でも単語間ポーズ・シーン端の余白が数百msの無音断片として
+ * keep_segmentsに残り、タイムラインのスキマ・再生/書き出しの無音区間になる。 */
 export function computeSceneKeptSubRanges(scene: Scene): Array<{ startMs: number; endMs: number }> {
-  const deletedRanges = scene.words
-    .filter((word) => word.deleted)
-    .map((word) => ({
-      startMs: Math.max(scene.sourceStartMs, word.startMs),
-      endMs: Math.min(scene.sourceEndMs, word.endMs),
-    }))
-    .filter((range) => range.endMs > range.startMs)
-    .sort((a, b) => a.startMs - b.startMs);
+  // 単語配列の並び順(=チップ表示順・時系列)で、連続する削除単語をランへまとめる
+  const deletedRanges: Array<{ startMs: number; endMs: number }> = [];
+  let runStartIndex = -1;
+  for (let index = 0; index <= scene.words.length; index += 1) {
+    const isDeleted = index < scene.words.length && scene.words[index].deleted;
+    if (isDeleted && runStartIndex === -1) runStartIndex = index;
+    if (!isDeleted && runStartIndex !== -1) {
+      const firstWord = scene.words[runStartIndex];
+      const lastWord = scene.words[index - 1];
+      const startMs =
+        runStartIndex === 0 ? scene.sourceStartMs : Math.max(scene.sourceStartMs, firstWord.startMs);
+      const endMs =
+        index === scene.words.length ? scene.sourceEndMs : Math.min(scene.sourceEndMs, lastWord.endMs);
+      if (endMs > startMs) deletedRanges.push({ startMs, endMs });
+      runStartIndex = -1;
+    }
+  }
+  deletedRanges.sort((a, b) => a.startMs - b.startMs);
 
   const mergedDeleted: Array<{ startMs: number; endMs: number }> = [];
   for (const range of deletedRanges) {
@@ -555,32 +662,37 @@ export function computeSceneKeptSubRanges(scene: Scene): Array<{ startMs: number
   return result.filter((range) => range.endMs > range.startMs);
 }
 
-type ScenePiece = { startMs: number; endMs: number; sceneIndex: number };
+type ScenePiece = { startMs: number; endMs: number; sceneIndex: number; speed: SceneSpeed };
 
 function collectScenePieces(scenes: Scene[]): ScenePiece[] {
   const pieces: ScenePiece[] = [];
   scenes.forEach((scene, sceneIndex) => {
     for (const range of computeSceneKeptSubRanges(scene)) {
-      pieces.push({ ...range, sceneIndex });
+      pieces.push({ ...range, sceneIndex, speed: normalizeSceneSpeed(scene.speed) });
     }
   });
   return pieces.sort((a, b) => a.startMs - b.startMs);
 }
 
-type MergedSceneGroup = { startMs: number; endMs: number; sceneIndices: number[] };
+type MergedSceneGroup = { startMs: number; endMs: number; sceneIndices: number[]; speed: SceneSpeed };
 
 /** 連続/重複する区間ピースを合併し、各グループに寄与したシーンのindex(出現順・重複なし)を記録する。 */
 function groupScenePieces(pieces: ScenePiece[]): MergedSceneGroup[] {
   const groups: MergedSceneGroup[] = [];
   for (const piece of pieces) {
     const last = groups[groups.length - 1];
-    if (last && piece.startMs <= last.endMs) {
+    if (last && piece.startMs <= last.endMs && piece.speed === last.speed) {
       last.endMs = Math.max(last.endMs, piece.endMs);
       if (last.sceneIndices[last.sceneIndices.length - 1] !== piece.sceneIndex) {
         last.sceneIndices.push(piece.sceneIndex);
       }
     } else {
-      groups.push({ startMs: piece.startMs, endMs: piece.endMs, sceneIndices: [piece.sceneIndex] });
+      groups.push({
+        startMs: piece.startMs,
+        endMs: piece.endMs,
+        sceneIndices: [piece.sceneIndex],
+        speed: piece.speed,
+      });
     }
   }
   return groups;
@@ -596,6 +708,7 @@ export function deriveKeepSegments(scenes: Scene[]): KeepSegment[] {
   return groupScenePieces(collectScenePieces(scenes)).map((group) => ({
     startMs: group.startMs,
     endMs: group.endMs,
+    ...(group.speed === 1 ? {} : { speed: group.speed }),
   }));
 }
 
@@ -672,6 +785,43 @@ export function setSceneDirectedType(scenes: Scene[], sceneId: string, typeId: s
   return scenes.map((scene) =>
     scene.id === sceneId ? { ...scene, directedType: typeId, directedStyleId: null } : scene,
   );
+}
+
+/**
+ * フェーズT3(directedモード): シーン行のアニメーションピッカーから登場アニメを個別上書きする
+ * (null=上書き解除。type→マッピング → プリセット既定の解決へ戻す)。
+ */
+export function setSceneDirectedAnimation(scenes: Scene[], sceneId: string, animationId: string | null): Scene[] {
+  return scenes.map((scene) =>
+    scene.id === sceneId ? { ...scene, directedAnimationIn: animationId } : scene,
+  );
+}
+
+/** シーン映像演出の手動指定(null=自動選定へ戻す)。 */
+export function setSceneVideoEffectOverride(
+  scenes: Scene[],
+  sceneId: string,
+  override: VideoEffectOverride | null,
+): Scene[] {
+  return scenes.map((scene) =>
+    scene.id === sceneId ? { ...scene, videoEffectOverride: override } : scene,
+  );
+}
+
+/** タイムラインからの素材速度変更。無効値は等速へ丸める。 */
+export function setSceneSpeed(scenes: Scene[], sceneId: string, speed: number): Scene[] {
+  const normalized = normalizeSceneSpeed(speed);
+  return scenes.map((scene) => {
+    if (scene.id !== sceneId || normalizeSceneSpeed(scene.speed) === normalized) return scene;
+    return { ...scene, speed: normalized };
+  });
+}
+
+/** 全シーンを同じ素材速度へ変更する。1呼び出し=1 Undo。 */
+export function setAllSceneSpeeds(scenes: Scene[], speed: number): Scene[] {
+  const normalized = normalizeSceneSpeed(speed);
+  if (scenes.every((scene) => normalizeSceneSpeed(scene.speed) === normalized)) return scenes;
+  return scenes.map((scene) => ({ ...scene, speed: normalized }));
 }
 
 /**
@@ -754,7 +904,33 @@ export function setSceneTelopText(scenes: Scene[], sceneId: string, text: string
   return scenes.map((scene) => {
     if (scene.id !== sceneId) return scene;
     const autoText = autoTelopTextFromWords(scene.words);
-    return { ...scene, telopText: text, telopEdited: text !== autoText };
+    const directedHighlightWords = (scene.directedHighlightWords || []).filter(
+      (word) => Boolean(word) && text.includes(word),
+    );
+    return {
+      ...scene,
+      telopText: text,
+      telopEdited: text !== autoText,
+      directedHighlightWords: directedHighlightWords.length ? directedHighlightWords : undefined,
+    };
+  });
+}
+
+/** テロップの黄色部分(highlight_words)をシーン単位で上書きする。 */
+export function setSceneDirectedHighlightWords(
+  scenes: Scene[],
+  sceneId: string,
+  words: string[] | undefined,
+): Scene[] {
+  return scenes.map((scene) => {
+    if (scene.id !== sceneId) return scene;
+    const directedHighlightWords = (words || []).filter(
+      (word) => Boolean(word) && scene.telopText.includes(word),
+    );
+    return {
+      ...scene,
+      directedHighlightWords: directedHighlightWords.length ? directedHighlightWords : undefined,
+    };
   });
 }
 
@@ -767,11 +943,92 @@ export {
   type TelopOccurrenceTarget,
 } from "./telopOccurrences.ts";
 
+// --- W10-4(分割時のテロップ文言分配) ---
+
+/** splitEditedTelopTextの正規化で無視する文字(空白・改行と、自動テキストが除去する句点)。 */
+const SPLIT_NORMALIZE_IGNORE_RE = /[\s。]/u;
+
+/** deleted以外の単語テキストを連結し、正規化(空白・改行・句点除去)した文字列を返す。 */
+function normalizedVisibleWordsText(words: SceneWord[]): string {
+  return words
+    .filter((word) => !word.deleted)
+    .map((word) => word.text)
+    .join("")
+    .split("")
+    .filter((ch) => !SPLIT_NORMALIZE_IGNORE_RE.test(ch))
+    .join("");
+}
+
+/**
+ * W10-4: 編集済みtelopTextをシーン分割の前後半へ分配する純関数。
+ *
+ * 1. 一致探索: 後半words(非deleted)の先頭からの連結文字列(正規化: 空白・改行・句点除去)の
+ *    できるだけ長い接頭辞をeditedText(同正規化)の中から探索し、見つかればその最後の出現位置で
+ *    分割する(先頭語1語だけの一致でも採用)。ユーザーが前半・後半の一方だけを短縮・修正した
+ *    ケースで、編集済み文言を正しい側に残せる。
+ * 2. フォールバック(W10-12): 一致しなければ前半words正規化長の比率でeditedTextを切り、
+ *    後半に残りを全て割当する(省略編集で片側が空になる分配も許容)。
+ * 3. どちらの半分にも編集済み全文を丸ごと複製しない(上下同一表示の根絶)。片側が空になる分配は
+ *    そのまま許容する(テロップなし)。
+ */
+export function splitEditedTelopText(
+  editedText: string,
+  firstWords: SceneWord[],
+  secondWords: SceneWord[],
+): { first: string; second: string } {
+  const chars = [...editedText];
+  // 正規化後インデックス→元テキストインデックスの対応表(改行・空白をまたがない分割位置の復元に使う)。
+  const normChars: string[] = [];
+  const normToOriginal: number[] = [];
+  chars.forEach((ch, index) => {
+    if (SPLIT_NORMALIZE_IGNORE_RE.test(ch)) return;
+    normChars.push(ch);
+    normToOriginal.push(index);
+  });
+  const normText = normChars.join("");
+  if (!normText.length) return { first: "", second: "" };
+
+  const originalIndexForNormPos = (normPos: number): number =>
+    normPos >= normToOriginal.length ? chars.length : normToOriginal[normPos];
+
+  const buildResult = (splitOriginalIndex: number): { first: string; second: string } => {
+    const clamped = Math.max(0, Math.min(chars.length, splitOriginalIndex));
+    // 分割点の前後に残った空白・改行は境界をまたがせず取り除く(前半末尾・後半先頭)。
+    const first = chars.slice(0, clamped).join("").replace(/\s+$/u, "");
+    const second = chars.slice(clamped).join("").replace(/^\s+/u, "");
+    return { first, second };
+  };
+
+  // 1. 一致探索: 後半words連結の「できるだけ長い接頭辞」(単語境界単位)を後方から探す。
+  const visibleSecondTexts = secondWords.filter((word) => !word.deleted).map((word) => word.text);
+  for (let count = visibleSecondTexts.length; count >= 1; count -= 1) {
+    const prefix = visibleSecondTexts
+      .slice(0, count)
+      .join("")
+      .split("")
+      .filter((ch) => !SPLIT_NORMALIZE_IGNORE_RE.test(ch))
+      .join("");
+    if (!prefix) continue;
+    const foundNormPos = normText.lastIndexOf(prefix);
+    if (foundNormPos === -1) continue;
+    return buildResult(originalIndexForNormPos(foundNormPos));
+  }
+
+  // 2. フォールバック(W10-12): 前半words正規化長の比率でeditedTextを切り、後半に残りを全て割当。
+  const firstLen = normalizedVisibleWordsText(firstWords).length;
+  const secondLen = normalizedVisibleWordsText(secondWords).length;
+  const totalLen = firstLen + secondLen;
+  const ratio = totalLen > 0 ? firstLen / totalLen : 0.5;
+  const targetNormPos = Math.round(ratio * normChars.length);
+  return buildResult(originalIndexForNormPos(targetNormPos));
+}
+
 /**
  * チップ境界でシーンを分割する。secondFirstWordId が後半シーンの先頭単語になる。
  * 分割点(ms)は前半シーンの最後の単語の終了時刻と後半シーンの先頭単語の開始時刻の中点。
- * telopTextの扱い: 未編集なら前後ともチップ連結で再生成。編集済みなら前半シーンに編集済み
- * 全文を残し、後半は新規にチップ連結で生成する(telopEditedは前半のみ維持)。
+ * telopTextの扱い: 未編集なら前後ともチップ連結で再生成。編集済みならW10-4の
+ * splitEditedTelopText()で編集済みテキストを前後半へ分配する(両半分ともtelopEdited=trueを維持。
+ * 旧実装の「前半に全文コピー+後半は自動再生成」は上下同一表示・短縮テキスト巻き戻りの原因のため廃止)。
  */
 export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWordId: string): Scene[] {
   const sceneIndex = scenes.findIndex((scene) => scene.id === sceneId);
@@ -784,8 +1041,9 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
   const secondWords = scene.words.slice(wordIndex);
   const boundaryMs = Math.round((firstWords[firstWords.length - 1].endMs + secondWords[0].startMs) / 2);
 
-  const firstTelopText = scene.telopEdited ? scene.telopText : autoTelopTextFromWords(firstWords);
-  const secondTelopText = autoTelopTextFromWords(secondWords);
+  const editedParts = scene.telopEdited ? splitEditedTelopText(scene.telopText, firstWords, secondWords) : null;
+  const firstTelopText = editedParts ? editedParts.first : autoTelopTextFromWords(firstWords);
+  const secondTelopText = editedParts ? editedParts.second : autoTelopTextFromWords(secondWords);
   const firstScene: Scene = {
     id: `${scene.id}L`,
     sourceStartMs: scene.sourceStartMs,
@@ -795,13 +1053,17 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     telopEdited: scene.telopEdited,
     cutMarks: scene.cutMarks.filter((mark) => mark < boundaryMs),
     // 感情タグ(T-2)は分割後の本文に対して再判定する。個別スタイルオーバーライド(T-3)・
-    // directedスタイル(T2)は「分割」という構造操作ではユーザーの意図を推測できないため
-    // 両半分にそのまま引き継ぐ(directedの強調語は本文に残っている側でのみ有効になる)。
+    // directedスタイル(T2)・アニメ上書き(T3)・話者(W1)は「分割」という構造操作ではユーザーの意図を
+    // 推測できないため両半分にそのまま引き継ぐ(directedの強調語は本文に残っている側でのみ有効になる)。
     emotionTag: detectEmotionTag(firstTelopText),
     styleOverrideId: scene.styleOverrideId,
     directedStyleId: scene.directedStyleId,
     directedType: scene.directedType,
     directedHighlightWords: scene.directedHighlightWords,
+    directedAnimationIn: scene.directedAnimationIn,
+    videoEffectOverride: scene.videoEffectOverride,
+    speaker: scene.speaker,
+    speed: scene.speed,
   };
   const secondScene: Scene = {
     id: `${scene.id}R`,
@@ -809,13 +1071,18 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     sourceEndMs: scene.sourceEndMs,
     words: secondWords,
     telopText: secondTelopText,
-    telopEdited: false,
+    // W10-4: 編集済みシーンの分割では後半もtelopEdited=trueを維持する(自動全文への巻き戻り防止)。
+    telopEdited: scene.telopEdited,
     cutMarks: scene.cutMarks.filter((mark) => mark >= boundaryMs),
     emotionTag: detectEmotionTag(secondTelopText),
     styleOverrideId: scene.styleOverrideId,
     directedStyleId: scene.directedStyleId,
     directedType: scene.directedType,
     directedHighlightWords: scene.directedHighlightWords,
+    directedAnimationIn: scene.directedAnimationIn,
+    videoEffectOverride: scene.videoEffectOverride,
+    speaker: scene.speaker,
+    speed: scene.speed,
   };
 
   return [...scenes.slice(0, sceneIndex), firstScene, secondScene, ...scenes.slice(sceneIndex + 1)];
@@ -838,14 +1105,52 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
   const firstWords: SceneWord[] = [];
   const secondWords: SceneWord[] = [];
   for (const word of scene.words) {
+    // W28(2026-08-22 実機フィードバック): 分割点が無音チップの内部に落ちる場合は、チップを
+    // 中点側へ丸ごと寄せず2つに割る(分割位置がズレない+両側が空にならない)。
+    if (word.silence && word.startMs < ms && word.endMs > ms) {
+      firstWords.push({ ...word, id: `${word.id}L`, endMs: ms });
+      secondWords.push({ ...word, id: `${word.id}R`, startMs: ms });
+      continue;
+    }
     const midpointMs = (word.startMs + word.endMs) / 2;
     if (midpointMs < ms) firstWords.push(word);
     else secondWords.push(word);
   }
+  // W28: シーン端の無音(ワードが存在しない区間)での分割は、空になる側へその区間を表す
+  // 無音チップを生成して分割を成立させる(旧実装は「両側に単語必須」で分割不可だった)。
+  // 分割点が音声ワードの内部に落ちて片側が空になるケースだけは従来どおり分割しない。
+  if (!firstWords.length || !secondWords.length) {
+    const insideSpeechWord = scene.words.some(
+      (word) => !word.silence && word.startMs < ms && word.endMs > ms,
+    );
+    if (insideSpeechWord) return scenes;
+    if (!firstWords.length) {
+      firstWords.push({
+        id: `sil_edge_${scene.id}L`,
+        text: "",
+        startMs: scene.sourceStartMs,
+        endMs: ms,
+        deleted: false,
+        silence: true,
+      });
+    }
+    if (!secondWords.length) {
+      secondWords.push({
+        id: `sil_edge_${scene.id}R`,
+        text: "",
+        startMs: ms,
+        endMs: scene.sourceEndMs,
+        deleted: false,
+        silence: true,
+      });
+    }
+  }
   if (!firstWords.length || !secondWords.length) return scenes;
 
-  const firstTelopText = scene.telopEdited ? scene.telopText : autoTelopTextFromWords(firstWords);
-  const secondTelopText = autoTelopTextFromWords(secondWords);
+  // W10-4: splitSceneAtWordと同じくtelopEdited時は編集済みテキストを前後半へ分配する。
+  const editedParts = scene.telopEdited ? splitEditedTelopText(scene.telopText, firstWords, secondWords) : null;
+  const firstTelopText = editedParts ? editedParts.first : autoTelopTextFromWords(firstWords);
+  const secondTelopText = editedParts ? editedParts.second : autoTelopTextFromWords(secondWords);
   const firstScene: Scene = {
     id: `${scene.id}L`,
     sourceStartMs: scene.sourceStartMs,
@@ -859,6 +1164,10 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     directedStyleId: scene.directedStyleId,
     directedType: scene.directedType,
     directedHighlightWords: scene.directedHighlightWords,
+    directedAnimationIn: scene.directedAnimationIn,
+    videoEffectOverride: scene.videoEffectOverride,
+    speaker: scene.speaker,
+    speed: scene.speed,
   };
   const secondScene: Scene = {
     id: `${scene.id}R`,
@@ -866,13 +1175,18 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     sourceEndMs: scene.sourceEndMs,
     words: secondWords,
     telopText: secondTelopText,
-    telopEdited: false,
+    // W10-4: 編集済みシーンの分割では後半もtelopEdited=trueを維持する。
+    telopEdited: scene.telopEdited,
     cutMarks: scene.cutMarks.filter((mark) => mark > ms),
     emotionTag: detectEmotionTag(secondTelopText),
     styleOverrideId: scene.styleOverrideId,
     directedStyleId: scene.directedStyleId,
     directedType: scene.directedType,
     directedHighlightWords: scene.directedHighlightWords,
+    directedAnimationIn: scene.directedAnimationIn,
+    videoEffectOverride: scene.videoEffectOverride,
+    speaker: scene.speaker,
+    speed: scene.speed,
   };
 
   return [...scenes.slice(0, sceneIndex), firstScene, secondScene, ...scenes.slice(sceneIndex + 1)];
@@ -888,19 +1202,79 @@ export function addCutMark(scenes: Scene[], sceneId: string, ms: number): Scene[
   });
 }
 
-/** 現在シーンを次のシーンと結合する(⌘M相当。Phase 2でキー操作から呼ばれる想定)。 */
+/**
+ * W13-4: シーン結合時のテロップ連結。前シーンの表示テキスト+後シーンの表示テキストを
+ * そのまま連結する(間に改行は入れない。境界の空白・改行だけ取り除く)。
+ * splitEditedTelopText(W10-4のEnter分割)の逆操作として一貫させる。
+ */
+export function joinTelopTexts(firstText: string, secondText: string): string {
+  const first = firstText.replace(/\s+$/u, "");
+  const second = secondText.replace(/^\s+/u, "");
+  if (!first) return second;
+  if (!second) return first;
+  return `${first}${second}`;
+}
+
+function nextAliveSceneIndex(scenes: Scene[], fromIndex: number): number {
+  for (let index = fromIndex + 1; index < scenes.length; index += 1) {
+    if (!isSceneFullyDeleted(scenes[index])) return index;
+  }
+  return -1;
+}
+
+function prevAliveSceneIndex(scenes: Scene[], fromIndex: number): number {
+  for (let index = fromIndex - 1; index >= 0; index -= 1) {
+    if (!isSceneFullyDeleted(scenes[index])) return index;
+  }
+  return -1;
+}
+
+/**
+ * 現在シーンを次のシーンと結合する(⌘M相当。Phase 2でキー操作から呼ばれる想定)。
+ * W28(2026-08-22 実機フィードバック):
+ * - 直後に「丸ごと削除済み」シーンが挟まっていてもまたいで結合する(言い直しで間のブロックを
+ *   消した後、前後のブロックをつなぐ操作)。削除済みシーンのwordsは削除状態のまま取り込む
+ *   (チップから復元可能なまま残る)。テロップ本文には削除済みシーンのテキストを混ぜない。
+ * - スタイル・アニメ・映像演出は「上(前半)のシーン」を全面的に優先する(前半が未設定なら
+ *   未設定のまま=前半の見た目を維持する。旧実装の「前半になければ後半を引き継ぐ」は、
+ *   エフェクト付きテロップを上とくっつけると下のエフェクトが残ってしまうため廃止)。
+ * W29(2026-08-24 実機フィードバック):
+ * - Bで2箇所切って間のテキストボックスを消した後、残った前後どちらから結合しても1つになる。
+ *   再生ヘッドが削除済みの中間行に残っていても、手前の生きている行と次の生きている行をつなぐ。
+ *   末尾の残存行から結合した場合は手前の生きている行とつなぐ。
+ */
 export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
-  const sceneIndex = scenes.findIndex((scene) => scene.id === sceneId);
-  if (sceneIndex === -1 || sceneIndex >= scenes.length - 1) return scenes;
+  let sceneIndex = scenes.findIndex((scene) => scene.id === sceneId);
+  if (sceneIndex === -1) return scenes;
+  if (isSceneFullyDeleted(scenes[sceneIndex])) {
+    const previousAlive = prevAliveSceneIndex(scenes, sceneIndex);
+    if (previousAlive >= 0) sceneIndex = previousAlive;
+    else {
+      const nextAlive = nextAliveSceneIndex(scenes, sceneIndex);
+      if (nextAlive < 0) return scenes;
+      sceneIndex = nextAlive;
+    }
+  }
+  let lastIndex = nextAliveSceneIndex(scenes, sceneIndex);
+  if (lastIndex === -1) {
+    const previousAlive = prevAliveSceneIndex(scenes, sceneIndex);
+    if (previousAlive < 0) return scenes;
+    lastIndex = sceneIndex;
+    sceneIndex = previousAlive;
+  }
   const first = scenes[sceneIndex];
-  const second = scenes[sceneIndex + 1];
-  const words = [...first.words, ...second.words];
-  const telopEdited = first.telopEdited || second.telopEdited;
-  const telopText = telopEdited
-    ? `${first.telopEdited ? first.telopText : autoTelopTextFromWords(first.words)}${
-        second.telopEdited ? second.telopText : autoTelopTextFromWords(second.words)
-      }`
-    : autoTelopTextFromWords(words);
+  const span = scenes.slice(sceneIndex, lastIndex + 1);
+  const second = span[span.length - 1];
+  const aliveSpan = span.filter((scene) => !isSceneFullyDeleted(scene));
+  const words = span.flatMap((scene) => scene.words);
+  // W13-4: 結合後のテロップは「いま表示されているテキスト同士の連結」にする。
+  // 未編集シーンでも telopText はAI整形済みテキスト等で words 由来の自動生成と異なり得るため、
+  // 旧実装(未編集は autoTelopTextFromWords で再生成)では表示が元テキストへ巻き戻っていた。
+  const telopText = aliveSpan.reduce((acc, scene) => joinTelopTexts(acc, scene.telopText), "");
+  // 連結結果が自動生成と一致するなら未編集のまま。異なる場合は編集済み扱いにして、
+  // 以降の単語削除等で words から再生成されて巻き戻らないよう保護する
+  const telopEdited = first.telopEdited || second.telopEdited || telopText !== autoTelopTextFromWords(words);
+  const highlightSources = aliveSpan.filter((scene) => scene.directedHighlightWords);
   const merged: Scene = {
     id: `${first.id}_${second.id}`,
     sourceStartMs: first.sourceStartMs,
@@ -908,19 +1282,47 @@ export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
     words,
     telopText,
     telopEdited,
-    cutMarks: [...first.cutMarks, ...second.cutMarks],
-    // 結合後の本文で感情タグ(T-2)を再判定する。個別スタイルオーバーライド(T-3)・
-    // directedスタイル(T2)は前半シーンのものを優先し、前半になければ後半のものを引き継ぐ。
+    cutMarks: span.flatMap((scene) => scene.cutMarks),
+    // 結合後の本文で感情タグ(T-2)を再判定する。それ以外の見た目(スタイル・種類・アニメ・
+    // 映像演出)は前半シーンの設定をそのまま使う(W28: 上のテロップの見た目を優先)。
     emotionTag: detectEmotionTag(telopText),
-    styleOverrideId: first.styleOverrideId ?? second.styleOverrideId ?? null,
-    directedStyleId: first.directedStyleId ?? second.directedStyleId,
-    directedType: first.directedType ?? second.directedType,
-    directedHighlightWords:
-      first.directedHighlightWords || second.directedHighlightWords
-        ? [...new Set([...(first.directedHighlightWords || []), ...(second.directedHighlightWords || [])])]
-        : undefined,
+    styleOverrideId: first.styleOverrideId ?? null,
+    directedStyleId: first.directedStyleId,
+    directedType: first.directedType,
+    directedAnimationIn: first.directedAnimationIn,
+    videoEffectOverride: first.videoEffectOverride,
+    speaker: first.speaker ?? second.speaker,
+    speed: first.speed,
+    directedHighlightWords: highlightSources.length
+      ? [...new Set(highlightSources.flatMap((scene) => scene.directedHighlightWords || []))]
+      : undefined,
   };
-  return [...scenes.slice(0, sceneIndex), merged, ...scenes.slice(sceneIndex + 2)];
+  return [...scenes.slice(0, sceneIndex), merged, ...scenes.slice(lastIndex + 1)];
+}
+
+/**
+ * W10-1(シーン単位の削除・復元): シーンが「丸ごと削除済み」(全単語deleted)かどうか。
+ * SceneRowListのスタブ行(「シーンN を削除しました」)への畳み込み判定と、
+ * Delete連打時の連鎖選択(削除済みシーンをスキップ)に使う。単語ゼロのシーンは対象外。
+ */
+export function isSceneFullyDeleted(scene: Scene): boolean {
+  return scene.words.length > 0 && scene.words.every((word) => word.deleted);
+}
+
+/**
+ * W10-1(Delete連打で前のシーンへ連鎖): deletedIndexのシーンを丸ごと削除した直後に
+ * 選択を移す先のシーンidを返す。直前の(上の)未削除シーンを優先し、先頭に達したら
+ * 次の(下の)未削除シーンへ。どこにも無ければnull。scenesは削除前の配列でよい
+ * (deletedIndex自身は候補から除外される)。
+ */
+export function findNextSelectionAfterSceneDelete(scenes: Scene[], deletedIndex: number): string | null {
+  for (let index = deletedIndex - 1; index >= 0; index -= 1) {
+    if (!isSceneFullyDeleted(scenes[index])) return scenes[index].id;
+  }
+  for (let index = deletedIndex + 1; index < scenes.length; index += 1) {
+    if (!isSceneFullyDeleted(scenes[index])) return scenes[index].id;
+  }
+  return null;
 }
 
 /** 指定ms時点に該当するシーンのindexを返す(該当なしは-1)。 */

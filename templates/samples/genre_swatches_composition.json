@@ -1,0 +1,3245 @@
+{
+  "timeline": {
+    "version": "1.0.0",
+    "total_duration_ms": 48000,
+    "video_fit": "cover",
+    "fps": 30,
+    "framing": {
+      "scale": 1.0,
+      "offset_y": 0
+    },
+    "telop_y": 0.72,
+    "telop_font_size": 72,
+    "telop_max_chars_per_line": 16,
+    "animation_in": "none",
+    "animation_out": "none",
+    "overlays": [],
+    "cuts": [
+      {
+        "cut_id": "cut_001",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_002.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_001_p00",
+              "lines": [
+                "この方法で再生数が伸びた"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "solo",
+          "semantic_type": "default",
+          "style": "fact_yellow"
+        }
+      },
+      {
+        "cut_id": "cut_002",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_003.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 2000,
+          "end_ms": 4000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_002_p00",
+              "lines": [
+                "ここが一番大事!"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "solo",
+          "semantic_type": "emphasis",
+          "style": "emotion_red"
+        }
+      },
+      {
+        "cut_id": "cut_003",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_004.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 4000,
+          "end_ms": 6000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_003_p00",
+              "lines": [
+                "結論:継続が9割"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "solo",
+          "semantic_type": "punchline",
+          "style": "box_yellow"
+        }
+      },
+      {
+        "cut_id": "cut_004",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_005.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 6000,
+          "end_ms": 8000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_004_p00",
+              "lines": [
+                "売上を3倍にした仕組み"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "business",
+          "semantic_type": "default",
+          "style": "biz_white"
+        }
+      },
+      {
+        "cut_id": "cut_005",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_006.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 8000,
+          "end_ms": 10000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_005_p00",
+              "lines": [
+                "重要なのは利益率です"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "business",
+          "semantic_type": "emphasis",
+          "style": "biz_blue"
+        }
+      },
+      {
+        "cut_id": "cut_006",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_007.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 10000,
+          "end_ms": 12000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_006_p00",
+              "lines": [
+                "まとめ:数字で語る"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "business",
+          "semantic_type": "punchline",
+          "style": "biz_navy_box"
+        }
+      },
+      {
+        "cut_id": "cut_007",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_008.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 12000,
+          "end_ms": 14000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_007_p00",
+              "lines": [
+                "なるほど、面白いですね"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "dialogue",
+          "semantic_type": "default",
+          "style": "neutral_white"
+        }
+      },
+      {
+        "cut_id": "cut_008",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_009.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 14000,
+          "end_ms": 16000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_008_p00",
+              "lines": [
+                "それってどういうこと?"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "dialogue",
+          "semantic_type": "question",
+          "style": "question_blue"
+        }
+      },
+      {
+        "cut_id": "cut_009",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_010.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 16000,
+          "end_ms": 18000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_009_p00",
+              "lines": [
+                "たしかに!"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "dialogue",
+          "semantic_type": "reply",
+          "style": "reply_cyan"
+        }
+      },
+      {
+        "cut_id": "cut_010",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_011.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 18000,
+          "end_ms": 20000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_010_p00",
+              "lines": [
+                "先週の続きを話します"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "podcast",
+          "semantic_type": "default",
+          "style": "neutral_white"
+        }
+      },
+      {
+        "cut_id": "cut_011",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_012.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 20000,
+          "end_ms": 22000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_011_p00",
+              "lines": [
+                "ここだけの裏話です"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "podcast",
+          "semantic_type": "emphasis",
+          "style": "emotion_red"
+        }
+      },
+      {
+        "cut_id": "cut_012",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_013.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 22000,
+          "end_ms": 24000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_012_p00",
+              "lines": [
+                "要点はこの3つ"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "podcast",
+          "semantic_type": "punchline",
+          "style": "box_yellow"
+        }
+      },
+      {
+        "cut_id": "cut_013",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_014.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 24000,
+          "end_ms": 26000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_013_p00",
+              "lines": [
+                "朝6時、旅のはじまり"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "vlog",
+          "semantic_type": "default",
+          "style": "vlog_caption"
+        }
+      },
+      {
+        "cut_id": "cut_014",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_015.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 26000,
+          "end_ms": 28000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_014_p00",
+              "lines": [
+                "この景色に出会えた"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "vlog",
+          "semantic_type": "emphasis",
+          "style": "vlog_caption_strong"
+        }
+      },
+      {
+        "cut_id": "cut_015",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_016.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 28000,
+          "end_ms": 30000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_015_p00",
+              "lines": [
+                "旅は道連れ世は情け"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "vlog",
+          "semantic_type": "quote",
+          "style": "serif_quote"
+        }
+      },
+      {
+        "cut_id": "cut_016",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_017.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 30000,
+          "end_ms": 32000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_016_p00",
+              "lines": [
+                "まさかの結末に一同驚愕"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "variety",
+          "semantic_type": "default",
+          "style": "variety_yellow"
+        }
+      },
+      {
+        "cut_id": "cut_017",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_002.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 32000,
+          "end_ms": 34000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_017_p00",
+              "lines": [
+                "衝撃の事実が発覚!"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "variety",
+          "semantic_type": "emphasis",
+          "style": "variety_pop_red"
+        }
+      },
+      {
+        "cut_id": "cut_018",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_003.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 34000,
+          "end_ms": 36000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_018_p00",
+              "lines": [
+                "ドッキリ大成功!!"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "variety",
+          "semantic_type": "surprise",
+          "style": "variety_hand_shock"
+        }
+      },
+      {
+        "cut_id": "cut_019",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_004.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 36000,
+          "end_ms": 38000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_019_p00",
+              "lines": [
+                "毎日のスキンケア習慣"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "beauty",
+          "semantic_type": "default",
+          "style": "beauty_serif"
+        }
+      },
+      {
+        "cut_id": "cut_020",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_005.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 38000,
+          "end_ms": 40000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_020_p00",
+              "lines": [
+                "うるおいが違う"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "beauty",
+          "semantic_type": "emphasis",
+          "style": "beauty_pink"
+        }
+      },
+      {
+        "cut_id": "cut_021",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_006.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 40000,
+          "end_ms": 42000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_021_p00",
+              "lines": [
+                "ご褒美コスメ3選"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "beauty",
+          "semantic_type": "punchline",
+          "style": "beauty_gold"
+        }
+      },
+      {
+        "cut_id": "cut_022",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_007.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 42000,
+          "end_ms": 44000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_022_p00",
+              "lines": [
+                "ラスボス戦、開幕"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "game",
+          "semantic_type": "default",
+          "style": "game_neon_cyan"
+        }
+      },
+      {
+        "cut_id": "cut_023",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_008.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 44000,
+          "end_ms": 46000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_023_p00",
+              "lines": [
+                "会心の一撃!!"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "game",
+          "semantic_type": "emphasis",
+          "style": "game_neon_magenta"
+        }
+      },
+      {
+        "cut_id": "cut_024",
+        "type": "body",
+        "video": {
+          "file_path": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments/cut_009.mp4",
+          "start_ms": 0,
+          "end_ms": 2000
+        },
+        "timeline": {
+          "start_ms": 46000,
+          "end_ms": 48000
+        },
+        "telop": {
+          "pages": [
+            {
+              "id": "cut_024_p00",
+              "lines": [
+                "GAME OVER"
+              ]
+            }
+          ]
+        },
+        "layout": "talk",
+        "scene_id": null,
+        "swatch": {
+          "genre": "game",
+          "semantic_type": "punchline",
+          "style": "game_retro_dot"
+        }
+      }
+    ],
+    "telop_styles": {
+      "default": {
+        "description": "標準テロップ。青縦グラデ+白枠+濃紺枠",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 72,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#7BB8DC",
+          "gradient_to": "#1E5DA8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#1E3A5F",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "highlight": {
+        "description": "重要な発言・数字・結論を強調する大きめテロップ。黄→オレンジ",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Arial Black\", \"Meiryo\", sans-serif",
+        "font_size": 96,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFD93D",
+          "gradient_to": "#FF6B35",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 12
+        },
+        "outer_stroke": {
+          "color": "#7A2A00",
+          "width": 24
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "simple": {
+        "description": "シンプルな白文字+黒縁。地味なナレーションや補助テロップ向け",
+        "font_family": "\"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Yu Gothic\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": {
+          "color": "#000000",
+          "width": 8
+        },
+        "outer_stroke": null,
+        "drop_shadow": "drop-shadow(0px 3px 5px rgba(0,0,0,0.5))",
+        "y_position_offset": 0
+      },
+      "calm": {
+        "description": "落ち着いた説明・整理向け。淡い水色グラデ+白枠+深い青枠",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 66,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D9F3FF",
+          "gradient_to": "#5E91B8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1C3D57",
+          "width": 17
+        },
+        "drop_shadow": "drop-shadow(0px 3px 6px rgba(0,0,0,0.35))",
+        "y_position_offset": 0
+      },
+      "warning": {
+        "description": "注意喚起・否定的な発言を強調。赤グラデ+白枠",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Arial Black\", \"Meiryo\", sans-serif",
+        "font_size": 80,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FF6B6B",
+          "gradient_to": "#C92A2A",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#5C0A0A",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 4px 8px rgba(0,0,0,0.5))",
+        "y_position_offset": 0
+      },
+      "blue_standard": {
+        "description": "ブルー・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#7BB8DC",
+          "gradient_to": "#1E5DA8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1E3A5F",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "blue_emphasis": {
+        "description": "ブルー・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#7BB8DC",
+          "gradient_to": "#1E5DA8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#1E3A5F",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "blue_subtle": {
+        "description": "ブルー・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#7BB8DC",
+          "gradient_to": "#1E5DA8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1E3A5F",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "blue_band": {
+        "description": "ブルー・帯背景",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#7BB8DC",
+          "gradient_to": "#1E5DA8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1E3A5F",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "rgba(17, 17, 17, 0.62)"
+        },
+        "y_position_offset": 0
+      },
+      "orange_standard": {
+        "description": "オレンジ・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB347",
+          "gradient_to": "#E86A17",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#6B3410",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "orange_emphasis": {
+        "description": "オレンジ・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB347",
+          "gradient_to": "#E86A17",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#6B3410",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "orange_subtle": {
+        "description": "オレンジ・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB347",
+          "gradient_to": "#E86A17",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#6B3410",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "orange_band": {
+        "description": "オレンジ・帯背景",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB347",
+          "gradient_to": "#E86A17",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#6B3410",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "rgba(17, 17, 17, 0.62)"
+        },
+        "y_position_offset": 0
+      },
+      "red_standard": {
+        "description": "レッド・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FF7A7A",
+          "gradient_to": "#C92A2A",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#5C0A0A",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "red_emphasis": {
+        "description": "レッド・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FF7A7A",
+          "gradient_to": "#C92A2A",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#5C0A0A",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "red_subtle": {
+        "description": "レッド・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FF7A7A",
+          "gradient_to": "#C92A2A",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#5C0A0A",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "red_band": {
+        "description": "レッド・帯背景",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FF7A7A",
+          "gradient_to": "#C92A2A",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#5C0A0A",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "rgba(17, 17, 17, 0.62)"
+        },
+        "y_position_offset": 0
+      },
+      "green_standard": {
+        "description": "グリーン・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#A0E7A0",
+          "gradient_to": "#2F8F4F",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1A4D2E",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "green_emphasis": {
+        "description": "グリーン・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#A0E7A0",
+          "gradient_to": "#2F8F4F",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#1A4D2E",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "green_subtle": {
+        "description": "グリーン・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#A0E7A0",
+          "gradient_to": "#2F8F4F",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1A4D2E",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "green_band": {
+        "description": "グリーン・帯背景",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#A0E7A0",
+          "gradient_to": "#2F8F4F",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#1A4D2E",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "rgba(17, 17, 17, 0.62)"
+        },
+        "y_position_offset": 0
+      },
+      "purple_standard": {
+        "description": "パープル・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D9AFFF",
+          "gradient_to": "#7B1FA2",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#3B0764",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "purple_emphasis": {
+        "description": "パープル・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D9AFFF",
+          "gradient_to": "#7B1FA2",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#3B0764",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "purple_subtle": {
+        "description": "パープル・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D9AFFF",
+          "gradient_to": "#7B1FA2",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#3B0764",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "pink_standard": {
+        "description": "ピンク・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB6D9",
+          "gradient_to": "#E0529B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#7A1F51",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "pink_emphasis": {
+        "description": "ピンク・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB6D9",
+          "gradient_to": "#E0529B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#7A1F51",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "pink_subtle": {
+        "description": "ピンク・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB6D9",
+          "gradient_to": "#E0529B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#7A1F51",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "pink_band": {
+        "description": "ピンク・帯背景",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFB6D9",
+          "gradient_to": "#E0529B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#7A1F51",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "rgba(17, 17, 17, 0.62)"
+        },
+        "y_position_offset": 0
+      },
+      "gold_standard": {
+        "description": "金黄・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFE9A8",
+          "gradient_to": "#C9A227",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#6B4E00",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "gold_emphasis": {
+        "description": "金黄・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFE9A8",
+          "gradient_to": "#C9A227",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#6B4E00",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "gold_subtle": {
+        "description": "金黄・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFE9A8",
+          "gradient_to": "#C9A227",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#6B4E00",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "gold_band": {
+        "description": "金黄・帯背景",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFE9A8",
+          "gradient_to": "#C9A227",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#6B4E00",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "rgba(17, 17, 17, 0.62)"
+        },
+        "y_position_offset": 0
+      },
+      "white_standard": {
+        "description": "白・標準(黒外縁)",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFFFFF",
+          "gradient_to": "#E8E8E8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "white_emphasis": {
+        "description": "白・強調大(黒外縁)",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFFFFF",
+          "gradient_to": "#E8E8E8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "white_subtle": {
+        "description": "白・控えめ小(黒外縁)",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFFFFF",
+          "gradient_to": "#E8E8E8",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "black_standard": {
+        "description": "黒・標準(白内縁+グレー外縁)",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#4A4A4A",
+          "gradient_to": "#050505",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#4D4D4D",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "black_emphasis": {
+        "description": "黒・強調大(白内縁+グレー外縁)",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#4A4A4A",
+          "gradient_to": "#050505",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#4D4D4D",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "black_subtle": {
+        "description": "黒・控えめ小(白内縁+グレー外縁)",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#4A4A4A",
+          "gradient_to": "#050505",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#4D4D4D",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "cyan_standard": {
+        "description": "水色・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#B8F2FF",
+          "gradient_to": "#1CA9C9",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#0B4A57",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "cyan_emphasis": {
+        "description": "水色・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#B8F2FF",
+          "gradient_to": "#1CA9C9",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#0B4A57",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "cyan_subtle": {
+        "description": "水色・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#B8F2FF",
+          "gradient_to": "#1CA9C9",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#0B4A57",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "navy_standard": {
+        "description": "ネイビー・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#6E8CB8",
+          "gradient_to": "#16223D",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#0A0F1A",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "navy_emphasis": {
+        "description": "ネイビー・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#6E8CB8",
+          "gradient_to": "#16223D",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#0A0F1A",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "navy_subtle": {
+        "description": "ネイビー・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#6E8CB8",
+          "gradient_to": "#16223D",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#0A0F1A",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "brown_standard": {
+        "description": "茶・標準",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D8A46B",
+          "gradient_to": "#8B5A2B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#4A2E12",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "brown_emphasis": {
+        "description": "茶・強調大",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 94,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D8A46B",
+          "gradient_to": "#8B5A2B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#4A2E12",
+          "width": 20
+        },
+        "drop_shadow": "drop-shadow(0px 6px 10px rgba(0,0,0,0.5))",
+        "y_position_offset": -0.05
+      },
+      "brown_subtle": {
+        "description": "茶・控えめ小",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 56,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#D8A46B",
+          "gradient_to": "#8B5A2B",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 9
+        },
+        "outer_stroke": {
+          "color": "#4A2E12",
+          "width": 16
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      },
+      "fact_yellow": {
+        "description": "事実・説明のデフォルト。白+黒細縁+ハード影、強調語のみ黄",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 72,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 4,
+          "y": 4,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "fact_yellow_band": {
+        "description": "事実・説明+座布団(半透明黒帯)。背景がゴチャつく場面向け",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 72,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "neutral_white_band": {
+        "description": "ニュートラル+座布団(半透明黒帯)。背景がゴチャつく場面向け",
+        "font_family": "\"GenEi Gothic N H-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "animation_in": "none",
+        "sfx": null
+      },
+      "neutral_white": {
+        "description": "ニュートラルな相槌・つなぎ・引用。白+黒細縁+黒ハード影",
+        "font_family": "\"GenEi Gothic N H-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 4,
+          "y": 4,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "animation_in": "none",
+        "sfx": null
+      },
+      "emotion_red": {
+        "description": "感情・驚き・断言。赤ベタ+白細縁+黒オフセット影",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 78,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#E60028"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FFFFFF",
+          "width": 7
+        },
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.65))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "pop_big",
+        "sfx": "don"
+      },
+      "question_blue": {
+        "description": "聞き手の質問・ツッコミ。青ベタ+白細縁+黒オフセット影",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 72,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#2E9BFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FFFFFF",
+          "width": 7
+        },
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.65))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "slide_up",
+        "sfx": "pon"
+      },
+      "reply_cyan": {
+        "description": "軽い返し・相槌。けいふぉんとの水色+黒細縁でカジュアルに",
+        "font_family": "\"Keifont\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 68,
+        "font_weight": 700,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#6BDCF5"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 3,
+          "y": 3,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "latin_font_family": null,
+        "animation_in": "none",
+        "sfx": null
+      },
+      "special_purple": {
+        "description": "特別に強い煽り/ネガ。ラノベPOPの紫グラデ+白細縁+暗紫の外縁",
+        "font_family": "\"LanobePOP\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 82,
+        "font_weight": 700,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#B06CF2",
+          "gradient_to": "#4E1490",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 7
+        },
+        "outer_stroke": {
+          "color": "#14042E",
+          "width": 12
+        },
+        "drop_shadow": "drop-shadow(0px 5px 10px rgba(20,4,46,0.6))",
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "pop_big",
+        "sfx": "don"
+      },
+      "box_yellow": {
+        "description": "話のオチ・要約・言い切り。黄色ベタ背景ボックス+黒文字(2行)",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 64,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "solid",
+          "color": "#000000"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))",
+        "background": {
+          "color": "#FFE600",
+          "padding_x": 36,
+          "padding_y": 14
+        },
+        "y_position_offset": 0,
+        "animation_in": "zoom",
+        "sfx": "jan"
+      },
+      "box_red": {
+        "description": "プラン名等の強い提示。赤ベタ背景ボックス+白文字",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 64,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))",
+        "background": {
+          "color": "#E60028",
+          "padding_x": 36,
+          "padding_y": 14
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "zoom",
+        "sfx": "jan"
+      },
+      "cta_yellow": {
+        "description": "CTA「概要欄の公式LINEに『◯◯希望』」。黄色ベタ大ボックス+黒文字2行",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 76,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "solid",
+          "color": "#000000"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": "drop-shadow(0px 4px 10px rgba(0,0,0,0.4))",
+        "background": {
+          "color": "#FFE600",
+          "padding_x": 44,
+          "padding_y": 16
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#E60028",
+        "animation_in": "zoom",
+        "sfx": "jan"
+      },
+      "op_brush": {
+        "description": "OP煽り。毛筆(Yuji Syuku)・白文字+黒フチ(参考画像02)",
+        "font_family": "\"Yuji Syuku\", \"Hiragino Mincho ProN\", \"Hiragino Mincho Pro\", \"Yu Mincho\", \"YuMincho\", serif",
+        "font_size": 88,
+        "font_weight": 400,
+        "letter_spacing": "0.04em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 12
+        },
+        "drop_shadow": "drop-shadow(0px 5px 10px rgba(0,0,0,0.7))",
+        "y_position_offset": -0.1,
+        "latin_font_family": null
+      },
+      "neutral_white_pink": {
+        "description": "ニュートラル変種。白+ピンク細縁+黒ハード影",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 72,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#E8336E",
+          "width": 7
+        },
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.6))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "animation_in": "none",
+        "sfx": null
+      },
+      "serif_quote": {
+        "description": "名言・格言。白の明朝+黒細縁+ソフト影。余韻のある字間",
+        "font_family": "\"Shippori Mincho B1\", \"Hiragino Mincho ProN\", \"Hiragino Mincho Pro\", \"Yu Mincho\", \"YuMincho\", serif",
+        "font_size": 74,
+        "font_weight": 700,
+        "letter_spacing": "0.14em",
+        "line_height": 1.6,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 8
+        },
+        "drop_shadow": "drop-shadow(0px 6px 14px rgba(0,0,0,0.65))",
+        "y_position_offset": 0,
+        "latin_font_family": null,
+        "animation_in": "slide_left",
+        "sfx": "shakin"
+      },
+      "serif_harsh": {
+        "description": "辛辣・毒舌。黒の明朝+白細縁+黒オフセット影",
+        "font_family": "\"Shippori Mincho B1\", \"Hiragino Mincho ProN\", \"Hiragino Mincho Pro\", \"Yu Mincho\", \"YuMincho\", serif",
+        "font_size": 78,
+        "font_weight": 800,
+        "letter_spacing": "0.06em",
+        "line_height": 1.45,
+        "fill": {
+          "type": "solid",
+          "color": "#111111"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FFFFFF",
+          "width": 8
+        },
+        "drop_shadow": "drop-shadow(3px 3px 6px rgba(0,0,0,0.7))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#E60028",
+        "latin_font_family": null,
+        "animation_in": "slide_left",
+        "sfx": "shakin"
+      },
+      "biz_white": {
+        "description": "ビジネス・メイン。BIZ UDPゴシックの白+黒細縁。装飾最小",
+        "font_family": "\"BIZ UDPGothic\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 68,
+        "font_weight": 700,
+        "letter_spacing": "0.03em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 3,
+          "y": 3,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#4DA3FF",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "biz_blue": {
+        "description": "ビジネス・強調。青ベタ+白細縁+ソフト影",
+        "font_family": "\"BIZ UDPGothic\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 76,
+        "font_weight": 700,
+        "letter_spacing": "0.03em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "solid",
+          "color": "#2E86E0"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FFFFFF",
+          "width": 7
+        },
+        "drop_shadow": "drop-shadow(2px 2px 5px rgba(0,0,0,0.55))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "fade",
+        "sfx": null
+      },
+      "biz_navy_box": {
+        "description": "ビジネス・見出し。紺ベタ背景ボックス+白文字",
+        "font_family": "\"BIZ UDPGothic\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 64,
+        "font_weight": 700,
+        "letter_spacing": "0.04em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))",
+        "background": {
+          "color": "#16305E",
+          "padding_x": 36,
+          "padding_y": 14
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "fade",
+        "sfx": null
+      },
+      "vlog_caption": {
+        "description": "Vlog・メイン字幕。細めの白+薄い黒帯。縁なしで映像に馴染む",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 52,
+        "font_weight": 400,
+        "letter_spacing": "0.08em",
+        "line_height": 1.5,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": null,
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.40)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFFFFF",
+        "particle_scale": 1,
+        "animation_in": "none",
+        "sfx": null
+      },
+      "vlog_caption_strong": {
+        "description": "Vlog・強調字幕。太字白+やや濃い黒帯。控えめ強調",
+        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", \"Meiryo\", sans-serif",
+        "font_size": 58,
+        "font_weight": 700,
+        "letter_spacing": "0.06em",
+        "line_height": 1.5,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": null,
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.45)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "particle_scale": 1,
+        "animation_in": "fade",
+        "sfx": null
+      },
+      "variety_yellow": {
+        "description": "バラエティ・メイン。極太の黄+黒細縁+ハード影",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 74,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFE600"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 7
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 4,
+          "y": 4,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FF2E2E",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "variety_pop_red": {
+        "description": "バラエティ・強調。Dela Gothic Oneの黄→赤グラデ+黒細縁",
+        "font_family": "\"Dela Gothic One\", \"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", sans-serif",
+        "font_size": 88,
+        "font_weight": 400,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#FFD93D",
+          "gradient_to": "#FF3B00",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 8
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 5,
+          "y": 5,
+          "color": "#000000"
+        },
+        "y_position_offset": -0.02,
+        "highlight_color": "#FFFFFF",
+        "animation_in": "pop_big",
+        "sfx": "don"
+      },
+      "variety_hand_shock": {
+        "description": "バラエティ・特殊。手書きPOPの白+赤細縁+スタンプ登場",
+        "font_family": "\"LanobePOP\", \"GenEi POPle Bk\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", sans-serif",
+        "font_size": 84,
+        "font_weight": 700,
+        "letter_spacing": "0.02em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#E60028",
+          "width": 7
+        },
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.6))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "latin_font_family": null,
+        "animation_in": "stamp",
+        "sfx": "don"
+      },
+      "beauty_serif": {
+        "description": "美容・メイン。明朝の白+縁なし+上品なソフト影",
+        "font_family": "\"Shippori Mincho B1\", \"Hiragino Mincho ProN\", \"Hiragino Mincho Pro\", \"Yu Mincho\", \"YuMincho\", serif",
+        "font_size": 64,
+        "font_weight": 700,
+        "letter_spacing": "0.12em",
+        "line_height": 1.6,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": null,
+        "drop_shadow": "drop-shadow(0px 3px 10px rgba(0,0,0,0.6))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#F2A6C5",
+        "latin_font_family": null,
+        "particle_scale": 1,
+        "animation_in": "fade",
+        "sfx": null
+      },
+      "beauty_pink": {
+        "description": "美容・強調。くすみピンクの明朝+白細縁+ソフト影",
+        "font_family": "\"Shippori Mincho B1\", \"Hiragino Mincho ProN\", \"Hiragino Mincho Pro\", \"Yu Mincho\", \"YuMincho\", serif",
+        "font_size": 72,
+        "font_weight": 800,
+        "letter_spacing": "0.08em",
+        "line_height": 1.5,
+        "fill": {
+          "type": "solid",
+          "color": "#F2A6C5"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FFFFFF",
+          "width": 6
+        },
+        "drop_shadow": "drop-shadow(2px 3px 6px rgba(0,0,0,0.55))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#FFFFFF",
+        "latin_font_family": null,
+        "particle_scale": 1,
+        "animation_in": "fade",
+        "sfx": null
+      },
+      "beauty_gold": {
+        "description": "美容・見出し。金グラデの明朝+白細縁。高級感",
+        "font_family": "\"Shippori Mincho B1\", \"Hiragino Mincho ProN\", \"Hiragino Mincho Pro\", \"Yu Mincho\", \"YuMincho\", serif",
+        "font_size": 78,
+        "font_weight": 800,
+        "letter_spacing": "0.10em",
+        "line_height": 1.5,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#F5E0A8",
+          "gradient_to": "#C9A227",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FFFFFF",
+          "width": 6
+        },
+        "drop_shadow": "drop-shadow(0px 4px 10px rgba(0,0,0,0.5))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "highlight_color": "#FFFFFF",
+        "latin_font_family": null,
+        "particle_scale": 1,
+        "animation_in": "fade",
+        "sfx": null
+      },
+      "game_neon_cyan": {
+        "description": "ゲーム・メイン。白+シアン縁+ネオングロウ+黒座布団",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.04em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#00CFEF",
+          "width": 6
+        },
+        "drop_shadow": "drop-shadow(0px 0px 10px rgba(0,229,255,0.95)) drop-shadow(0px 0px 24px rgba(0,229,255,0.6))",
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#B6FF3D",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "game_neon_magenta": {
+        "description": "ゲーム・強調。白+マゼンタ縁+ネオングロウ+黒座布団",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 82,
+        "font_weight": 900,
+        "letter_spacing": "0.04em",
+        "line_height": 1.3,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#FF2ED2",
+          "width": 7
+        },
+        "drop_shadow": "drop-shadow(0px 0px 10px rgba(255,46,210,0.95)) drop-shadow(0px 0px 24px rgba(255,46,210,0.6))",
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "pop_big",
+        "sfx": "don"
+      },
+      "game_retro_dot": {
+        "description": "ゲーム・特殊。ドット文字(DotGothic16)の黄緑+黒座布団。レトロ演出",
+        "font_family": "\"DotGothic16\", \"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", monospace",
+        "font_size": 72,
+        "font_weight": 400,
+        "letter_spacing": "0.06em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "solid",
+          "color": "#B6FF3D"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": "drop-shadow(0px 0px 12px rgba(182,255,61,0.7))",
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "latin_font_family": null,
+        "animation_in": "stamp",
+        "sfx": "pon"
+      },
+      "question": {
+        "description": "ホスト/インタビュアーの問いかけ。緑グラデで穏やかに",
+        "font_family": "\"Hiragino Maru Gothic ProN\", \"Zen Kaku Gothic Antique\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 68,
+        "font_weight": 900,
+        "letter_spacing": "0.02em",
+        "line_height": 1.4,
+        "fill": {
+          "type": "gradient",
+          "gradient_from": "#A0E7A0",
+          "gradient_to": "#2F8F4F",
+          "gradient_direction": "vertical"
+        },
+        "inner_stroke": {
+          "color": "#FFFFFF",
+          "width": 10
+        },
+        "outer_stroke": {
+          "color": "#1A4D2E",
+          "width": 18
+        },
+        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
+        "y_position_offset": 0
+      }
+    },
+    "default_telop_style": "default"
+  },
+  "voice_data": {
+    "version": "1.0",
+    "cuts": [
+      {
+        "id": "cut_001",
+        "narration": "この方法で再生数が伸びた",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_001_p00",
+            "text": "この方法で再生数が伸びた",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "この方法で再生数が伸びた",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "fact_yellow",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_002",
+        "narration": "ここが一番大事!",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_002_p00",
+            "text": "ここが一番大事!",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "ここが一番大事!",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "emotion_red",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_003",
+        "narration": "結論:継続が9割",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_003_p00",
+            "text": "結論:継続が9割",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "結論:継続が9割",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "box_yellow",
+            "type": "punchline"
+          }
+        ]
+      },
+      {
+        "id": "cut_004",
+        "narration": "売上を3倍にした仕組み",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_004_p00",
+            "text": "売上を3倍にした仕組み",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "売上を3倍にした仕組み",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "biz_white",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_005",
+        "narration": "重要なのは利益率です",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_005_p00",
+            "text": "重要なのは利益率です",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "重要なのは利益率です",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "biz_blue",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_006",
+        "narration": "まとめ:数字で語る",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_006_p00",
+            "text": "まとめ:数字で語る",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "まとめ:数字で語る",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "biz_navy_box",
+            "type": "punchline"
+          }
+        ]
+      },
+      {
+        "id": "cut_007",
+        "narration": "なるほど、面白いですね",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_007_p00",
+            "text": "なるほど、面白いですね",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "なるほど、面白いですね",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "neutral_white",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_008",
+        "narration": "それってどういうこと?",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_008_p00",
+            "text": "それってどういうこと?",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "それってどういうこと?",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "question_blue",
+            "type": "question"
+          }
+        ]
+      },
+      {
+        "id": "cut_009",
+        "narration": "たしかに!",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_009_p00",
+            "text": "たしかに!",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "たしかに!",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "reply_cyan",
+            "type": "reply"
+          }
+        ]
+      },
+      {
+        "id": "cut_010",
+        "narration": "先週の続きを話します",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_010_p00",
+            "text": "先週の続きを話します",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "先週の続きを話します",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "neutral_white",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_011",
+        "narration": "ここだけの裏話です",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_011_p00",
+            "text": "ここだけの裏話です",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "ここだけの裏話です",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "emotion_red",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_012",
+        "narration": "要点はこの3つ",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_012_p00",
+            "text": "要点はこの3つ",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "要点はこの3つ",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "box_yellow",
+            "type": "punchline"
+          }
+        ]
+      },
+      {
+        "id": "cut_013",
+        "narration": "朝6時、旅のはじまり",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_013_p00",
+            "text": "朝6時、旅のはじまり",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "朝6時、旅のはじまり",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "vlog_caption",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_014",
+        "narration": "この景色に出会えた",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_014_p00",
+            "text": "この景色に出会えた",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "この景色に出会えた",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "vlog_caption_strong",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_015",
+        "narration": "旅は道連れ世は情け",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_015_p00",
+            "text": "旅は道連れ世は情け",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "旅は道連れ世は情け",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "serif_quote",
+            "type": "quote"
+          }
+        ]
+      },
+      {
+        "id": "cut_016",
+        "narration": "まさかの結末に一同驚愕",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_016_p00",
+            "text": "まさかの結末に一同驚愕",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "まさかの結末に一同驚愕",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "variety_yellow",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_017",
+        "narration": "衝撃の事実が発覚!",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_017_p00",
+            "text": "衝撃の事実が発覚!",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "衝撃の事実が発覚!",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "variety_pop_red",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_018",
+        "narration": "ドッキリ大成功!!",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_018_p00",
+            "text": "ドッキリ大成功!!",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "ドッキリ大成功!!",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "variety_hand_shock",
+            "type": "surprise"
+          }
+        ]
+      },
+      {
+        "id": "cut_019",
+        "narration": "毎日のスキンケア習慣",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_019_p00",
+            "text": "毎日のスキンケア習慣",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "毎日のスキンケア習慣",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "beauty_serif",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_020",
+        "narration": "うるおいが違う",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_020_p00",
+            "text": "うるおいが違う",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "うるおいが違う",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "beauty_pink",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_021",
+        "narration": "ご褒美コスメ3選",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_021_p00",
+            "text": "ご褒美コスメ3選",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "ご褒美コスメ3選",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "beauty_gold",
+            "type": "punchline"
+          }
+        ]
+      },
+      {
+        "id": "cut_022",
+        "narration": "ラスボス戦、開幕",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_022_p00",
+            "text": "ラスボス戦、開幕",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "ラスボス戦、開幕",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "game_neon_cyan",
+            "type": "default"
+          }
+        ]
+      },
+      {
+        "id": "cut_023",
+        "narration": "会心の一撃!!",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_023_p00",
+            "text": "会心の一撃!!",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "会心の一撃!!",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "game_neon_magenta",
+            "type": "emphasis"
+          }
+        ]
+      },
+      {
+        "id": "cut_024",
+        "narration": "GAME OVER",
+        "voice": {
+          "duration_ms": 2000,
+          "words": []
+        },
+        "telops": [
+          {
+            "id": "cut_024_p00",
+            "text": "GAME OVER",
+            "word_indices": [],
+            "segments": [
+              {
+                "text": "GAME OVER",
+                "word_indices": []
+              }
+            ],
+            "start": 0.15,
+            "end": 1.9,
+            "style": "game_retro_dot",
+            "type": "punchline"
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "source_video": "/Users/takeshi/workspace/works/video-podcast-saas/editor/runs/20260704_204052_videoplayback_7/step08_composition/segments",
+    "original_duration_ms": 48000,
+    "edited_duration_ms": 48000,
+    "reduction_ratio": 0,
+    "total_cuts": 24,
+    "display_width": 1280,
+    "display_height": 720,
+    "orientation": "horizontal",
+    "rotation": 0,
+    "project": {
+      "name": "genre_swatches_u5"
+    }
+  }
+}

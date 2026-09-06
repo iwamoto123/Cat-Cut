@@ -1652,30 +1652,11 @@
         "y_position_offset": 0
       },
       "fact_yellow": {
-        "description": "事実・説明のデフォルト。黄ベタ文字+黒細縁",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "description": "事実・説明のデフォルト。白+黒細縁+ハード影、強調語のみ黄",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
         "font_size": 72,
         "font_weight": 900,
-        "letter_spacing": "0.02em",
-        "line_height": 1.35,
-        "fill": {
-          "type": "solid",
-          "color": "#FFE600"
-        },
-        "inner_stroke": null,
-        "outer_stroke": {
-          "color": "#000000",
-          "width": 10
-        },
-        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.45))",
-        "y_position_offset": 0
-      },
-      "neutral_white": {
-        "description": "ニュートラルな相槌・つなぎ・引用。白+黒細縁+黒ハード影",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
-        "font_size": 72,
-        "font_weight": 900,
-        "letter_spacing": "0.02em",
+        "letter_spacing": "0.03em",
         "line_height": 1.35,
         "fill": {
           "type": "solid",
@@ -1684,22 +1665,102 @@
         "inner_stroke": null,
         "outer_stroke": {
           "color": "#000000",
-          "width": 8
+          "width": 6
         },
         "drop_shadow": null,
         "shadow_offset": {
-          "x": 6,
-          "y": 6,
+          "x": 4,
+          "y": 4,
           "color": "#000000"
         },
-        "y_position_offset": 0
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "fact_yellow_band": {
+        "description": "事実・説明+座布団(半透明黒帯)。背景がゴチャつく場面向け",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 72,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "highlight_color": "#FFE600",
+        "animation_in": "none",
+        "sfx": null
+      },
+      "neutral_white_band": {
+        "description": "ニュートラル+座布団(半透明黒帯)。背景がゴチャつく場面向け",
+        "font_family": "\"GenEi Gothic N H-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": null,
+        "background": {
+          "color": "rgba(0, 0, 0, 0.55)"
+        },
+        "y_position_offset": 0,
+        "animation_in": "none",
+        "sfx": null
+      },
+      "neutral_white": {
+        "description": "ニュートラルな相槌・つなぎ・引用。白+黒細縁+黒ハード影",
+        "font_family": "\"GenEi Gothic N H-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 70,
+        "font_weight": 900,
+        "letter_spacing": "0.03em",
+        "line_height": 1.35,
+        "fill": {
+          "type": "solid",
+          "color": "#FFFFFF"
+        },
+        "inner_stroke": null,
+        "outer_stroke": {
+          "color": "#000000",
+          "width": 6
+        },
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 4,
+          "y": 4,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "animation_in": "none",
+        "sfx": null
       },
       "emotion_red": {
         "description": "感情・驚き・断言。赤ベタ+白細縁+黒オフセット影",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
-        "font_size": 76,
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 78,
         "font_weight": 900,
-        "letter_spacing": "0.02em",
+        "letter_spacing": "0.03em",
         "line_height": 1.35,
         "fill": {
           "type": "solid",
@@ -1708,48 +1769,44 @@
         "inner_stroke": null,
         "outer_stroke": {
           "color": "#FFFFFF",
-          "width": 10
+          "width": 7
         },
-        "drop_shadow": null,
-        "shadow_offset": {
-          "x": 5,
-          "y": 5,
-          "color": "#000000"
-        },
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.65))",
+        "shadow_offset": null,
         "y_position_offset": 0,
-        "highlight_color": "#FFE600"
+        "highlight_color": "#FFE600",
+        "animation_in": "pop_big",
+        "sfx": "don"
       },
       "question_blue": {
         "description": "聞き手の質問・ツッコミ。青ベタ+白細縁+黒オフセット影",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
         "font_size": 72,
         "font_weight": 900,
-        "letter_spacing": "0.02em",
+        "letter_spacing": "0.03em",
         "line_height": 1.35,
         "fill": {
           "type": "solid",
-          "color": "#1D6AE5"
+          "color": "#2E9BFF"
         },
         "inner_stroke": null,
         "outer_stroke": {
           "color": "#FFFFFF",
-          "width": 10
+          "width": 7
         },
-        "drop_shadow": null,
-        "shadow_offset": {
-          "x": 5,
-          "y": 5,
-          "color": "#000000"
-        },
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.65))",
+        "shadow_offset": null,
         "y_position_offset": 0,
-        "highlight_color": "#FFE600"
+        "highlight_color": "#FFE600",
+        "animation_in": "slide_up",
+        "sfx": "pon"
       },
       "reply_cyan": {
-        "description": "軽い返し・相槌。水色ベタ+黒細縁",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "description": "軽い返し・相槌。けいふぉんとの水色+黒細縁でカジュアルに",
+        "font_family": "\"Keifont\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
         "font_size": 68,
-        "font_weight": 900,
-        "letter_spacing": "0.02em",
+        "font_weight": 700,
+        "letter_spacing": "0.03em",
         "line_height": 1.35,
         "fill": {
           "type": "solid",
@@ -1758,16 +1815,24 @@
         "inner_stroke": null,
         "outer_stroke": {
           "color": "#000000",
-          "width": 10
+          "width": 6
         },
-        "drop_shadow": "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))",
-        "y_position_offset": 0
+        "drop_shadow": null,
+        "shadow_offset": {
+          "x": 3,
+          "y": 3,
+          "color": "#000000"
+        },
+        "y_position_offset": 0,
+        "latin_font_family": null,
+        "animation_in": "none",
+        "sfx": null
       },
       "special_purple": {
-        "description": "特別に強い煽り/ネガ。紫グラデ+白細縁+暗紫の外縁",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
-        "font_size": 80,
-        "font_weight": 900,
+        "description": "特別に強い煽り/ネガ。ラノベPOPの紫グラデ+白細縁+暗紫の外縁",
+        "font_family": "\"LanobePOP\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_size": 82,
+        "font_weight": 700,
         "letter_spacing": "0.02em",
         "line_height": 1.3,
         "fill": {
@@ -1778,19 +1843,21 @@
         },
         "inner_stroke": {
           "color": "#FFFFFF",
-          "width": 8
+          "width": 7
         },
         "outer_stroke": {
           "color": "#14042E",
-          "width": 14
+          "width": 12
         },
         "drop_shadow": "drop-shadow(0px 5px 10px rgba(20,4,46,0.6))",
         "y_position_offset": 0,
-        "highlight_color": "#FFE600"
+        "highlight_color": "#FFE600",
+        "animation_in": "pop_big",
+        "sfx": "don"
       },
       "box_yellow": {
         "description": "話のオチ・要約・言い切り。黄色ベタ背景ボックス+黒文字(2行)",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
         "font_size": 64,
         "font_weight": 900,
         "letter_spacing": "0.02em",
@@ -1807,11 +1874,13 @@
           "padding_x": 36,
           "padding_y": 14
         },
-        "y_position_offset": 0
+        "y_position_offset": 0,
+        "animation_in": "zoom",
+        "sfx": "jan"
       },
       "box_red": {
         "description": "プラン名等の強い提示。赤ベタ背景ボックス+白文字",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
         "font_size": 64,
         "font_weight": 900,
         "letter_spacing": "0.02em",
@@ -1829,11 +1898,13 @@
           "padding_y": 14
         },
         "y_position_offset": 0,
-        "highlight_color": "#FFE600"
+        "highlight_color": "#FFE600",
+        "animation_in": "zoom",
+        "sfx": "jan"
       },
       "cta_yellow": {
         "description": "CTA「概要欄の公式LINEに『◯◯希望』」。黄色ベタ大ボックス+黒文字2行",
-        "font_family": "\"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
+        "font_family": "\"GenEi Gothic N U-KL\", \"Zen Kaku Gothic Antique\", \"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", \"Meiryo\", sans-serif",
         "font_size": 76,
         "font_weight": 900,
         "letter_spacing": "0.02em",
@@ -1851,7 +1922,9 @@
           "padding_y": 16
         },
         "y_position_offset": 0,
-        "highlight_color": "#E60028"
+        "highlight_color": "#E60028",
+        "animation_in": "zoom",
+        "sfx": "jan"
       },
       "op_brush": {
         "description": "OP煽り。毛筆(Yuji Syuku)・白文字+黒フチ(参考画像02)",
@@ -1870,7 +1943,8 @@
           "width": 12
         },
         "drop_shadow": "drop-shadow(0px 5px 10px rgba(0,0,0,0.7))",
-        "y_position_offset": -0.1
+        "y_position_offset": -0.1,
+        "latin_font_family": null
       },
       "neutral_white_pink": {
         "description": "ニュートラル変種。白+ピンク細縁+黒ハード影",
@@ -1886,15 +1960,13 @@
         "inner_stroke": null,
         "outer_stroke": {
           "color": "#E8336E",
-          "width": 10
+          "width": 7
         },
-        "drop_shadow": null,
-        "shadow_offset": {
-          "x": 6,
-          "y": 6,
-          "color": "#000000"
-        },
-        "y_position_offset": 0
+        "drop_shadow": "drop-shadow(3px 3px 5px rgba(0,0,0,0.6))",
+        "shadow_offset": null,
+        "y_position_offset": 0,
+        "animation_in": "none",
+        "sfx": null
       },
       "serif_quote": {
         "description": "名言・格言。白の明朝+黒細縁+ソフト影。余韻のある字間",
@@ -1913,7 +1985,10 @@
           "width": 8
         },
         "drop_shadow": "drop-shadow(0px 6px 14px rgba(0,0,0,0.65))",
-        "y_position_offset": 0
+        "y_position_offset": 0,
+        "latin_font_family": null,
+        "animation_in": "slide_left",
+        "sfx": "shakin"
       },
       "serif_harsh": {
         "description": "辛辣・毒舌。黒の明朝+白細縁+黒オフセット影",
@@ -1929,16 +2004,15 @@
         "inner_stroke": null,
         "outer_stroke": {
           "color": "#FFFFFF",
-          "width": 10
+          "width": 8
         },
-        "drop_shadow": null,
-        "shadow_offset": {
-          "x": 5,
-          "y": 5,
-          "color": "#000000"
-        },
+        "drop_shadow": "drop-shadow(3px 3px 6px rgba(0,0,0,0.7))",
+        "shadow_offset": null,
         "y_position_offset": 0,
-        "highlight_color": "#E60028"
+        "highlight_color": "#E60028",
+        "latin_font_family": null,
+        "animation_in": "slide_left",
+        "sfx": "shakin"
       },
       "question": {
         "description": "ホスト/インタビュアーの問いかけ。緑グラデで穏やかに",
@@ -2375,7 +2449,7 @@
             "word_indices": [],
             "start": 0.15,
             "end": 2.85,
-            "style": "neutral_white",
+            "style": "neutral_white_band",
             "segments": [
               {
                 "text": "動画編集も企画もサムネイルも全部ひとりでやっていた頃には想像もできなかった景色がそこにはありました",

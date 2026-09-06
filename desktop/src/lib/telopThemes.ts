@@ -55,12 +55,44 @@ export type TelopStyleDef = {
   fill: TelopFill;
   inner_stroke?: TelopStroke | null;
   outer_stroke?: TelopStroke | null;
+  /** フェーズU6: outer_stroke のさらに外側の第3縁(多重テロップの「太枠」用。最背面)。 */
+  outer_stroke2?: TelopStroke | null;
   drop_shadow?: string | null;
+  /** フェーズU6: 光彩(グロウ)。drop-shadow多重で表現(telopGlow.ts)。radiusはfont_size基準px。 */
+  glow?: { color: string; radius: number } | null;
   /** フェーズT2.5-2: ハードなオフセット影(縁レイヤーの下に(x,y)pxずらして描画)。 */
   shadow_offset?: { x: number; y: number; color: string } | null;
   y_position_offset?: number;
   underline?: boolean;
-  background?: { color: string; borderRadius?: string } | null;
+  /**
+   * 背景。padding_x/padding_y(px)指定時は「行ごとの帯」ではなく文字ブロック全体の
+   * 背後に1枚のベタ長方形を描く(box_yellow等。Remotion Telop.tsx の resolveBlockBackground と同じ規則)。
+   */
+  background?: {
+    color: string;
+    borderRadius?: string;
+    padding_x?: number;
+    padding_y?: number;
+    border_radius?: number;
+  } | null;
+  /** フェーズT1-2(部分ハイライト): highlight_words の塗り色。省略時 DEFAULT_HIGHLIGHT_COLOR。 */
+  highlight_color?: string;
+  /** フェーズT3: プリセット既定の登場アニメーション(pop_big等。省略時はtimeline既定)。 */
+  animation_in?: string | null;
+  /** フェーズT3: プリセット既定の退場アニメーション。 */
+  animation_out?: string | null;
+  /** フェーズT3: 登場アニメの長さ(フレーム数。省略時は既定12)。 */
+  animation_duration_frames?: number;
+  /** フェーズT3: 登場時効果音ID(assets/sfx/。null/省略で鳴らさない)。 */
+  sfx?: string | null;
+  /** 助詞縮小: 内容語に挟まれた単独ひらがな助詞の縮小率。省略時0.8、1で無効。 */
+  particle_scale?: number | null;
+  /** 和欧混植: 半角英数字の連続に適用する欧文フォント。省略時Anton、nullで無効。 */
+  latin_font_family?: string | null;
+  /** フェーズW27: ブロック全体の回転(deg)。斜め文字プリセット用。省略=回転なし。 */
+  rotate?: number | null;
+  /** フェーズW27: 縦書き("vertical"=vertical-rl・縦1列)。短い決めゼリフ用。省略=横書き。 */
+  writing_mode?: "vertical" | null;
   /** yaml側の説明文(ギャラリーのツールチップ等に使える。必須ではない)。 */
   description?: string;
 };
@@ -176,6 +208,19 @@ export function getPresetCatalog(): TelopPresetCatalog {
 
 export function getPresetStyle(name: string): TelopStyleDef | null {
   return presetCatalog[name] ?? null;
+}
+
+/**
+ * フェーズU6(詳細エディタ): カスタムスタイル定義(custom_* ID)を実行時にカタログへ登録する。
+ * registerPresetCatalog(起動時のyaml読み込み)と違いフォールバックへは戻さず追記のみ
+ * (デザインテーマのcustom_styles・シーン個別カスタムをプレビューへ即時反映するため)。
+ */
+export function registerRuntimeStyles(defs: Record<string, TelopStyleDef> | null | undefined): void {
+  if (!defs) return;
+  const entries = Object.entries(defs).filter(([id, def]) => id && def && typeof def === "object" && def.fill);
+  if (!entries.length) return;
+  for (const [id, def] of entries) presetCatalog[id] = def;
+  rebuildStyleRegistry();
 }
 
 // =============================================================================
@@ -568,6 +613,20 @@ export function telopStyleToCssProperties(style: TelopStyleDef, baseFontSizePx: 
       ),
     );
   }
+  // フェーズU6: 第3縁(最背面)も同心円shadowで近似する(小サイズ表示専用の簡易版)
+  if (style.outer_stroke2) {
+    shadowLayers.push(
+      ...multiRingShadowLayers(
+        style.outer_stroke2.color,
+        scaleTelopStrokeWidth(style.outer_stroke2.width, baseFontSizePx, presetFontSize),
+      ),
+    );
+  }
+  // フェーズU6: グロウはぼかしtext-shadow1層で近似する(忠実描画はTelopStyledTextの責務)
+  if (style.glow && style.glow.radius > 0) {
+    const glowRadius = style.glow.radius * telopDisplayScale(baseFontSizePx, presetFontSize);
+    shadowLayers.push(`0 0 ${Math.round(glowRadius * 100) / 100}px ${style.glow.color}`);
+  }
   const dropShadowLayer = dropShadowToTextShadow(
     scaleTelopDropShadow(style.drop_shadow, baseFontSizePx, presetFontSize),
   );
@@ -600,7 +659,8 @@ export function telopStyleToCssProperties(style: TelopStyleDef, baseFontSizePx: 
  */
 export function telopStyleSwatchColors(style: TelopStyleDef): { color: string; borderColor: string } {
   const color = style.fill.type === "gradient" ? style.fill.gradient_to : style.fill.color;
-  const borderColor = style.outer_stroke?.color ?? style.inner_stroke?.color ?? "#d9dde3";
+  const borderColor =
+    style.outer_stroke2?.color ?? style.outer_stroke?.color ?? style.inner_stroke?.color ?? "#d9dde3";
   return { color: color || "#FFFFFF", borderColor };
 }
 

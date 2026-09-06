@@ -22,10 +22,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
 from _telop_presets import load_presets
 
-# リント対象 = 演出系プリセット(フェーズT1の10種 + T2.5の追加分)
+# リント対象 = 演出系プリセット(フェーズT1の10種 + T2.5の追加分 + U5のジャンル別)
 DIRECTED_PRESET_NAMES = [
     "fact_yellow",
+    "fact_yellow_band",
     "neutral_white",
+    "neutral_white_band",
     "neutral_white_pink",
     "emotion_red",
     "question_blue",
@@ -37,6 +39,34 @@ DIRECTED_PRESET_NAMES = [
     "op_brush",
     "serif_quote",
     "serif_harsh",
+    # フェーズU5: ジャンル別プロプリセット
+    "biz_white",
+    "biz_blue",
+    "biz_navy_box",
+    "vlog_caption",
+    "vlog_caption_strong",
+    "variety_yellow",
+    "variety_pop_red",
+    "variety_hand_shock",
+    "beauty_serif",
+    "beauty_pink",
+    "beauty_gold",
+    "game_neon_cyan",
+    "game_neon_magenta",
+    "game_retro_dot",
+    # フェーズW1: 話者カラー用プリセット
+    "fact_cyan",
+    "fact_green",
+    # フェーズW24 Phase B-2: 広告向けプリセット
+    "ad_gothic_impact",
+    "ad_mincho_impact",
+    "ad_highlight_band",
+    # フェーズW26: 緊急赤帯(縦型ショートの締切・限定訴求)
+    "ad_urgent_band",
+    # フェーズW27: アクセント3種(特大・斜め・縦書き)
+    "ad_mega_impact",
+    "ad_slant_impact",
+    "ad_vertical_mincho",
 ]
 
 # 原則1: 隣接レイヤーに要求する最小の相対輝度差
@@ -91,13 +121,20 @@ def adjacent_layers(preset: dict):
     (飛ばした結果隣り合うペアが実描画でも隣接する)。
     """
     layers = []
+    fill = preset.get("fill") if isinstance(preset.get("fill"), dict) else {}
+    fill_color = str(fill.get("color", "") or "").strip().lower()
     fill_lum = fill_luminance(preset.get("fill"))
     if fill_lum is not None:
         layers.append(("fill", fill_lum))
     for key in ("inner_stroke", "outer_stroke"):
         stroke = preset.get(key)
         if isinstance(stroke, dict):
-            lum = relative_luminance(str(stroke.get("color", "")))
+            stroke_color = str(stroke.get("color", "") or "").strip().lower()
+            # フェーズW27: 塗りと同色のインナーストロークは「縁」ではなく文字を肥やす
+            # 太字化テクニック(明朝の痩せ対策)。視覚上fillと一体化するため隣接判定から除外する
+            if key == "inner_stroke" and stroke_color and stroke_color == fill_color:
+                continue
+            lum = relative_luminance(stroke_color)
             if lum is not None:
                 layers.append((key, lum))
     background = preset.get("background")
@@ -159,6 +196,90 @@ class TelopPresetLintTests(unittest.TestCase):
                     relative_luminance(str(shadow_offset.get("color", ""))),
                     f"{name}.shadow_offset.color が #RRGGBB でない",
                 )
+
+    def test_outer_stroke2_schema(self):
+        # フェーズU6: 第3縁は {color, width} を満たし、常識的な太さ(40px以下)に収まる
+        for name, preset in self.presets.items():
+            stroke2 = preset.get("outer_stroke2")
+            if stroke2 is None:
+                continue
+            with self.subTest(preset=name):
+                self.assertIsInstance(stroke2, dict, f"{name}.outer_stroke2 が辞書でない")
+                self.assertIsNotNone(
+                    relative_luminance(str(stroke2.get("color", ""))),
+                    f"{name}.outer_stroke2.color が #RRGGBB でない",
+                )
+                width = stroke2.get("width")
+                self.assertIsInstance(width, (int, float), f"{name}.outer_stroke2.width が数値でない")
+                self.assertGreater(width, 0, f"{name}.outer_stroke2.width が0以下")
+                self.assertLessEqual(width, 40, f"{name}.outer_stroke2.width {width}px が40pxを超過")
+                # 第3縁はouter_strokeの外側なので、outer_strokeがあるならそれより太いこと
+                outer = preset.get("outer_stroke")
+                if isinstance(outer, dict):
+                    self.assertGreater(
+                        width,
+                        outer.get("width", 0),
+                        f"{name}.outer_stroke2.width は outer_stroke.width より大きくすること",
+                    )
+
+    def test_glow_schema(self):
+        # フェーズU6: 光彩は {color, radius} を満たし、radius は常識的な範囲(60px以下)
+        for name, preset in self.presets.items():
+            glow = preset.get("glow")
+            if glow is None:
+                continue
+            with self.subTest(preset=name):
+                self.assertIsInstance(glow, dict, f"{name}.glow が辞書でない")
+                self.assertTrue(str(glow.get("color", "")).strip(), f"{name}.glow.color が空")
+                radius = glow.get("radius")
+                self.assertIsInstance(radius, (int, float), f"{name}.glow.radius が数値でない")
+                self.assertGreater(radius, 0, f"{name}.glow.radius が0以下")
+                self.assertLessEqual(radius, 60, f"{name}.glow.radius {radius}px が60pxを超過")
+
+    def test_preset_animation_in_is_known_id(self):
+        # フェーズW24 Phase B: プリセットの animation_in は許容リスト(telop_types)と同期していること
+        from shared.telop_types import ANIMATION_IN_TYPES
+
+        for name, preset in self.presets.items():
+            animation = preset.get("animation_in")
+            if animation is None:
+                continue
+            with self.subTest(preset=name):
+                self.assertIn(
+                    animation,
+                    ANIMATION_IN_TYPES,
+                    f"{name}.animation_in '{animation}' が未知のアニメID",
+                )
+
+    def test_ad_presets_shape(self):
+        # フェーズW26: 縦型ショート広告の4スタイルデザインシステム(Fable v5移植)
+        # 標準テロップ: 潰れないHウェイトのゴシック+白+黒縁+ハード影、強調語は黄
+        gothic = self.presets["ad_gothic_impact"]
+        self.assertIn("GenEi Gothic N H-KL", gothic["font_family"])
+        self.assertEqual(gothic["fill"], {"type": "solid", "color": "#FFFFFF"})
+        self.assertEqual(gothic["highlight_color"], "#FFE600")
+        self.assertIsInstance(gothic["shadow_offset"], dict)
+
+        # 決めゼリフ: 帯なしの明朝大文字+黒縁+ハード影(dim暗転と併用する)
+        mincho = self.presets["ad_mincho_impact"]
+        self.assertIn("Shippori Mincho B1", mincho["font_family"])
+        self.assertIn("serif", mincho["font_family"])
+        self.assertNotIn("background", mincho, "W26: 決めゼリフは帯なし(dim暗転と併用)")
+        self.assertGreaterEqual(mincho["font_size"], 90, "決めゼリフは大文字")
+        self.assertIsInstance(mincho["shadow_offset"], dict)
+
+        # CTAボタン風: 黒ゴシック+黄色ザブトン帯
+        band = self.presets["ad_highlight_band"]
+        self.assertEqual(band["background"]["color"], "#FFE600")
+        # padding指定なし=行ごとのザブトン帯(ブロック1枚背景ではない)
+        self.assertNotIn("padding_x", band["background"])
+        self.assertNotIn("padding_y", band["background"])
+
+        # 緊急赤帯: 白ゴシック+赤ザブトン帯(W26新設)
+        urgent = self.presets["ad_urgent_band"]
+        self.assertEqual(urgent["background"]["color"], "#DE1C24")
+        self.assertEqual(urgent["fill"], {"type": "solid", "color": "#FFFFFF"})
+        self.assertNotIn("padding_x", urgent["background"])
 
     def test_serif_presets_use_shippori_mincho(self):
         # T2.5-3: 明朝プリセットは Shippori Mincho B1 (システム明朝フォールバック付き)

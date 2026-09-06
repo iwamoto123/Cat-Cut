@@ -123,6 +123,13 @@ def run_step(
                     remove_word_ids.add(wid)
                     remove_reasons[wid] = "retake:step05"
                     retake_removed_words += 1
+            elif sid in word_map:
+                # フェーズW29: step05_ai_retake は original_sentence_ids に word ID を書く
+                # (文単位リテイク・部分リテイク・AI判定フィラーすべて)。従来は文IDとしか
+                # 照合しておらず、AI検出リテイクが一度も適用されない致命的バグだった
+                remove_word_ids.add(sid)
+                remove_reasons[sid] = "retake:step05"
+                retake_removed_words += 1
 
     # 1c. インラインリテイク ("--" パターン検出)
     inline_retake_count = 0
@@ -262,10 +269,13 @@ def run_step(
         word_split_max_gap_ms = int(cfg["word_split_merge_max_gap_ms"])
     else:
         word_split_max_gap_ms = 1500
+    # V8-6: フラグ生成のギャップ上限(超は「意図的な間」としてフラグ化しない)
+    word_split_flag_max_gap_ms = int(cfg.get("word_split_flag_max_gap_ms", 1200))
     keep_segments, word_split_merges, word_split_flags = _apply_word_split_merge(
         keep_segments,
         remaining_words,
         max_gap_ms=word_split_max_gap_ms,
+        flag_max_gap_ms=word_split_flag_max_gap_ms,
     )
     if word_split_merges:
         print(f"  word-split merges: {word_split_merges}")
@@ -312,6 +322,7 @@ def run_step(
                 "edge_head_pad_ms": edge_head_pad_ms,
                 "edge_tail_pad_ms": edge_tail_pad_ms,
                 "word_split_merge_max_gap_ms": word_split_max_gap_ms,
+                "word_split_flag_max_gap_ms": word_split_flag_max_gap_ms,
             },
         },
     }
@@ -1050,10 +1061,15 @@ def _apply_word_split_merge(
     remaining_words: list,
     max_gap_ms: int = 1500,
     context_chars: int = 15,
+    flag_max_gap_ms: int = 1200,
 ) -> tuple[list, int, list]:
     """隣接セグメントで BudouX チャンク内部に境界がある場合、ギャップ閾値以内なら結合する。
 
     結合不可の単語分断は word_split_flags として収集する (改善19-B)。
+
+    フェーズV8-6: フラグ生成にギャップ上限(flag_max_gap_ms)を導入。ギャップが大きいほど
+    話者の「意図的な間」の可能性が高く、実データで 1610ms / 2210ms の境界が誤検知だった
+    (単語分断ではなく普通の間)。上限超のギャップはフラグを出さない。
     """
     del remaining_words  # 互換のため引数は残す。判定は segment text を使う。
     if len(keep_segments) <= 1:
@@ -1086,7 +1102,9 @@ def _apply_word_split_merge(
             merges += 1
         else:
             # 改善19-B: 結合不可の単語分断を flag 化
-            if gap_ms > max_gap_ms and tail_text and head_text:
+            # V8-6: flag_max_gap_ms 超のギャップは「意図的な間」とみなしフラグを出さない
+            # (下限 gap > max_gap_ms は撤廃: 結合されなかった境界は文字条件だけで判定する)
+            if 0 <= gap_ms <= flag_max_gap_ms and tail_text and head_text:
                 inside_budoux = (
                     _boundary_chars_eligible_for_merge(tail_text, head_text)
                     and _is_boundary_inside_budoux_chunk(tail_text, head_text)

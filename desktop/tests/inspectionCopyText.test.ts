@@ -90,3 +90,23 @@ test("buildInspectionCopyText: ヘッダーと全シーン行をプレーンテ�
     "2 [00:03.00-00:05.29] 、枠には限りがあります [警告: 境界はみ出し（終了側） 95ms]",
   );
 });
+
+test("buildInspectionCopyText: 手動改行入りテロップも1シーン=1行を保つ(改行は⏎で可視化)", () => {
+  const scenes: Scene[] = [
+    makeScene({
+      id: "s1",
+      sourceStartMs: 0,
+      sourceEndMs: 2000,
+      telopText: "山口県立大学を\n受験します",
+    }),
+  ];
+  const text = buildInspectionCopyText({
+    runName: "20260707_test",
+    scenes,
+    suspicionsBySceneId: new Map(),
+    generatedAt: new Date("2026-07-07T00:00:00"),
+  });
+  const lines = text.split("\n");
+  assert.equal(lines.length, 2);
+  assert.equal(lines[1], "1 [00:00.00-00:02.00] 山口県立大学を⏎受験します");
+});

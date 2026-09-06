@@ -39,22 +39,25 @@ class KanjiNumberImprove19Tests(unittest.TestCase):
 
 class WordSplitFlagTests(unittest.TestCase):
     def test_budoux_inside_gap_exceeded_flags(self):
+        # V8-6: マージ上限は超えるがフラグ上限(1200ms)以内のギャップはフラグ化する
         segments = [
             {"start_ms": 0, "end_ms": 1000, "text": "この部分をボル"},
-            {"start_ms": 5411, "end_ms": 8000, "text": "トマン定数と呼ぼう"},
+            {"start_ms": 2000, "end_ms": 8000, "text": "トマン定数と呼ぼう"},
         ]
-        merged, count, flags = _apply_word_split_merge(segments, [], max_gap_ms=1500)
+        merged, count, flags = _apply_word_split_merge(segments, [], max_gap_ms=800)
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
         self.assertEqual(len(flags), 1)
         self.assertIn("ボル", flags[0]["tail_text"])
         self.assertIn("トマン", flags[0]["head_text"])
-        self.assertGreater(flags[0]["gap_ms"], 1500)
+        self.assertGreater(flags[0]["gap_ms"], 800)
 
     def test_particle_comma_head_flags(self):
+        # 末尾が文末記号のため自動結合はしないが、次頭が「助詞+読点」で始まる=
+        # 直前カットで文が千切れた疑いがあるのでフラグ化する(ギャップ上限以内)
         segments = [
-            {"start_ms": 0, "end_ms": 1000, "text": "物理は結構極められる"},
-            {"start_ms": 5000, "end_ms": 8000, "text": "は、まあ比較的6割取れてるので"},
+            {"start_ms": 0, "end_ms": 1000, "text": "物理は結構極められる。"},
+            {"start_ms": 2000, "end_ms": 8000, "text": "は、まあ比較的6割取れてるので"},
         ]
         merged, count, flags = _apply_word_split_merge(segments, [], max_gap_ms=1500)
         self.assertEqual(count, 0)
@@ -70,6 +73,30 @@ class WordSplitFlagTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(flags), 0)
         self.assertEqual(len(merged), 1)
+
+    def test_large_gap_is_intentional_pause_no_flag(self):
+        # V8-6: 実データの誤検知(gap 1610ms / 2210ms)。フラグ上限1200ms超は
+        # 「意図的な間」とみなしフラグを出さない
+        for gap_ms in (1610, 2210):
+            segments = [
+                {"start_ms": 0, "end_ms": 1000, "text": "記憶に残りやすい"},
+                {"start_ms": 1000 + gap_ms, "end_ms": 1000 + gap_ms + 3000, "text": "なと思って"},
+            ]
+            merged, count, flags = _apply_word_split_merge(segments, [], max_gap_ms=1500)
+            self.assertEqual(count, 0)
+            self.assertEqual(len(flags), 0, f"gap={gap_ms}ms は意図的な間としてフラグ化しない")
+
+    def test_flag_max_gap_configurable(self):
+        # フラグ上限は設定で広げられる(旧挙動相当の検証)
+        segments = [
+            {"start_ms": 0, "end_ms": 1000, "text": "この部分をボル"},
+            {"start_ms": 5411, "end_ms": 8000, "text": "トマン定数と呼ぼう"},
+        ]
+        merged, count, flags = _apply_word_split_merge(
+            segments, [], max_gap_ms=1500, flag_max_gap_ms=10000,
+        )
+        self.assertEqual(count, 0)
+        self.assertEqual(len(flags), 1)
 
 
 class PromptImprove19Tests(unittest.TestCase):

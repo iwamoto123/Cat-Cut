@@ -10,11 +10,16 @@ import {
   type TelopOccurrenceTarget,
   setChipDeleted,
   setChipsDeleted,
+  setSceneDirectedAnimation,
+  setSceneDirectedHighlightWords,
   setSceneDirectedStyle,
   setSceneDirectedType,
   setSceneEmotionTag,
   setSceneStyleOverride,
+  setSceneSpeed as setSceneSpeedValue,
   setSceneTelopText,
+  setSceneVideoEffectOverride,
+  setAllSceneSpeeds,
   splitSceneAtMs,
   splitSceneAtWord,
   toggleChipDeleted,
@@ -23,6 +28,8 @@ import {
 } from "../lib/scenes";
 import type { EmotionTag } from "../lib/emotionTag";
 import { applyEdgeTrim, type EdgeTrimEdge, type EdgeTrimOptions } from "../lib/edgeTrim";
+import { cutSceneRangeMs, type RangeCutOptions } from "../lib/rangeCut";
+import type { VideoEffectOverride } from "../lib/videoEffectCatalog";
 
 /**
  * scenes配列を唯一の編集源として管理するフック(検品UI v2 Phase 1)。
@@ -57,6 +64,25 @@ export function useScenes(initialScenes: Scene[] = []) {
     history.setPresent((current) => setSceneTelopText(current, sceneId, text));
   };
 
+  /**
+   * W19-B3(AI修正を一括適用): 複数シーンのテロップ本文をまとめて書き換える。
+   * 1回の呼び出し=1つのUndo操作(setPresentを1回だけ呼ぶ)。Cmd+Zで全件まとめて戻る。
+   */
+  const setTelopTextBulk = (edits: Array<{ sceneId: string; text: string }>) => {
+    if (!edits.length) return;
+    history.setPresent((current) =>
+      edits.reduce((scenes, edit) => setSceneTelopText(scenes, edit.sceneId, edit.text), current),
+    );
+  };
+
+  /**
+   * W16-5: テロップ編集セッション中のライブ更新。履歴エントリを積まずに現在値だけ差し替える
+   * (セッション初回はsetTelopTextでpushし、以後はこちらを使う=編集セッション全体でUndo1回)。
+   */
+  const replaceTelopText = (sceneId: string, text: string) => {
+    history.replacePresent((current) => setSceneTelopText(current, sceneId, text));
+  };
+
   /** T-2: バッジクリックによる感情タグの手動変更。 */
   const setEmotionTag = (sceneId: string, tag: EmotionTag) => {
     history.setPresent((current) => setSceneEmotionTag(current, sceneId, tag));
@@ -75,6 +101,29 @@ export function useScenes(initialScenes: Scene[] = []) {
   /** フェーズT2.5-4(directedモード): typeバッジからのシーン種類変更(個別上書きは解除)。 */
   const setDirectedType = (sceneId: string, typeId: string) => {
     history.setPresent((current) => setSceneDirectedType(current, sceneId, typeId));
+  };
+
+  /** フェーズT3(directedモード): アニメーションピッカーからの登場アニメ個別上書き(null=解除)。 */
+  const setDirectedAnimation = (sceneId: string, animationId: string | null) => {
+    history.setPresent((current) => setSceneDirectedAnimation(current, sceneId, animationId));
+  };
+
+  /** シーン映像演出ピッカー。1回の変更を1つのUndo操作として記録する。 */
+  const setVideoEffectOverride = (sceneId: string, override: VideoEffectOverride | null) => {
+    history.setPresent((current) => setSceneVideoEffectOverride(current, sceneId, override));
+  };
+
+  const setSceneSpeed = (sceneId: string, speed: number) => {
+    history.setPresent((current) => setSceneSpeedValue(current, sceneId, speed));
+  };
+
+  const setAllScenesSpeed = (speed: number) => {
+    history.setPresent((current) => setAllSceneSpeeds(current, speed));
+  };
+
+  /** テロップの黄色部分。1回の変更を1つのUndo操作として記録する。 */
+  const setDirectedHighlightWords = (sceneId: string, words: string[] | undefined) => {
+    history.setPresent((current) => setSceneDirectedHighlightWords(current, sceneId, words));
   };
 
   /** T-3: 「このスタイルを同じ感情の全シーンに適用」。1回の呼び出し=1つのUndo操作。 */
@@ -122,6 +171,16 @@ export function useScenes(initialScenes: Scene[] = []) {
     });
   };
 
+  /**
+   * W20-1(範囲選択カット): 波形の横ドラッグ範囲をワンアクションでカットする複合アクション。
+   * ドラッグ中はUI側のローカルオーバーレイ表示のみで、確定(pointerup)時にこれを1回だけ呼ぶ
+   * (1ドラッグ=1つのUndo操作)。変更が無い場合(範囲が狭すぎる等)は履歴を積まない
+   * (cutSceneRangeMsが同一参照を返し、useEditHistoryの同値スキップが効く)。
+   */
+  const cutRangeInScene = (sceneId: string, rangeStartMs: number, rangeEndMs: number, options?: RangeCutOptions) => {
+    history.setPresent((current) => cutSceneRangeMs(current, sceneId, rangeStartMs, rangeEndMs, options).scenes);
+  };
+
   return {
     scenes: history.present,
     keepSegments,
@@ -131,10 +190,17 @@ export function useScenes(initialScenes: Scene[] = []) {
     toggleChipGroup,
     setChipGroupDeletedState,
     setTelopText,
+    setTelopTextBulk,
+    replaceTelopText,
     setEmotionTag,
     setStyleOverride,
     setDirectedStyle,
     setDirectedType,
+    setDirectedAnimation,
+    setVideoEffectOverride,
+    setSceneSpeed,
+    setAllScenesSpeed,
+    setDirectedHighlightWords,
     applyStyleToEmotionGroup,
     replaceSelectedTelopOccurrences,
     splitAtWord,
@@ -142,6 +208,7 @@ export function useScenes(initialScenes: Scene[] = []) {
     mergeWithNext,
     addCutMarkAt,
     applyEdgeTrimAt,
+    cutRangeInScene,
     reset: history.reset,
     undo: history.undo,
     redo: history.redo,

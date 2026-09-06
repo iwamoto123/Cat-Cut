@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 
 import httpx
 
+from shared.network import prefer_ipv4
+
 
 ELEVENLABS_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 
@@ -39,15 +41,18 @@ def transcribe_audio(
             "model_id": model_id,
             "timestamps_granularity": "word",
             "language_code": language_code,
+            # フェーズW1: 話者分離。word ごとに speaker_id("speaker_0"等)が付く
+            "diarize": "true",
         }
 
-        response = httpx.post(
-            ELEVENLABS_STT_URL,
-            headers=headers,
-            files=files,
-            data=data,
-            timeout=600.0,
-        )
+        with prefer_ipv4():
+            response = httpx.post(
+                ELEVENLABS_STT_URL,
+                headers=headers,
+                files=files,
+                data=data,
+                timeout=600.0,
+            )
 
     response.raise_for_status()
     result = response.json()
@@ -68,13 +73,19 @@ def stt_result_to_words(stt_result: Dict[str, Any]) -> List[Dict[str, Any]]:
         if w.get("type") != "word":
             continue
 
-        words.append({
+        word = {
             "id": f"w-{idx:04d}",
             "text": w["text"],
             "start_ms": int(w["start"] * 1000),
             "end_ms": int(w["end"] * 1000),
             "confidence": round(w.get("confidence", 0.0), 3),
-        })
+        }
+        # フェーズW1: diarize時の話者ID。APIが返さない場合はフィールド自体を
+        # 書かない(speaker無しの既存runと同形=完全後方互換)
+        speaker_id = w.get("speaker_id")
+        if isinstance(speaker_id, str) and speaker_id:
+            word["speaker"] = speaker_id
+        words.append(word)
         idx += 1
 
     return words

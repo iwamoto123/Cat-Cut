@@ -153,11 +153,35 @@ class SanitizeSlotDirectiveT25Tests(unittest.TestCase):
         self.assertEqual(directive["text"], self.SLOT["text"])
         self.assertTrue(directive["fallback"])
 
+    def test_overlong_source_keeps_ai_text_when_not_longer(self):
+        # フェーズW28: 元発話自体が上限超過の場合、差し戻しても改善しないので
+        # AI整形(元発話+8文字以内)を採用する(縦型の2行×12字=24文字設定で頻発)
+        raw = {"text": "毎月30万円の売上が出ています", "type": "default"}
+        directive = sanitize_slot_directive(self.SLOT, raw, max_text_chars=10)
+        self.assertEqual(directive["text"], "毎月30万円の売上が出ています")
+        self.assertFalse(directive["fallback"])
+
     def test_text_within_limit_is_kept(self):
         raw = {"text": "毎月30万円の売上が出てます", "type": "default"}
         directive = sanitize_slot_directive(self.SLOT, raw, max_text_chars=32)
         self.assertEqual(directive["text"], "毎月30万円の売上が出てます")
         self.assertFalse(directive["fallback"])
+
+    def test_drop_directive_hides_fragment_slot(self):
+        # フェーズW28: 断片だけのスロットはAIが drop:true で非表示にできる(短い元発話のみ)
+        slot = dict(self.SLOT, text="込みください")
+        raw = {"drop": True, "text": "", "type": "cta"}
+        directive = sanitize_slot_directive(slot, raw)
+        self.assertEqual(directive["text"], "")
+        self.assertTrue(directive.get("dropped"))
+        self.assertFalse(directive["fallback"])
+
+    def test_drop_is_ignored_for_long_source(self):
+        # 長い元発話(12文字超)への drop は内容消失を防ぐため無視して元発話へフォールバック
+        raw = {"drop": True, "text": ""}
+        directive = sanitize_slot_directive(self.SLOT, raw)
+        self.assertEqual(directive["text"], self.SLOT["text"])
+        self.assertTrue(directive["fallback"])
 
     def test_missing_response_gets_default_type(self):
         directive = sanitize_slot_directive(self.SLOT, None, type_mapping={"default": "neutral_white"})
@@ -230,9 +254,24 @@ class Step06cTypeBasedTests(unittest.TestCase):
         self.assertIn('"type"', prompt)
         self.assertIn("harsh", prompt)
         self.assertIn("quote", prompt)
-        self.assertIn("32文字", prompt)
+        self.assertIn("8文字以上長くなると", prompt)
         # 旧形式の「style ID一覧から選択」はプロンプトから消えている
         self.assertNotIn("fact_yellow", prompt)
+
+    def test_prompt_forbids_summarizing_and_uses_restored_edit_examples(self):
+        prompt = step06c_direction.build_slot_prompt(
+            [{"slot_id": "cut_001_s00", "text": "これ知識じゃんってなったと思うんだけど"}],
+            edit_examples=[
+                {
+                    "source": "これ知識じゃんってなったと思うんだけど",
+                    "before": "出た",
+                    "after": "これ知識じゃんってなったと思うんだけど",
+                },
+            ],
+        )
+        self.assertIn("要約・情報の省略は禁止", prompt)
+        self.assertIn("編集者の確定", prompt)
+        self.assertIn("これ知識じゃんってなったと思うんだけど", prompt)
 
     def test_run_step_with_type_based_llm_response(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -311,9 +350,12 @@ class Step06cTypeBasedTests(unittest.TestCase):
                     return {"chapters": []}
                 return {
                     "slots": [
-                        # 忠実だが 2行×8文字 を超える文言 → 元発話へフォールバック
+                        # 忠実だが上限超過かつ元発話より8文字を超えて長い → 元発話へフォールバック
+                        # (W28: 元発話+8文字以内なら上限超過でも採用されるため、それを超える膨張で検証)
+                        # (W30: 1行8字設定では意味の塊分割によりcut_001は
+                        #  「正直この勉強法は」+「ダメです」の2スロットになる)
                         {"slot_id": "cut_001_s00",
-                         "text": "正直この勉強法はダメですダメですダメです", "type": "harsh"},
+                         "text": "正直この勉強法はダメですダメですダメですダメです", "type": "harsh"},
                         {"slot_id": "cut_002_s00", "text": "そうなんですね", "type": "reply"},
                     ],
                     "overlays": [],
@@ -330,9 +372,10 @@ class Step06cTypeBasedTests(unittest.TestCase):
             )
             directives = json.loads((tmp / "telop_directives.json").read_text(encoding="utf-8"))
             slot1 = directives["slots"][0]
-            self.assertEqual(slot1["text"], "正直この勉強法はダメです")
+            self.assertEqual(slot1["text"], "正直この勉強法は")
             self.assertTrue(slot1["fallback"])
-            self.assertEqual(result["stats"]["fallback_slots"], 1)
+            # cut_001_s01(ダメです)はAI応答に無いためフォールバック扱い → 計2
+            self.assertEqual(result["stats"]["fallback_slots"], 2)
 
 
 if __name__ == "__main__":

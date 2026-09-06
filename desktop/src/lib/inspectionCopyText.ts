@@ -48,7 +48,9 @@ export function buildInspectionCopyText(options: BuildInspectionCopyTextOptions)
   const body = scenes.map((scene, index) => {
     const range = `[${formatInspectionTimeMs(scene.sourceStartMs)}-${formatInspectionTimeMs(scene.sourceEndMs)}]`;
     const warnings = formatSceneWarningSuffix(suspicionsBySceneId.get(scene.id) ?? []);
-    return `${index + 1} ${range} ${scene.telopText}${warnings ? ` ${warnings}` : ""}`;
+    // 手動改行入りのテロップも「1シーン=1行」の検品フォーマットを保つ(改行は⏎で可視化)
+    const telopText = scene.telopText.replace(/\n/g, "⏎");
+    return `${index + 1} ${range} ${telopText}${warnings ? ` ${warnings}` : ""}`;
   });
   return [header, ...body].join("\n");
 }

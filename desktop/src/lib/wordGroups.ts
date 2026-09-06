@@ -23,7 +23,12 @@ export type WordGroup = {
   deleted: boolean;
   /** メンバー全員がdeleted かつ autoTrimmed(端トリムによる自動削除)のときtrue。 */
   autoTrimmed: boolean;
+  /** W16-1(無音チップ): 無音word単独のグループ。textは表示用ラベル([...])で、テロップ本文には含まれない。 */
+  silence?: boolean;
 };
+
+/** W16-1(無音チップ): 無音グループの表示ラベル。データ(word.text)は空文字のまま。 */
+export const SILENCE_GROUP_LABEL = "[...]";
 
 const segmenter = new Intl.Segmenter("ja", { granularity: "word" });
 
@@ -34,79 +39,118 @@ const segmenter = new Intl.Segmenter("ja", { granularity: "word" });
  *
  * 削除済み(deleted)の単語も含めて全文字wordを対象にグループ化する。これにより、チップの
  * 削除/復元を繰り返してもグループ境界が変化しない(常に元の文構造からグループを作る)。
+ *
+ * W16-1(無音チップ): 無音word(silence)は常に単独グループ(ラベル [...])にし、
+ * 前後の通常wordの連続列ごとにセグメンタ処理を適用する。
  */
 function computeWordGroups(scene: Scene): WordGroup[] {
   const words = scene.words;
   if (!words.length) return [];
 
-  // 文字位置 -> 所属word indexの対応表を作る(1つのwordが複数文字を持つ場合にも対応できるよう汎用化)。
-  let concatText = "";
-  const charOwnerWordIndex: number[] = [];
-  words.forEach((word, wordIndex) => {
-    for (const _ch of word.text) {
-      concatText += _ch;
-      charOwnerWordIndex.push(wordIndex);
-    }
-  });
-
   const groups: WordGroup[] = [];
-  let currentWordIndices: number[] = [];
   let groupCounter = 0;
-  // wordを1度どこかのグループに割り当てたら二度と別のグループへ入れない(排他的な分割を保証する)。
-  // 通常SceneWordは1文字単位のため発生しないが、万一複数文字のwordがセグメント境界をまたいでも
-  // チップの重複所属(1つのwordが2つのグループに現れる)を防ぐ安全策。
-  const consumedWordIndices = new Set<number>();
 
-  function flushCurrentGroup() {
-    if (!currentWordIndices.length) return;
-    const memberWords: SceneWord[] = currentWordIndices.map((index) => words[index]);
+  function pushGroup(memberWords: SceneWord[], silence: boolean) {
     groups.push({
       id: `${scene.id}_g${groupCounter}`,
-      text: memberWords.map((word) => word.text).join(""),
+      text: silence ? SILENCE_GROUP_LABEL : memberWords.map((word) => word.text).join(""),
       wordIds: memberWords.map((word) => word.id),
       startMs: memberWords[0].startMs,
       endMs: memberWords[memberWords.length - 1].endMs,
       deleted: memberWords.every((word) => word.deleted),
       autoTrimmed: memberWords.every((word) => word.deleted && word.autoTrimmed === true),
+      ...(silence ? { silence: true } : {}),
     });
     groupCounter += 1;
-    currentWordIndices = [];
   }
 
-  if (!concatText.length) {
-    // 全wordが空文字テキストの場合(通常は起きない)、word単位でグループを作るフォールバック。
-    words.forEach((_word, wordIndex) => {
-      currentWordIndices = [wordIndex];
-      flushCurrentGroup();
+  /** 通常word(無音以外)の連続列をIntl.Segmenterでグループ化してgroupsへ追加する。 */
+  function segmentRunIntoGroups(runWords: SceneWord[]) {
+    // 文字位置 -> 所属word indexの対応表を作る(1つのwordが複数文字を持つ場合にも対応できるよう汎用化)。
+    let concatText = "";
+    const charOwnerWordIndex: number[] = [];
+    runWords.forEach((word, wordIndex) => {
+      for (const _ch of word.text) {
+        concatText += _ch;
+        charOwnerWordIndex.push(wordIndex);
+      }
     });
-    return groups;
+
+    let currentWordIndices: number[] = [];
+    // wordを1度どこかのグループに割り当てたら二度と別のグループへ入れない(排他的な分割を保証する)。
+    // 通常SceneWordは1文字単位のため発生しないが、万一複数文字のwordがセグメント境界をまたいでも
+    // チップの重複所属(1つのwordが2つのグループに現れる)を防ぐ安全策。
+    const consumedWordIndices = new Set<number>();
+
+    function flushCurrentGroup() {
+      if (!currentWordIndices.length) return;
+      pushGroup(
+        currentWordIndices.map((index) => runWords[index]),
+        false,
+      );
+      currentWordIndices = [];
+    }
+
+    if (!concatText.length) {
+      // 全wordが空文字テキストの場合(通常は起きない)、word単位でグループを作るフォールバック。
+      runWords.forEach((_word, wordIndex) => {
+        currentWordIndices = [wordIndex];
+        flushCurrentGroup();
+      });
+      return;
+    }
+
+    for (const segment of segmenter.segment(concatText)) {
+      const startChar = segment.index;
+      const endChar = segment.index + segment.segment.length;
+      const memberWordIndices = new Set<number>();
+      for (let charIndex = startChar; charIndex < endChar; charIndex += 1) {
+        const ownerIndex = charOwnerWordIndex[charIndex];
+        if (!consumedWordIndices.has(ownerIndex)) memberWordIndices.add(ownerIndex);
+      }
+      const sortedIndices = [...memberWordIndices].sort((a, b) => a - b);
+      if (!sortedIndices.length) continue;
+      for (const index of sortedIndices) consumedWordIndices.add(index);
+
+      if (segment.isWordLike) {
+        flushCurrentGroup();
+        currentWordIndices = sortedIndices;
+      } else if (currentWordIndices.length) {
+        currentWordIndices.push(...sortedIndices);
+      } else {
+        currentWordIndices = sortedIndices;
+        flushCurrentGroup();
+      }
+    }
+    flushCurrentGroup();
   }
 
-  for (const segment of segmenter.segment(concatText)) {
-    const startChar = segment.index;
-    const endChar = segment.index + segment.segment.length;
-    const memberWordIndices = new Set<number>();
-    for (let charIndex = startChar; charIndex < endChar; charIndex += 1) {
-      const ownerIndex = charOwnerWordIndex[charIndex];
-      if (!consumedWordIndices.has(ownerIndex)) memberWordIndices.add(ownerIndex);
+  let run: SceneWord[] = [];
+  const flushRun = () => {
+    if (run.length) {
+      segmentRunIntoGroups(run);
+      run = [];
     }
-    const sortedIndices = [...memberWordIndices].sort((a, b) => a - b);
-    if (!sortedIndices.length) continue;
-    for (const index of sortedIndices) consumedWordIndices.add(index);
-
-    if (segment.isWordLike) {
-      flushCurrentGroup();
-      currentWordIndices = sortedIndices;
-    } else if (currentWordIndices.length) {
-      currentWordIndices.push(...sortedIndices);
+  };
+  for (const word of words) {
+    if (word.silence) {
+      flushRun();
+      pushGroup([word], true);
     } else {
-      currentWordIndices = sortedIndices;
-      flushCurrentGroup();
+      run.push(word);
     }
   }
-  flushCurrentGroup();
+  flushRun();
 
   return groups;
+}
+
+/**
+ * W16-1(ハサミの無音選択): 指定ms位置を含む未削除の無音グループのindexを返す(無ければ-1)。
+ * ハサミモードの波形クリックが無音チップ区間なら、分割ではなくそのチップの選択に切り替えるために使う。
+ */
+export function findSilenceGroupIndexAtMs(groups: WordGroup[], ms: number): number {
+  return groups.findIndex((group) => group.silence === true && !group.deleted && ms >= group.startMs && ms < group.endMs);
 }
 
 /**
@@ -189,6 +233,63 @@ export function findActiveGroupId(groups: WordGroup[], ms: number): string | nul
  */
 export function normalizeChipDragRange(anchorIndex: number, currentIndex: number): { start: number; end: number } {
   return { start: Math.min(anchorIndex, currentIndex), end: Math.max(anchorIndex, currentIndex) };
+}
+
+/** W10-2(Shift選択): アンカーを保持したチップ範囲(start/endは両端含むチップindex)。 */
+export type ChipRangeWithAnchor = { start: number; end: number; anchor: number };
+
+function clampChipIndex(index: number, groupCount: number): number {
+  return Math.max(0, Math.min(groupCount - 1, index));
+}
+
+/**
+ * W10-2(Shift+←/→): 既存の選択範囲をアンカー固定のまま1チップぶん拡張/縮小する。
+ * アンカーの反対側の端(アクティブ端)をdirection方向へ動かし、アンカーをまたいだら
+ * 範囲を正規化する(テキストエディタのShift+矢印と同じ振る舞い)。
+ */
+export function shiftExtendChipRange(
+  range: { start: number; end: number },
+  anchor: number,
+  direction: 1 | -1,
+  groupCount: number,
+): ChipRangeWithAnchor {
+  const clampedAnchor = clampChipIndex(anchor, groupCount);
+  const active = range.start === clampedAnchor ? range.end : range.start;
+  const nextActive = clampChipIndex(active + direction, groupCount);
+  return {
+    start: Math.min(clampedAnchor, nextActive),
+    end: Math.max(clampedAnchor, nextActive),
+    anchor: clampedAnchor,
+  };
+}
+
+/**
+ * W10-2(Shift+←/→): 選択が無い状態からの初回Shift+矢印で作る1チップ選択。
+ * boundaryIndexはキャレット境界(0..groupCount)で、→なら境界の右隣チップ、←なら左隣チップを
+ * 選択の起点(=アンカー)にする(範囲外はクランプ)。グループが無ければnull。
+ */
+export function initialShiftChipRange(
+  boundaryIndex: number,
+  direction: 1 | -1,
+  groupCount: number,
+): ChipRangeWithAnchor | null {
+  if (groupCount <= 0) return null;
+  const chip = clampChipIndex(direction === 1 ? boundaryIndex : boundaryIndex - 1, groupCount);
+  return { start: chip, end: chip, anchor: chip };
+}
+
+/**
+ * W10-2(Shift+クリック): キャレット境界(0..groupCount)から「クリックしたチップまでの範囲」の
+ * アンカーチップindexを求める。クリック位置が境界の右側なら境界右隣のチップ、左側なら
+ * 境界左隣のチップをアンカーにする(境界からクリックチップまでが過不足なく選択される)。
+ */
+export function anchorChipIndexFromBoundary(
+  boundaryIndex: number,
+  clickedIndex: number,
+  groupCount: number,
+): number {
+  const anchor = clickedIndex >= boundaryIndex ? boundaryIndex : boundaryIndex - 1;
+  return clampChipIndex(anchor, groupCount);
 }
 
 /**

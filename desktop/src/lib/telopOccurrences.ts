@@ -4,6 +4,7 @@
  */
 
 import type { Scene } from "./scenes.ts";
+import { telopCharClass } from "./telopReplace.ts";
 
 const CONTEXT_CHARS = 10;
 
@@ -32,6 +33,19 @@ function countOccurrencesInText(haystack: string, needle: string): number {
   return count;
 }
 
+/**
+ * W10-5(出現検索の境界チェック): searchTextが数字・英字・カタカナで始まる/終わる場合、
+ * 一致箇所の直前/直後が同一文字種だと「連続語の途中の部分一致」(例:「170」内の「17」)なので
+ * 対象にしない。ひらがな・漢字で始まる/終わる語は従来どおり部分文字列一致のまま。
+ */
+function occurrenceHasWordBoundary(text: string, start: number, end: number, searchText: string): boolean {
+  const headClass = telopCharClass(searchText[0]);
+  if (headClass && start > 0 && telopCharClass(text[start - 1]) === headClass) return false;
+  const tailClass = telopCharClass(searchText[searchText.length - 1]);
+  if (tailClass && end < text.length && telopCharClass(text[end]) === tailClass) return false;
+  return true;
+}
+
 function sliceContext(text: string, start: number, end: number) {
   const beforeStart = Math.max(0, start - CONTEXT_CHARS);
   const afterEnd = Math.min(text.length, end + CONTEXT_CHARS);
@@ -58,14 +72,19 @@ export function findTelopOccurrencesInOtherScenes(
       const found = scene.telopText.indexOf(searchText, cursor);
       if (found === -1) break;
       const end = found + searchText.length;
-      occurrences.push({
-        sceneId: scene.id,
-        sceneOrdinal: index + 1,
-        occurrenceIndex,
-        start: found,
-        end,
-        ...sliceContext(scene.telopText, found, end),
-      });
+      // W10-5: 境界チェックに落ちた一致は結果に載せない。ただしoccurrenceIndexは
+      // replaceTelopOccurrences(replaceNthOccurrence)の「全indexOf一致の通し番号」と
+      // 揃える必要があるため、スキップした一致もカウントを進める。
+      if (occurrenceHasWordBoundary(scene.telopText, found, end, searchText)) {
+        occurrences.push({
+          sceneId: scene.id,
+          sceneOrdinal: index + 1,
+          occurrenceIndex,
+          start: found,
+          end,
+          ...sliceContext(scene.telopText, found, end),
+        });
+      }
       occurrenceIndex += 1;
       cursor = end;
     }

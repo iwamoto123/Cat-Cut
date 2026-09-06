@@ -28,3 +28,8 @@ def default_user_data_dir() -> Path:
 
 def default_user_dictionary_path() -> Path:
     return default_user_data_dir() / "user_dictionary.json"
+
+
+def default_correction_history_path() -> Path:
+    """W14-2: 全run横断の修正ペア履歴(編集前→編集後の語レベルdiff)。"""
+    return default_user_data_dir() / "correction_history.json"

@@ -170,6 +170,16 @@ def run_step(
     return result
 
 
+def _with_sentence_speaker(sentence: dict, sentence_words: list) -> dict:
+    """フェーズW1: sentence へ dominant speaker を付与する(無ければフィールドを書かない)。"""
+    from shared.speakers import dominant_speaker
+
+    speaker = dominant_speaker(sentence_words)
+    if speaker:
+        sentence["speaker"] = speaker
+    return sentence
+
+
 def _build_sentences(raw_result: dict, words: list) -> list:
     """utterances、segments、または句読点からsentencesを構築。"""
     sentences = []
@@ -189,13 +199,13 @@ def _build_sentences(raw_result: dict, words: list) -> list:
                 int(utt.get("end", 0) * 1000),
             )
 
-            sentences.append({
+            sentences.append(_with_sentence_speaker({
                 "id": f"sent_{i:04d}",
                 "text": utt_text,
                 "start_ms": utt_words[0]["start_ms"] if utt_words else 0,
                 "end_ms": utt_words[-1]["end_ms"] if utt_words else 0,
                 "word_ids": [w["id"] for w in utt_words],
-            })
+            }, utt_words))
     elif raw_result.get("segments"):
         for i, seg in enumerate(raw_result.get("segments", [])):
             seg_text = seg.get("text", "").strip()
@@ -208,13 +218,13 @@ def _build_sentences(raw_result: dict, words: list) -> list:
                 int(seg.get("end", 0) * 1000),
             )
 
-            sentences.append({
+            sentences.append(_with_sentence_speaker({
                 "id": f"sent_{i:04d}",
                 "text": seg_text,
                 "start_ms": seg_words[0]["start_ms"] if seg_words else int(seg.get("start", 0) * 1000),
                 "end_ms": seg_words[-1]["end_ms"] if seg_words else int(seg.get("end", 0) * 1000),
                 "word_ids": [w["id"] for w in seg_words],
-            })
+            }, seg_words))
     else:
         # フォールバック: 句読点で分割
         sentences = _split_by_punctuation(words)
@@ -241,25 +251,25 @@ def _split_by_punctuation(words: list) -> list:
 
         if punct_pattern.search(w["text"]) or len(current_words) >= 30:
             text = "".join(cw["text"] for cw in current_words)
-            sentences.append({
+            sentences.append(_with_sentence_speaker({
                 "id": f"sent_{len(sentences):04d}",
                 "text": text,
                 "start_ms": current_words[0]["start_ms"],
                 "end_ms": current_words[-1]["end_ms"],
                 "word_ids": [cw["id"] for cw in current_words],
-            })
+            }, current_words))
             current_words = []
 
     # 残り
     if current_words:
         text = "".join(cw["text"] for cw in current_words)
-        sentences.append({
+        sentences.append(_with_sentence_speaker({
             "id": f"sent_{len(sentences):04d}",
             "text": text,
             "start_ms": current_words[0]["start_ms"],
             "end_ms": current_words[-1]["end_ms"],
             "word_ids": [cw["id"] for cw in current_words],
-        })
+        }, current_words))
 
     return sentences
 

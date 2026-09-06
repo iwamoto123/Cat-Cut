@@ -1,5 +1,5 @@
 // 実行時(値)importのため、node --experimental-strip-types でテストを直接実行できるよう
-// 依存を持たない純関数モジュールとして実装する。
+// 拡張子つきの相対importだけを使う純関数モジュールとして実装する。
 //
 // 改善20-B(行バジェット超過時の明示的な改行位置制御):
 // 手編集などで行バジェット(max_chars_per_line、全角=1の重み付き文字数)を超えた
@@ -7,6 +7,8 @@
 // バランスよく折り返す。プレビュー(PreviewPlayer)とRemotionレンダリング
 // (remotion/src/lib/wrapTelopLine.ts に同一実装のコピーあり)の両方で同じ結果になる。
 // このファイルを変更したらRemotion側のコピーも同期すること。
+
+import { isBadLineBreak, isPhraseEndBreak } from "./telopLineBreak.ts";
 
 /**
  * `editor/python/shared/textwidth.py` の DEFAULT_WEIGHTS 移植
@@ -27,6 +29,11 @@ const ASCII_PUNCT = new Set(["!", "?", ",", ".", "-", "'", '"']);
 
 /** 行頭に置けない文字(禁則)。この文字で始まる折返しは強く避ける。 */
 const HEAD_FORBIDDEN = new Set([..."、。！？!?…‥・:;）)」』】〉》］"]);
+
+/** 行頭が付属語(助詞・助動詞・補助動詞)になる折返しへのペナルティ。 */
+const DEPENDENT_HEAD_COST = 12;
+/** 文節末でない位置(複合名詞の途中など)で折り返すことへのペナルティ。 */
+const NON_PHRASE_END_COST = 1.5;
 
 function classifyGlyph(ch: string): keyof typeof GLYPH_WEIGHTS {
   if (ch === " ") return "ascii_space";
@@ -102,6 +109,11 @@ function wrapTelopLineAtBudget(text: string, budget: number): string[] {
   const n = units.length;
   if (n <= 1) return [text];
   const widths = units.map(weightedTelopLineLength);
+  // units[k] の開始文字位置(付属語判定で text を前後に分けるために使う)
+  const offsets = units.reduce<number[]>(
+    (acc, unit) => [...acc, acc[acc.length - 1] + unit.length],
+    [0],
+  );
 
   // dp[i]: units[i..] を折り返す最小コスト
   const INF = Number.POSITIVE_INFINITY;
@@ -121,6 +133,11 @@ function wrapTelopLineAtBudget(text: string, budget: number): string[] {
       if (j < n) {
         const nextHead = units[j][0];
         if (nextHead !== undefined && HEAD_FORBIDDEN.has(nextHead)) cost += KINSOKU_COST;
+        // 文節の途中(名詞+助詞・名詞+して等)で折り返さない
+        const breakAt = offsets[j];
+        const before = text.slice(0, breakAt);
+        if (isBadLineBreak(before, text.slice(breakAt))) cost += DEPENDENT_HEAD_COST;
+        else if (!isPhraseEndBreak(before)) cost += NON_PHRASE_END_COST;
       }
 
       const total = cost + dp[j];

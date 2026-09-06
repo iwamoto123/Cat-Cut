@@ -54,6 +54,14 @@ class ChunkSentencesTests(unittest.TestCase):
         self.assertEqual(len(merged["needs_review"]), 1)
         self.assertEqual(merged["remove_filler_word_ids"], ["w-1", "w-2"])
 
+    def test_merge_llm_responses_keeps_partial_retakes(self):
+        # フェーズW29: チャンクマージで partial_retakes を落とさない
+        merged = ai_retake.merge_llm_responses([
+            {"partial_retakes": [{"sentence_id": "s-001", "remove_surface": "ここを捨てるのが不安という"}]},
+            {"partial_retakes": [{"sentence_id": "s-063", "remove_surface": "半年間のスケジュール感-"}]},
+        ])
+        self.assertEqual(len(merged["partial_retakes"]), 2)
+
 
 class RemoveFillerWordIdsTests(unittest.TestCase):
     def setUp(self):
@@ -71,7 +79,7 @@ class RemoveFillerWordIdsTests(unittest.TestCase):
             "needs_review": [],
             "remove_filler_word_ids": ["w-001", "w-002", "w-404"],
         }
-        retakes, needs, retake_count, fillers_removed = ai_retake.apply_llm_response(
+        retakes, needs, retake_count, fillers_removed, _suspects = ai_retake.apply_llm_response(
             response, self.sentences, self.sentence_map, self.word_map,
         )
         self.assertEqual(retake_count, 0)

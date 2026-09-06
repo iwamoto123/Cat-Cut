@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from shared.speakers import dominant_speaker, remap_chunk_speaker_ids
 from shared.stt_elevenlabs import transcribe_audio
 
 
@@ -102,17 +103,35 @@ def raw_result_to_words(stt_result: dict[str, Any]) -> list[dict[str, Any]]:
     for word in stt_result.get("words", []):
         if word.get("type") != "word":
             continue
-        words.append(
-            {
-                "id": f"w-{idx:04d}",
-                "text": word["text"],
-                "start_ms": int(word["start"] * 1000),
-                "end_ms": int(word["end"] * 1000),
-                "confidence": round(word.get("confidence", 0.0), 3),
-            }
-        )
+        entry = {
+            "id": f"w-{idx:04d}",
+            "text": word["text"],
+            "start_ms": int(word["start"] * 1000),
+            "end_ms": int(word["end"] * 1000),
+            "confidence": round(word.get("confidence", 0.0), 3),
+        }
+        # フェーズW1: diarize時の話者ID(無ければフィールド自体を書かない=後方互換)
+        speaker_id = word.get("speaker_id")
+        if isinstance(speaker_id, str) and speaker_id:
+            entry["speaker"] = speaker_id
+        words.append(entry)
         idx += 1
     return words
+
+
+def _sentence_entry(sentence_id: str, text: str, sentence_words: list[dict[str, Any]]) -> dict[str, Any]:
+    """sentence 1件を組み立てる。フェーズW1: dominant speaker があれば付与する(任意フィールド)。"""
+    entry = {
+        "id": sentence_id,
+        "text": text,
+        "start_ms": sentence_words[0]["start_ms"] if sentence_words else 0,
+        "end_ms": sentence_words[-1]["end_ms"] if sentence_words else 0,
+        "word_ids": [w["id"] for w in sentence_words],
+    }
+    speaker = dominant_speaker(sentence_words)
+    if speaker:
+        entry["speaker"] = speaker
+    return entry
 
 
 def build_sentences_from_raw(stt_result: dict[str, Any], words: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -127,15 +146,11 @@ def build_sentences_from_raw(stt_result: dict[str, Any], words: list[dict[str, A
             start_ms = int(utterance.get("start", 0) * 1000)
             end_ms = int(utterance.get("end", 0) * 1000)
             utterance_words = [w for w in words if w["end_ms"] > start_ms and w["start_ms"] < end_ms]
-            sentences.append(
-                {
-                    "id": f"sent_{index:04d}",
-                    "text": text,
-                    "start_ms": utterance_words[0]["start_ms"] if utterance_words else start_ms,
-                    "end_ms": utterance_words[-1]["end_ms"] if utterance_words else end_ms,
-                    "word_ids": [w["id"] for w in utterance_words],
-                }
-            )
+            entry = _sentence_entry(f"sent_{index:04d}", text, utterance_words)
+            if not utterance_words:
+                entry["start_ms"] = start_ms
+                entry["end_ms"] = end_ms
+            sentences.append(entry)
         return sentences
 
     punct_pattern = re.compile(r"[。！？.!?]$")
@@ -144,28 +159,12 @@ def build_sentences_from_raw(stt_result: dict[str, Any], words: list[dict[str, A
         current.append(word)
         if punct_pattern.search(word["text"]) or len(current) >= 30:
             text = "".join(item["text"] for item in current)
-            sentences.append(
-                {
-                    "id": f"sent_{len(sentences):04d}",
-                    "text": text,
-                    "start_ms": current[0]["start_ms"],
-                    "end_ms": current[-1]["end_ms"],
-                    "word_ids": [item["id"] for item in current],
-                }
-            )
+            sentences.append(_sentence_entry(f"sent_{len(sentences):04d}", text, current))
             current = []
 
     if current:
         text = "".join(item["text"] for item in current)
-        sentences.append(
-            {
-                "id": f"sent_{len(sentences):04d}",
-                "text": text,
-                "start_ms": current[0]["start_ms"],
-                "end_ms": current[-1]["end_ms"],
-                "word_ids": [item["id"] for item in current],
-            }
-        )
+        sentences.append(_sentence_entry(f"sent_{len(sentences):04d}", text, current))
 
     return sentences
 
@@ -199,6 +198,9 @@ def transcribe_audio_chunked(
             chunk_offsets.append(running_offset)
             running_offset += duration
 
+        # フェーズW1: チャンクごとにリセットされる speaker_id をグローバルIDへリマップする
+        # (speaker_id の無いレスポンスはそのまま素通し=後方互換)
+        chunk_results = remap_chunk_speaker_ids(chunk_results, chunk_offsets)
         merged = merge_chunk_results(chunk_results, chunk_offsets)
         words = raw_result_to_words(merged)
         sentences = build_sentences_from_raw(merged, words)

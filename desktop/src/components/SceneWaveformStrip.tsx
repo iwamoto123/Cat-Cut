@@ -7,7 +7,8 @@ import {
   sliceWaveformPeaks,
   smoothWaveformHeights,
 } from "../lib/waveform";
-import type { EdgeTrimEdge } from "../lib/edgeTrim";
+import { formatEdgeTrimDelta, type EdgeTrimEdge } from "../lib/edgeTrim";
+import { isRangeDragActivated, rangeSelectionFromPx, snapRangeCutBounds } from "../lib/rangeCut";
 
 const HEIGHT = 40;
 /**
@@ -36,13 +37,11 @@ type Props = {
   /** Phase 2: 波形上のマウスホバーで再生バーを追従させる(スクラブ)。 */
   onHoverSeek?: (ms: number) => void;
   /**
-   * 改善5-6(ハサミモード): B キーでトグルするハサミモード。ONの間は波形上のホバーで
-   * 縦の切り込み線プレビューを表示し、クリックで即splitSceneAtMs相当の分割を行う
-   * (onHoverSeek/onSeekは呼ばない)。旧「右クリック→切り込みメニュー→Enterで分割」の
-   * 2段階操作はこのワンクリック方式に置き換えたため、右クリックメニューは廃止した。
+   * Bキーでトグルするハサミモード。ONの間は端ハンドルより範囲ドラッグを優先し、
+   * 8px超の横ドラッグを離した時点で範囲カットする。クリックだけでは分割・シークしない。
    */
   scissorsMode?: boolean;
-  /** 改善5-6(ハサミモード): 波形上をクリックした位置(ms)で即座に分割する。 */
+  /** 旧ハサミクリック分割とのprops互換用。波形上のクリックでは呼び出さない。 */
   onScissorsCut?: (ms: number) => void;
   /** Phase 3: 端ハンドルのドラッグが開始した。改善3で300ms長押しを廃止し、押下即開始になった。 */
   onEdgeDragStart?: (edge: EdgeTrimEdge) => void;
@@ -54,6 +53,13 @@ type Props = {
   dragTooltip?: EdgeDragTooltip;
   /** Phase 3: 連動ロール中、隣接シーンとして受動的にハイライトすべき端("start"|"end")。 */
   highlightEdge?: EdgeTrimEdge | null;
+  /**
+   * W20-1(範囲選択カット): 通常モード(ハサミOFF)で波形本体(端ハンドル外)を横8px超ドラッグ
+   * すると範囲選択モードになり、ポインタを離した時点でこのコールバックが発火する。
+   * エッジトリムと同じく生のms(スナップ前)+チップスナップ許容msを渡し、
+   * 確定側(cutSceneRangeMs)がドラッグ中プレビューと同一規則でスナップする(WYSIWYG)。
+   */
+  onRangeCut?: (rawStartMs: number, rawEndMs: number, chipSnapToleranceMs: number) => void;
 };
 
 const COLOR_BG = "#f8fafc";
@@ -74,6 +80,19 @@ type ActiveEdgeDrag = {
   msPerPx: number;
 };
 
+/**
+ * W20-1(範囲選択カット): 波形本体のpointerdownで開始する範囲選択候補。
+ * 横8px(RANGE_CUT_ACTIVATE_PX)を超えて動くまではactivated=falseのままで、
+ * その間に離せば従来どおりのクリック(シーク/キャレット確定)として扱う。
+ */
+type ActiveRangeDrag = {
+  pointerId: number;
+  startClientX: number;
+  startX: number;
+  msPerPx: number;
+  activated: boolean;
+};
+
 /** 片側(ベースラインから上方向のみ)のミニ波形。シーン行カード・全体ナビバー共通の描画方針。 */
 export function SceneWaveformStrip({
   scene,
@@ -85,12 +104,12 @@ export function SceneWaveformStrip({
   onSeek,
   onHoverSeek,
   scissorsMode,
-  onScissorsCut,
   onEdgeDragStart,
   onEdgeDragMove,
   onEdgeDragEnd,
   dragTooltip,
   highlightEdge,
+  onRangeCut,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -99,8 +118,9 @@ export function SceneWaveformStrip({
   const justDraggedRef = useRef(false);
   const [activeEdge, setActiveEdge] = useState<EdgeTrimEdge | null>(null);
   const [hoverEdge, setHoverEdge] = useState<EdgeTrimEdge | null>(null);
-  /** 改善5-6(ハサミモード): 波形上ホバー中の切り込み線プレビュー位置(px)。ホバー解除でnull。 */
-  const [scissorsHoverX, setScissorsHoverX] = useState<number | null>(null);
+  /** W20-1(範囲選択カット): ドラッグ中の範囲選択候補(ポインタ管理はref、表示はstate)。 */
+  const rangeDragRef = useRef<ActiveRangeDrag | null>(null);
+  const [rangeSelectPx, setRangeSelectPx] = useState<{ startX: number; currentX: number } | null>(null);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -112,10 +132,6 @@ export function SceneWaveformStrip({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (!scissorsMode) setScissorsHoverX(null);
-  }, [scissorsMode]);
 
   useEffect(() => {
     if (!visible) return;
@@ -228,34 +244,25 @@ export function SceneWaveformStrip({
       justDraggedRef.current = false;
       return;
     }
+    // ハサミONのクリックだけでは分割もシークも行わない。
+    if (scissorsMode) return;
     // 改善3(端ドラッグ改善): 端ハンドル領域は「つまみ」専用とし、波形本体のシーク領域とは
     // 分離する(誤操作防止)。ハンドル上のクリックはシークを発生させない。
     if (edgeAtX(xFromEvent(event))) return;
     const ms = msFromScrubPosition(scene, xFromEvent(event), width);
-    // 改善5-6(ハサミモード): ONの間はクリックで即分割する(通常のシークは発生させない)。
-    if (scissorsMode) {
-      onScissorsCut?.(ms);
-      return;
-    }
     onSeek(ms);
   }
 
   function handleMouseMove(event: React.MouseEvent<HTMLCanvasElement>) {
     if (dragRef.current) return;
+    // W20-1: 範囲選択ドラッグ中はホバースクラブを抑制する(選択とシークの二重動作を防ぐ)。
+    if (rangeDragRef.current?.activated) return;
     if (edgeAtX(xFromEvent(event))) {
-      setScissorsHoverX(null);
       return;
     }
-    if (scissorsMode) {
-      setScissorsHoverX(xFromEvent(event));
-      return;
-    }
+    if (scissorsMode) return;
     if (!onHoverSeek) return;
     onHoverSeek(msFromScrubPosition(scene, xFromEvent(event), width));
-  }
-
-  function handleMouseLeaveCanvas() {
-    setScissorsHoverX(null);
   }
 
   function computeChipSnapToleranceMs(msPerPx: number): number {
@@ -268,25 +275,64 @@ export function SceneWaveformStrip({
    * 開始する。誤操作防止は「長押し」ではなく「当たり判定の分離(edgeAtX)」で担保する。
    */
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
-    // 改善5-6(ハサミモード): ONの間は端トリムのドラッグを無効化し、クリック分割に専念させる。
-    if (scissorsMode) return;
-    if (!onEdgeDragMove || !onEdgeDragEnd) return;
     const x = xFromEvent(event);
-    const edge = edgeAtX(x);
-    setHoverEdge(edge);
-    if (!edge) return;
-    event.preventDefault();
-    const canvas = canvasRef.current;
-    canvas?.setPointerCapture(event.pointerId);
-    const startMs = edge === "start" ? scene.sourceStartMs : scene.sourceEndMs;
     const spanMs = Math.max(1, scene.sourceEndMs - scene.sourceStartMs);
     const msPerPx = spanMs / Math.max(1, width);
-    dragRef.current = { edge, pointerId: event.pointerId, startClientX: event.clientX, startMs, msPerPx };
-    setActiveEdge(edge);
-    onEdgeDragStart?.(edge);
+    // ハサミONでは波形端でも範囲ドラッグを優先する。端トリムはハサミOFFでのみ開始する。
+    if (scissorsMode) {
+      if (!onRangeCut) return;
+      event.preventDefault();
+      setHoverEdge(null);
+      rangeDragRef.current = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startX: x,
+        msPerPx,
+        activated: false,
+      };
+      return;
+    }
+    const edge = edgeAtX(x);
+    setHoverEdge(edge);
+    if (edge) {
+      if (!onEdgeDragMove || !onEdgeDragEnd) return;
+      event.preventDefault();
+      const canvas = canvasRef.current;
+      canvas?.setPointerCapture(event.pointerId);
+      const startMs = edge === "start" ? scene.sourceStartMs : scene.sourceEndMs;
+      dragRef.current = { edge, pointerId: event.pointerId, startClientX: event.clientX, startMs, msPerPx };
+      setActiveEdge(edge);
+      onEdgeDragStart?.(edge);
+      return;
+    }
+    // W20-1(範囲選択カット): 波形本体(端ハンドル外)は範囲選択の候補として押下位置を記録する。
+    // 横8px超動くまでは発動せず、そのまま離せば従来のクリック(シーク等)がhandleClickで動く。
+    if (!onRangeCut) return;
+    rangeDragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startX: x,
+      msPerPx,
+      activated: false,
+    };
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    // W20-1(範囲選択カット): 候補中はしきい値判定、発動後は選択範囲のローカルstateだけを更新する
+    // (scenesは一切触らず、確定はpointerupの1回のみ=WYSIWYG)。
+    const rangeDrag = rangeDragRef.current;
+    if (rangeDrag && event.pointerId === rangeDrag.pointerId) {
+      const deltaPx = event.clientX - rangeDrag.startClientX;
+      if (!rangeDrag.activated) {
+        if (!isRangeDragActivated(deltaPx)) return;
+        rangeDrag.activated = true;
+        canvasRef.current?.setPointerCapture(event.pointerId);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setRangeSelectPx({ startX: rangeDrag.startX, currentX: rangeDrag.startX + deltaPx });
+      return;
+    }
     const drag = dragRef.current;
     if (!drag) {
       // ホバー中の端ハンドル表示切り替えのみ担当する(再生バー追従は既存のonMouseMoveに任せ、二重発火を避ける)。
@@ -312,11 +358,34 @@ export function SceneWaveformStrip({
     dragRef.current = null;
   }
 
+  /**
+   * W20-1(範囲選択カット): 範囲選択候補/ドラッグの終了処理。担当した場合trueを返す。
+   * 未発動(8px未満)なら何もせずクリアし、従来のクリック動作(handleClick)に任せる。
+   * 発動済みならcommit=trueのとき選択範囲(生ms)をonRangeCutへ発火する。
+   */
+  function finishRangeDrag(event: React.PointerEvent<HTMLCanvasElement>, commit: boolean): boolean {
+    const rangeDrag = rangeDragRef.current;
+    if (!rangeDrag || event.pointerId !== rangeDrag.pointerId) return false;
+    rangeDragRef.current = null;
+    setRangeSelectPx(null);
+    if (!rangeDrag.activated) return true;
+    canvasRef.current?.releasePointerCapture(event.pointerId);
+    justDraggedRef.current = true;
+    if (commit) {
+      const currentX = rangeDrag.startX + (event.clientX - rangeDrag.startClientX);
+      const range = rangeSelectionFromPx(scene, rangeDrag.startX, currentX, width);
+      onRangeCut?.(range.startMs, range.endMs, computeChipSnapToleranceMs(rangeDrag.msPerPx));
+    }
+    return true;
+  }
+
   function handlePointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (finishRangeDrag(event, true)) return;
     endActiveDrag(event);
   }
 
   function handlePointerCancel(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (finishRangeDrag(event, false)) return;
     endActiveDrag(event);
   }
 
@@ -334,13 +403,29 @@ export function SceneWaveformStrip({
       ? Math.max(0, Math.min(100, ((playheadMs - scene.sourceStartMs) / sceneSpanMs) * 100))
       : null;
 
+  // W20-1(範囲選択カット): ドラッグ中の選択オーバーレイ。確定処理(cutSceneRangeMs)と同じ
+  // snapRangeCutBoundsでスナップした範囲を表示することで、プレビュー=確定結果を保証する。
+  let rangeCutOverlay: { leftPx: number; widthPx: number; label: string } | null = null;
+  if (rangeSelectPx) {
+    const raw = rangeSelectionFromPx(scene, rangeSelectPx.startX, rangeSelectPx.currentX, width);
+    const snapped = snapRangeCutBounds(scene, raw.startMs, raw.endMs, {
+      chipSnapToleranceMs: computeChipSnapToleranceMs(sceneSpanMs / Math.max(1, width)),
+    });
+    const leftPx = ((snapped.startMs - scene.sourceStartMs) / sceneSpanMs) * width;
+    const rightPx = ((snapped.endMs - scene.sourceStartMs) / sceneSpanMs) * width;
+    rangeCutOverlay = {
+      leftPx,
+      widthPx: Math.max(1, rightPx - leftPx),
+      label: formatEdgeTrimDelta(-(snapped.endMs - snapped.startMs)),
+    };
+  }
+
   return (
     <div className="sceneWaveformWrap" ref={wrapRef}>
       {visible ? (
         <canvas
           className="sceneWaveformCanvas"
           onClick={handleClick}
-          onMouseLeave={handleMouseLeaveCanvas}
           onMouseMove={handleMouseMove}
           onPointerCancel={handlePointerCancel}
           onPointerDown={handlePointerDown}
@@ -353,9 +438,14 @@ export function SceneWaveformStrip({
       ) : (
         <div className="sceneWaveformPlaceholder" style={{ height: HEIGHT }} />
       )}
-      {/* 改善5-6(ハサミモード): 実際の再生バーとは独立した、ホバー位置の切り込み線プレビュー。 */}
-      {visible && scissorsMode && scissorsHoverX != null && (
-        <div className="sceneScissorsPreviewLine" style={{ left: scissorsHoverX }} />
+      {/* W20-1(範囲選択カット): ドラッグ中の選択範囲ハイライト+カット尺ラベル(「-1.24s」)。 */}
+      {visible && rangeCutOverlay && (
+        <div
+          className="sceneRangeCutOverlay"
+          style={{ left: rangeCutOverlay.leftPx, width: rangeCutOverlay.widthPx }}
+        >
+          <span className="sceneRangeCutLabel">{rangeCutOverlay.label}</span>
+        </div>
       )}
       {/* 改善3(再生バーの見た目変更): 行貫通の赤縦線は廃止し、波形ストリップ内だけに薄め・細めの
           縦線で表示する。全体ナビバー(SceneNavBar)側の再生ヘッドは別コンポーネントのため維持される。 */}

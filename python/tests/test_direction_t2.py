@@ -36,6 +36,7 @@ from shared.direction import (
     select_slots_for_cut,
     wrap_directive_lines,
 )
+from shared.textwidth import glyph_length
 
 
 def make_words(specs):
@@ -76,10 +77,11 @@ class BuildSlotsTests(unittest.TestCase):
 
     def test_slots_cover_cut_without_gaps(self):
         # 分割してもスロット列はカット全体([0, duration])を隙間なくカバーする
+        # (W30: 意味の塊分割は文字数基準のため、文末で切れる長さの単語列を使う)
         words = make_words([
-            ("あ", 0, 2200), ("い。", 2250, 2500),
-            ("う", 2600, 4800), ("え。", 4850, 5100),
-            ("お", 5200, 7000),
+            ("今日は", 0, 2200), ("いい天気です。", 2250, 2500),
+            ("明日は", 2600, 4800), ("雨のようです。", 4850, 5100),
+            ("傘を持って出かけましょう", 5200, 7000),
         ])
         segs = [{"start_ms": 0, "end_ms": 7500, "text": ""}]
         slots = build_slots(segs, words)
@@ -161,6 +163,27 @@ class SanitizeTests(unittest.TestCase):
         self.assertEqual(directive["highlight_words"], ["30万円"])
         self.assertFalse(directive["fallback"])
         self.assertEqual(directive["source_start_ms"], 800)
+
+    def test_natural_line_break_is_preserved(self):
+        # AIの自然改行("\n")は保持し、忠実性チェックは改行を除いた文字列で行う
+        raw = {"text": "毎月30万円の売上が\n出てます", "style": "emotion_red"}
+        directive = sanitize_slot_directive(self.SLOT, raw)
+        self.assertEqual(directive["text"], "毎月30万円の売上が\n出てます")
+        self.assertFalse(directive["fallback"])
+
+    def test_line_break_normalization(self):
+        # CRLF・連続改行・行頭行末の空白は正規化する
+        raw = {"text": "毎月30万円の売上が \r\n\n 出てます", "style": "emotion_red"}
+        directive = sanitize_slot_directive(self.SLOT, raw)
+        self.assertEqual(directive["text"], "毎月30万円の売上が\n出てます")
+
+    def test_max_text_chars_ignores_line_breaks(self):
+        # 文字数上限の判定は改行を除いた実文字数で行う(改行が上限超過の引き金にならない)
+        raw = {"text": "毎月30万円の売上が\n出てます", "style": "emotion_red"}
+        flat_len = glyph_length("毎月30万円の売上が出てます", "weighted_cpl")
+        directive = sanitize_slot_directive(self.SLOT, raw, max_text_chars=flat_len)
+        self.assertEqual(directive["text"], "毎月30万円の売上が\n出てます")
+        self.assertFalse(directive["fallback"])
 
     def test_unfaithful_text_falls_back_to_source(self):
         raw = {"text": "秘密の裏技で年収を10倍にする方法", "style": "fact_yellow"}
@@ -246,6 +269,22 @@ class DirectedCompositionHelpersTests(unittest.TestCase):
         self.assertLessEqual(len(lines), 2)
         self.assertEqual("".join(lines), "これはかなり長いテロップ文言でどうしても折り返しが必要になります")
 
+    def test_wrap_directive_lines_honors_manual_breaks(self):
+        # 手動改行(UI編集・AIの自然改行)はBudouX折返しを通さずそのまま行にする
+        lines = wrap_directive_lines("山口県立大学を\n受験します", 12)
+        self.assertEqual(lines, ["山口県立大学を", "受験します"])
+        # バジェット超過でも手動改行の行構成を崩さない(幅は描画側の縮小に任せる)
+        lines = wrap_directive_lines("これはとても長い一行目のテロップ文言です\n二行目", 8)
+        self.assertEqual(lines, ["これはとても長い一行目のテロップ文言です", "二行目"])
+
+    def test_wrap_directive_lines_manual_breaks_capped_at_three_lines(self):
+        lines = wrap_directive_lines("一行目\n二行目\n三行目\n四行目", 12)
+        self.assertEqual(lines, ["一行目", "二行目", "三行目四行目"])
+
+    def test_wrap_directive_lines_manual_breaks_drop_empty_lines(self):
+        lines = wrap_directive_lines("一行目\n\n  \n二行目", 12)
+        self.assertEqual(lines, ["一行目", "二行目"])
+
     def test_build_directed_cut_content_structure(self):
         slots = [
             {"slot_id": "s0", "start_ms": 0, "end_ms": 3000, "text": "毎月30万円の売上",
@@ -274,6 +313,21 @@ class DirectedCompositionHelpersTests(unittest.TestCase):
         self.assertEqual(telops[0]["word_indices"], [0, 1, 2])
         self.assertEqual((telops[1]["start"], telops[1]["end"]), (3.0, 6.0))
         self.assertEqual(telops[1]["word_indices"], [3])
+
+    def test_build_directed_cut_content_manual_break_roundtrip(self):
+        # 手動改行入りスロット: page.lines は改行どおり、telop.text は"\n"を保持して
+        # UIのシーン再初期化(textarea復元)で改行位置が失われない
+        slots = [
+            {"slot_id": "s0", "start_ms": 0, "end_ms": 3000, "text": "山口県立大学を\n受験します",
+             "style": "fact_yellow", "highlight_words": []},
+        ]
+        pages, telops = build_directed_cut_content("cut_001", slots, [], 3000, 16)
+        self.assertEqual(pages[0]["lines"], ["山口県立大学を", "受験します"])
+        self.assertEqual(telops[0]["text"], "山口県立大学を\n受験します")
+        self.assertEqual(
+            [seg["text"] for seg in telops[0]["segments"]],
+            ["山口県立大学を", "受験します"],
+        )
 
     def test_map_source_ms_to_timeline_snaps_gaps(self):
         segments = [
@@ -310,6 +364,23 @@ class DirectedCompositionHelpersTests(unittest.TestCase):
         self.assertEqual(profile["end_ms"], 6500)
         self.assertEqual(profile["text"], "山田太郎")
 
+    def test_build_directed_overlays_dedupes_profile_cards_per_person(self):
+        # 同一人物のprofile_cardは最初の1回だけ表示する(空白差は同一人物と見なす)。
+        # 別人のカードは残る。ユーザーFB 2026-07-06「プロフィールが何度も表示される」
+        directives = {
+            "overlays": [
+                {"type": "profile_card", "source_anchor_ms": 500, "text": "山田 太郎", "subtitle": "社長"},
+                {"type": "profile_card", "source_anchor_ms": 3000, "text": "山田太郎", "subtitle": "社長"},
+                {"type": "profile_card", "source_anchor_ms": 5000, "text": "佐藤花子", "subtitle": "編集者"},
+                {"type": "profile_card", "source_anchor_ms": 7000, "text": "山田太郎"},
+            ],
+        }
+        segments = [{"source_start_ms": 0, "source_end_ms": 10000, "timeline_start_ms": 0}]
+        overlays = build_directed_overlays(directives, segments, 10000)
+        profiles = [o for o in overlays if o["type"] == "profile_card"]
+        self.assertEqual([p["text"] for p in profiles], ["山田 太郎", "佐藤花子"])
+        self.assertEqual(profiles[0]["start_ms"], 500)
+
 
 class Step06cRunStepTests(unittest.TestCase):
     """step06c_direction.run_step (LLMモック)。"""
@@ -343,6 +414,14 @@ class Step06cRunStepTests(unittest.TestCase):
                 # call_llm と同じ契約: 解析済みJSON(dict)を返す
                 if "構成作家" in prompt:  # チャプタープロンプト
                     return {"chapters": [{"start_cut_id": "cut_001", "title": "売上の話"}]}
+                if "予告ダイジェスト)専門" in prompt:  # フェーズW: OPディレクター第2パス
+                    return {
+                        "op_picks": [
+                            {"slot_id": "cut_001_s00", "role": "hook_open", "display": "hook",
+                             "hook_text": "毎月30万円", "keyword": "30万円", "keyword_color": "yellow"},
+                            {"slot_id": "cut_999_s00", "role": "punch", "display": "verbatim"},  # 実在しない→落ちる
+                        ],
+                    }
                 return {
                     "slots": [
                         {"slot_id": "cut_001_s00", "text": "毎月30万円の売上が出ています",
@@ -353,6 +432,8 @@ class Step06cRunStepTests(unittest.TestCase):
                     "overlays": [
                         {"type": "profile_card", "slot_id": "cut_001_s00", "text": "山田太郎", "subtitle": "社長"},
                     ],
+                    # V8-6: チャンク推薦(実在しないIDはsanitizeで落ちる)
+                    "op_picks": ["cut_001_s00", "cut_999_s00"],
                 }
 
             result = step06c_direction.run_step(
@@ -385,6 +466,11 @@ class Step06cRunStepTests(unittest.TestCase):
             self.assertEqual(directives["chapters"][0]["source_start_ms"], 0)
             self.assertEqual(len(directives["overlays"]), 1)
             self.assertEqual(directives["overlays"][0]["source_anchor_ms"], 0)
+            # フェーズW: OPディレクター第2パスの最終選定(v2形式)が実在slot_idのみで保存される
+            self.assertEqual(directives["op_picks"], [{
+                "slot_id": "cut_001_s00", "role": "hook_open", "display": "hook",
+                "hook_text": "毎月30万円", "keyword": "30万円", "keyword_color": "yellow",
+            }])
 
     def test_run_step_without_api_key_writes_fallback(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -501,16 +587,16 @@ class Step08DirectedBranchTests(unittest.TestCase):
 
             self.assertEqual(comp["meta"]["telop_mode"], "directed")
 
-            # timeline.overlays: チャプター2つ(タイムライン全体をカバー) + profile_card
+            # timeline.overlays: チャプター2つ(タイムライン全体をカバー)。
+            # W25: 要約系オーバーレイ(profile_card / list_stack / cta_banner等)は
+            # step08で自動表示しない(chapter_titleのみ残る)。
             overlays = comp["timeline"]["overlays"]
             chapters = [o for o in overlays if o["type"] == "chapter_title"]
             self.assertEqual(len(chapters), 2)
             self.assertEqual(chapters[0]["start_ms"], 0)
             self.assertEqual(chapters[0]["end_ms"], 3500)  # 第2章開始 = cut_002 のタイムライン頭
             self.assertEqual(chapters[1]["end_ms"], 6500)  # 総尺 3500+3000
-            profile = next(o for o in overlays if o["type"] == "profile_card")
-            self.assertEqual(profile["text"], "山田太郎")
-            self.assertEqual(profile["position"], "bottom_left")
+            self.assertEqual([o["type"] for o in overlays], ["chapter_title", "chapter_title"])
 
             # voice_data.cuts[].telops[]: スロット単位の明示タイミング + style + highlight_words
             vcut1 = comp["voice_data"]["cuts"][0]

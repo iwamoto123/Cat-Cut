@@ -1,16 +1,223 @@
 # Cat-Cut Editor（video-podcast SaaS 用）
 
-Desktop の Cat-Cut を `video-podcast-saas/editor/` に統合した編集エンジンです。
+インタビュー・解説動画を「STT→AIカット提案→AIテロップ演出→検品UI→Remotion書き出し」まで
+一気通貫で処理する編集エンジンです。Desktop の Cat-Cut を `video-podcast-saas/editor/` に統合しています。
 
 ## 役割分担
 
 | 用途 | ツール |
 |------|--------|
-| 社内レビュー（テロップ・フォント調整） | Cat-Cut デスクトップアプリ (`desktop/`) |
+| 社内レビュー（カット・テロップ検品、画像/BGM/OP編集） | Cat-Cut デスクトップアプリ (`desktop/`) |
 | SaaS バッチ（無人処理） | `python/run_headless_pipeline.py` |
 | 配信連携 | `python/tools/build_delivery_manifest.py` → Ayrshare |
+| 決済（準備のみ・既定OFF） | `billing/`（Stripe / UnivaPay。`FEATURES.billing: false`） |
+| 社員配布 | `distribution/`（zip作成 + インストーラ） |
 
 選定理由: [outputs/2026-07-02_editor-platform-decision.md](../outputs/2026-07-02_editor-platform-decision.md)
+
+## ディレクトリ構成
+
+```
+editor/
+├── desktop/        # Electron + Vite + React の検品UI（テスト: node:test / vitestではない）
+│   ├── main/       # Electronメインプロセス（IPC・run管理・キャッシュ・学習データ）
+│   ├── src/        # レンダラー（App.tsx + components/ + lib/ + hooks/）
+│   └── tests/      # UIロジックの純関数テスト（*.test.ts、importは.ts拡張子必須）
+├── python/         # 解析パイプライン step01〜08 + shared/ + tools/ + tests/
+├── remotion/       # 書き出しレンダラー（Remotion）。共有純ロジックの「正本」置き場
+├── templates/      # テロッププリセット・ジャンル既定・OPパターン等のYAML
+├── billing/        # ライセンス課金サーバー（Node 22、鍵署名式ライセンスキー）
+├── distribution/   # 社員配布（make_package.sh / install.command）
+├── assets/         # フォント・効果音・顔検出モデル（YuNet）
+└── runs/<run>/     # 1動画=1プロジェクト。全編集データの正本
+```
+
+## パイプラインの全体像
+
+```
+step01 preprocess     動画メタ取得・音声抽出
+step02 stt            ElevenLabs Scribe（既定・diarize対応）/ ローカルWhisper。15分超は自動チャンク
+step02b correct       ユーザー辞書・決定的正規化
+step03 vad            Silero VAD + RMSエッジリファイン（無音トリム）
+step04 filler         フィラー検出（あのー・えっと等）
+step05 ai_retake      AI校正パス1: 言い直し検出・疑義ワード抽出（suspect_words）
+step05b retranscribe  疑義区間だけ切り出して再STT→LLM裁定（差分は要確認パネルへ）
+step06b ai_refine     AI校正パス2: 誤字・表記揺れ統一（チャンク分割・final_pass 2周目つき）
+step06c direction     演出モード(directed): テロップスロット分割+文言整形+スタイル+改行+OP選定
+step06d final_check   最終AIチェック（表示テキストを1回のLLM呼び出しで再点検）
+step07 cut_proposal   keep_segments 確定（単語分断ガード・分断フラグ）
+step08 composition    composition.json 生成 + セグメント抽出（差分キャッシュ・並列）
+                      → remotion/scripts/render-cli.ts で MP4 書き出し
+```
+
+- テロップは2モード: **full**（word単位カラオケ同期）/ **directed**（演出モード・既定。2〜4秒スロット固定表示）
+- AI校正は Anthropic / OpenAI / Gemini のどのキーでも動く（優先順 anthropic > openai > gemini）。キーなしでも全機能動作（AI校正のみ無効）
+
+## run フォルダのデータ（正本）
+
+| ファイル | 内容 |
+|---------|------|
+| `orientation.json` | 横型/縦型のユーザー選択（テンプレ・キャンバス寸法の最優先参照） |
+| `telop_directives.json` | directedモードのスロット・スタイル・OPタイトル・op_picks |
+| `scene_edits_draft.json` | 検品UIの自動保存下書き（2秒debounce） |
+| `edit_history.json` | テロップ編集の学習データ（元STT→AI表示→編集後の3層） |
+| `op_config.json` | OP設定（pattern/decoration/クリップ明示指定。run単位の正本） |
+| `video_framing.json` | 変形・クロップ（scale/x/y + crop 4辺） |
+| `images/images.json` | 挿入画像トラック（タイムラインms基準・中心座標x,y+scale） |
+| `bgm/bgm.json` | BGMトラック（音量・フェード） |
+| `face_regions.json` | 顔検出キャッシュ（縦型のテロップ顔回避配置用） |
+| `step08_input_hash.json` | 差分なし書き出しスキップ用の入力ハッシュ |
+| `ui_cache/` | 波形・フィルムストリップのキャッシュ |
+
+派生キャッシュ（segments/ 等）は起動時に「最終利用7日超」のrunから自動削除される（プロジェクト自体は消さない）。
+UIの「キャッシュ」ボタンから手動削除も可能。
+
+## 主要機能の現仕様（2026-09時点）
+
+### 検品UI（シーン行 + タイムラインの2タブ）
+
+- **シーン行UI v2**: 縦のシーン行リスト。タイミング層（単語チップ）と表示層（テキスト枠）を分離。
+  キー操作 = Space再生 / L倍速 / ←→音節移動 / Delete削除 / Enter分割 / ⌘M結合 / Bハサミ（波形ドラッグで範囲カット）
+- **要確認パネル**: AI疑義ワード・再STT差分・最終チェック指摘・学習済み修正の残存を1カ所に集約。
+  「AI修正を一括適用」でsuggestion付きを全適用（Undo 1エントリ）。折りたたみ可（localStorage記憶）
+- **タイムラインタブ**: テロップ/画像/映像/BGMのマルチトラック。出力タイムライン基準・リップル削除・
+  D&Dで画像/BGM追加・レーン段積み（配列順=前後関係=zIndex）
+- **ステージ別UX**（W23）: home（プロジェクト一覧）/ analyzing（左ペイン+進捗）/ editing（検品UI全幅・左ペイン非表示）
+- **プレビュー忠実性**: テロップの折返し・縦位置・スタイル・アニメ・オーバーレイ・画像・フレーミングは
+  Remotionと同一の純関数で計算（remotionが正本→desktopへコピー。`sharedRemotionCopies.test.ts` がバイト一致を担保）
+
+### 縦型対応（W8/W24/W25）
+
+- 素材選択時にffprobe自動判定+横型/縦型の選択モーダル。選択は `orientation.json` に永続化
+- 縦型キャンバスは顔検出（OpenCV YuNet）でテロップを顔回避配置（帯0.30〜0.72、Reels/TikTokのUIを回避）
+- 縦型では章タイトル非生成・OPチェック既定OFF・要約系オーバーレイ自動表示は全面停止
+
+### プレビュー上の直接操作
+
+- **挿入画像**: 画像本体ドラッグ=位置移動、pointerdownで即ハンドル表示、四隅ハンドル=大きさ変更
+  （縦・斜めドラッグも有効。外向き成分の大きい方を採用）。操作確定で `images.json` へ即保存。
+  横型・縦型ともcontain矩形基準の同一計算=書き出しと同じ見た目
+- **映像フレーミング**: ステージ左下「変形」「クロップ」ボタン（FCP風）。四隅ハンドル・辺ハンドル・
+  画角枠線+画角外ディム表示。保存は `video_framing.json`
+- **プレビューサイズ**: 横型 max 420px・縦型はビューポート連動の高さクランプ
+  （下のトランスポートバー・キー操作ガイドが見切れない高さに自動調整。タイムラインタブはさらに低め）
+
+### OP（オープニング）
+
+- パターンは「OPなし / ハイライト予告」の2択+装飾4種（flash_pop/cinema_bars/color_wipe/neon_frame）
+- AIが「続きが気になるスロット」を選定（op_picks）。ユーザー明示クリップが常に優先
+- 解析開始前に「オープニングを付ける」チェックで事前選択可（W23）。チェックONなら必ずOPが入る
+  （クリップ候補ゼロでもtitle_cardへフォールバック）
+
+### 学習（編集データの蓄積と共有）
+
+- テロップ編集は自動で `edit_history.json` + `correction_history.json`（語レベル差分ペア・上限500 LRU）に蓄積
+- 修正例はstep05/06bのプロンプトに頻度上位30件を注入（決定的置換にはしない=AIの文脈判断）
+- **Nextcloud共有**: 書き出し完了画面の「編集学習データを共有」→ `<Nextcloud>/CatCut-learning/exports/` へ保存。
+  開発機で `python/tools/eval_edit_learning.py --merge-history` を実行して統合→ `shared_correction_history.json` を公開→全PCが自動参照。
+  exports/は各PCが自分のファイル名にのみ書き、sharedは開発機のみが書く=コンフリクトが構造的に起きない
+
+### 書き出し
+
+- 書き出しボタン→設定モーダル（保存先/ファイル名/解像度=短辺上限px方式/画質CRF/並列数/HWエンコード）
+- セグメント差分キャッシュ（実測212.9秒→0.5秒）+ 差分なしstep08完全スキップ（入力ハッシュ一致で数秒）
+- レンダリングは一時ファイル→完了後rename（失敗時に「書き出し済み」と誤表示しない・元動画を上書きしない）
+- 完了後にFinder自動表示+「プロジェクトを保存しますか？」ダイアログ
+
+### 配布・運用
+
+- `distribution/make_package.sh` → `~/Desktop/CatCut-haifu-YYYYMMDD.zip` → NextCloud `CatCut-haifu/CatCut-latest.zip` に公開
+- 社員側は `install.command`（右クリック→開く）。`~/CatCut` へrsync=更新しても編集データが消えない。
+  インストーラにダウングレード防止ガードあり（VERSION.txt比較・古い場合は警告+yes必須）
+- バージョン確認は `~/CatCut/VERSION.txt`。Intel Mac対応（requirements環境マーカー分岐）
+
+## 開発運用ルール
+
+- **1フェーズ=1委任**: 大きめの実装は仕様書に「改善N」「フェーズX」を書き、その単位でサブエージェントに委任→親が検収
+- **特定動画の固有ワードをハードコードしない**（汎用の仕組みにする）。固有名詞は `templates/domain_dictionary.yaml` へ
+- **視覚系の変更は実映像レンダリングのスチルPNG**（`templates/samples/out/`）で目視検収。CSS近似のプレビューだけで済ませない
+- remotion⇔desktopの共有純ロジックは「remotionが正本・desktopへコピー」し `sharedRemotionCopies.test.ts` で一致担保
+- desktopテストのimportは `.ts` 拡張子必須（`node --experimental-strip-types`）
+- Remotion検証前に webpackキャッシュ（`node_modules/.cache`）が古いコードを掴んでいないか注意
+- 実機フィードバックは「run名+具体的な症状」を仕様書に書き起こしてから着手
+- 後方互換を壊さない: 新フィールドはoptional、旧runは従来動作（`images.json`なし=キーなし等）
+
+## これまでの試行錯誤（フェーズ年表と教訓）
+
+正式な仕様書は `../outputs/2026-XX-XX_catcut-*.md`、詳細な時系列は `../CONTEXT.md` の進捗ログにある。
+ここでは「何を試して、何を学んだか」の骨子だけまとめる。
+
+### 2026-07-02〜03: 検品ファーストUXへの転換
+
+- 自然言語コマンド（Cmd+K/Ollama）路線を**廃止**。「AIが疑わしい箇所を列挙し、人はそこだけ検品する」に再定義
+- Vrewの画面収録を分析して**シーン行UI v2**へ全面刷新（scenes配列を唯一の編集源に。波形ナッジ巻き戻り問題の根本対策）
+
+### 2026-07-03〜04: ルールベース校正の限界とAI校正本格化（改善3〜22）
+
+- 無音カット・フィラー除去・漢数字変換・表記揺れをルールベースで20回近く改善したが**収穫逓減**と判断
+- LLM 2パス校正（パス1=言い直し検出/パス2=文脈修正）+ドメイン辞書注入へ移行
+- つまずきと対策:
+  - AI校正が90秒タイムアウトで**無言で失敗**していた → タイムアウト300秒+チャンク分割+失敗をUIに赤バナー表示
+  - thinking がmax_tokensを食い潰して**本文が空**になる → thinking無効化+max_tokens拡大
+  - APIクレジット切れが「all chunks failed」としか出ない → エラー分類（billing/auth/rate_limit…）+原因別の日本語案内
+  - カット境界の完全一致検索が先頭文字欠けで**9秒先の同一テキストに誤マッチ**し以降全ページ音ズレ → ファジー前方一致に
+
+### 2026-07-05〜06: テロップ演出エンジン（T1〜T3）とUX刷新（U1〜U9）
+
+- 参考動画分析→プリセット体系（semantic type 10種×type→presetマッピング）→アニメ+効果音
+- **U1 プレビュー忠実化**が転換点: directedモードでプリセットが一切反映されないバグ級ギャップを発見し、
+  「remotionの純ロジックをdesktopへコピー+ファイル一致テスト」の仕組みを恒久化
+- フォント刷新・助詞縮小・和欧混植。多重縁の行ズレは「全レイヤー同一行配列」で根絶
+
+### 2026-07-06〜07: タイムラインView・OP・画像/BGM（V1〜V8）
+
+- マルチトラックのタイムラインView新設。**横軸は出力タイムライン基準**に統一（軸ズレ問題の根本解決）
+- OPは仮想プレイリスト方式でプレビュー再生可能に。画像トラックはBGM経路と同型で追加
+- 教訓: タイムラインの「勝手にズーム」は (a)古いレンダラーJSの残留 (b)flexのmin-size:autoによる自走ズームループ
+  の2種があった。**修正が反映されない報告はまずウィンドウリロードを疑う**。短尺動画（数秒）でも必ず確認する
+- 教訓: bottom系オーバーレイはテロップ帯（y820〜1010px）との**空間衝突**と同種テロップとの**時間衝突**を設計時に確認
+
+### 2026-07-08〜16: 検品の実戦投入と学習基盤（W5〜W16）
+
+- 実機検品（70分動画等）のフィードバック駆動で、要確認パネル・プロジェクト一覧・書き出しモーダル・
+  シーン/チップ削除・無音チップ・Undo統合を整備
+- 書き出し高速化: セグメント差分キャッシュ+HWエンコード+bundleキャッシュ（step08 2回目 212.9秒→0.5秒）
+- 学習基盤: 編集履歴3層（元STT→AI表示→編集後）の自動蓄積→全PC収集→開発機で統合・再学習
+- runs/が32GBに膨張 → 起動時の自動キャッシュクリーン（最終利用7日超の派生キャッシュのみ削除）
+- 社内配布開始（zip+インストーラ。Intel Mac対応でtorch系ホイールの環境マーカー分岐が必要だった）
+
+### 2026-07-17〜29: 操作性の磨き込み（W17〜W21）
+
+- Delete誤削除の根本対策=削除ターゲットの優先順位を固定（範囲選択→確定キャレット→明示再生ヘッドのみ）
+- **W19 サクサク化**: 再生ヘッドstateを`playheadStore`（useSyncExternalStore）へ分離し
+  **再生中の毎フレームApp全体再レンダリングを根絶**。AI自動検品（再STT+最終チェック+一括適用）で
+  「解析完了→自動チェック→一括適用→人は残件だけ」のフローが成立
+- 省略過多の原因はプロンプトの「簡潔な文」指示だった（要約禁止へ変更+ユーザー編集例を注入）
+
+### 2026-08-16〜28: テロップ改行・縦型ショート広告（W22〜W25）
+
+- **W22 改行の文節ルール化**: 「行頭に置かない付属語」を定義しwrapTelopLine/BudouX/AIプロンプトの3経路すべてに適用
+- **W24 縦型ショート広告**: 顔検出（YuNet）+縦型セーフゾーン配置・テロップアニメ10種・広告プリセット・ビジネス向けエフェクト
+- **W25 事故対応**: 「縦型の出来が酷い」の正体は書き出し失敗+元動画の誤表示だった。
+  原因は (a)開発時の残骸シンボリックリンクがdanglingでbundle即死 (b)render_output.jsonを**レンダリング前に**書いていた+
+  書き出し先が元動画と同名（macOSは大小文字非区別）でexistsSyncが真 → 記録は成功後に書く+同名時は`-edited.mp4`へ自動退避
+
+### 2026-08-26〜09-04: 実機フィードバックの継続対応
+
+- BGM既定音量 15%→3%→**100%**（「どうせ微調整するなら100%から下げたい」という現場の声で二転)
+- 「最後のテキストが修正できない・削除しても復活する」を2段階で根治:
+  空スロットを「テロップなし」マーカーとして保持+UI適用済みrunへのSTT再生成フォールバックを全面遮断
+- 要確認パネルは横並び→**縦積み+折りたたみ**へ（「横に並べると見づらい」）
+- 配布の混乱対応: 社員側の古い展開フォルダから再インストール→巻き戻る罠に、ダウングレード防止ガードで対処
+
+### 2026-09-07: プレビュー直接操作・見切れ・トップバー修正
+
+- 挿入画像の操作を直感化: pointerdownで即ハンドル表示・**縦/斜めドラッグでも拡縮が効く**ように
+  （従来は横成分のみで、横可動域が狭い縦型では「効かない」操作感だった）・ホバーで破線枠表示
+- プレビューの見切れ対策: 縦型ステージを固定60vh→ビューポート連動の高さクランプ+幅はアスペクトから導出
+  （左右の黒帯解消）。タイムラインタブは低めの上限でタイムライン本体の視界を確保
+- トップバーの「キャッシュ」ボタン・「待機中」バッジの文字はみ出し修正
+  （`.secondaryButton`のheight:42pxが意図せず勝っていた+狭い左ペインでラベルが折り返していた）
 
 ## セットアップ
 
@@ -23,9 +230,10 @@ pip install -r python/requirements.txt
 pip install torch torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 
 cd remotion && npm install && cd ..
+cd desktop && npm install && cd ..
 
 cp .env.example .env
-# ELEVEN_API_KEY を設定
+# ELEVEN_API_KEY を設定（AI校正キーはアプリ初回起動ウィザードでも設定可）
 ```
 
 ## デスクトップアプリ（レビュー用）
@@ -44,6 +252,9 @@ nodenv exec npm run dev
    ```bash
    lsof -ti :5174 | xargs kill -9 2>/dev/null; nodenv exec npm run dev
    ```
+
+実機FBが修正後も同一症状の場合、コードを疑う前にウィンドウのリロード（⌘R）/アプリ再起動を確認する
+（HMRがTSXの更新を届けられていないことがある）。
 
 ## ヘッドレスパイプライン（SaaS用）
 
@@ -74,5 +285,22 @@ runs/{run_name}/
 ## テスト
 
 ```bash
+# Python（unittest）
 .venv/bin/python -m unittest discover -s python/tests -v
+
+# desktop（node:test。importは.ts拡張子必須）
+cd desktop && npm test && npx tsc --noEmit
+
+# remotion
+cd remotion && npm test && npx tsc --noEmit
 ```
+
+## 配布（社員向け）
+
+```bash
+# 開発機で配布zipを作成（runs/.venv/node_modules/.env等は除外）
+distribution/make_package.sh
+# → ~/Desktop/CatCut-haifu-YYYYMMDD.zip を NextCloud の CatCut-haifu/CatCut-latest.zip へ公開
+```
+
+社員は「いま展開したフォルダ」の `install.command` を右クリック→開く（古いCatCut-setupフォルダは削除推奨）。

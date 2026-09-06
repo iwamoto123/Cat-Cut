@@ -242,6 +242,18 @@ test("resolveCaretDeleteLeftTarget: 行頭(groupIndex<=0)はnull、それ以外�
   assert.equal(resolveCaretDeleteLeftTarget(scenes[0], 99), null, "範囲外のgroupIndexはnull(該当グループなし)");
 });
 
+test("resolveCaretDeleteLeftTarget: Delete連打では削除済みグループを飛ばして左へ進む", () => {
+  const [scene] = buildTwoSceneGroupFixture();
+  const afterFirstDelete = {
+    ...scene,
+    words: scene.words.map((word) => (["w3", "w4", "w5"].includes(word.id) ? { ...word, deleted: true } : word)),
+  };
+  assert.deepEqual(resolveCaretDeleteLeftTarget(afterFirstDelete, 2), {
+    sceneId: scene.id,
+    wordIds: ["w1", "w2"],
+  });
+});
+
 test("resolveCaretSplitTarget: 行の内部境界でのみ分割対象(境界右隣グループの先頭文字wordId)を返す", () => {
   const scenes = buildTwoSceneGroupFixture();
   assert.deepEqual(resolveCaretSplitTarget(scenes[0], 1), { sceneId: scenes[0].id, wordId: "w3" }, "「相談」と「できる」の間");

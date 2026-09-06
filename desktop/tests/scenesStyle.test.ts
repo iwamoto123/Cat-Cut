@@ -116,7 +116,7 @@ test("splitSceneAtWord: 分割後の各半分で感情タグを本文から再�
   assert.equal(split[1].styleOverrideId, "extra_green", "構造操作である分割ではオーバーライドを両半分に引き継ぐ");
 });
 
-test("mergeSceneWithNext: 結合後の本文で感情タグを再判定し、前半のstyleOverrideIdを優先する", () => {
+test("W28 mergeSceneWithNext: 結合後の本文で感情タグを再判定し、styleOverrideIdは前半のものだけを使う", () => {
   const scenes = initializeScenes({
     words: words(["w1", "こんにちは", 0, 300], ["w2", "本当ですか", 400, 700]),
     keepSegments: [
@@ -129,5 +129,7 @@ test("mergeSceneWithNext: 結合後の本文で感情タグを再判定し、前
   assert.equal(merged.length, 1);
   assert.equal(merged[0].telopText, "こんにちは本当ですか");
   assert.equal(merged[0].emotionTag, "question");
-  assert.equal(merged[0].styleOverrideId, "extra_purple", "前半にオーバーライドが無ければ後半のものを引き継ぐ");
+  // 2026-08-22 実機フィードバック: 上のテロップとくっつけたら上の見た目を優先する
+  // (旧仕様の「前半に無ければ後半を引き継ぐ」は下のエフェクトが残ってしまうため廃止)
+  assert.equal(merged[0].styleOverrideId, null, "前半にオーバーライドが無ければ後半のものも引き継がない");
 });

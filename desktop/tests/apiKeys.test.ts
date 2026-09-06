@@ -6,6 +6,8 @@ import {
   buildPipelineEnvKeys,
   formatAnthropicTestError,
   formatElevenTestError,
+  formatNetworkError,
+  normalizeApiKey,
   formatGeminiTestError,
   formatOpenAiTestError,
   maskLastFour,
@@ -132,8 +134,20 @@ test("buildPipelineEnvKeys: 設定済みキーのみ環境変数に注入", () =
   assert.equal(env.ANTHROPIC_API_KEY, undefined);
 });
 
+test("normalizeApiKey: 不可視文字と前後空白を除去", () => {
+  assert.equal(normalizeApiKey("  sk_test  "), "sk_test");
+  assert.equal(normalizeApiKey("\uFEFFsk_test"), "sk_test");
+});
+
+test("formatNetworkError: 典型エラーコード別メッセージ", () => {
+  assert.match(formatNetworkError({ code: "ENOTFOUND" }), /api\.elevenlabs\.io/);
+  assert.match(formatNetworkError({ code: "ETIMEDOUT" }), /タイムアウト/);
+  assert.match(formatNetworkError({ message: "timeout" }), /タイムアウト/);
+});
+
 test("formatElevenTestError / formatAnthropicTestError / OpenAI / Gemini: ステータス別メッセージ", () => {
   assert.equal(formatElevenTestError(null, true), "インターネット接続を確認してください");
+  assert.equal(formatElevenTestError(null, true, "詳細エラー"), "詳細エラー");
   assert.equal(formatElevenTestError(401, false), "キーが正しくありません。コピーし直してください");
   assert.equal(formatAnthropicTestError(null, true), "インターネット接続を確認してください");
   assert.equal(formatAnthropicTestError(403, false), "Billing（お支払い）でクレジットを購入済みか確認してください");
@@ -145,16 +159,11 @@ test("formatElevenTestError / formatAnthropicTestError / OpenAI / Gemini: ステ
 test("testElevenLabsConnection: 成功レスポンスをモックで検証", async () => {
   const result = await testElevenLabsConnection("sk_test", async () => ({
     status: 200,
-    body: JSON.stringify({
-      subscription: { tier: "starter" },
-      character_count: 1000,
-      character_limit: 10000,
-    }),
+    body: JSON.stringify({ text: "", words: [] }),
   }));
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.message, "接続できました");
-    assert.match(result.detail || "", /プラン: starter/);
+    assert.equal(result.message, "接続できました（文字起こしAPI）");
   }
 });
 
@@ -172,7 +181,7 @@ test("testElevenLabsConnection: ネットワークエラーをモックで検証
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.message, "インターネット接続を確認してください");
+    assert.match(result.message, /接続に失敗しました/);
   }
 });
 

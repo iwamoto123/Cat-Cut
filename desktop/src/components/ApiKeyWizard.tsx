@@ -403,8 +403,9 @@ export function ApiKeyWizard({
                 <span className="apiWizardStepNote">アカウントがない場合は先に無料登録（GoogleアカウントでOK）</span>
               </li>
               <li>画面の「Create API Key」を押す</li>
-              <li>表示されたキー（<code>sk_</code> で始まる長い文字列）を「Copy」ボタンでコピー</li>
-              <li>下の入力欄に貼り付け</li>
+              <li>キー作成時は <strong>IP制限なし</strong>・<strong>Speech to Text 権限あり</strong>（または制限なし）にする</li>
+              <li>表示されたキー（<code>sk_</code> で始まる長い文字列）を「Copy」ボタンで<strong>全文</strong>コピー</li>
+              <li>下の入力欄に貼り付け →「接続テスト」で成功を確認してから「次へ」</li>
             </ol>
 
             {elevenDetected && elevenUseDetected ? (

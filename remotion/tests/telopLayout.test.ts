@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  TELOP_FIT_WIDTH_RATIO,
   TELOP_MAX_LINES,
   TELOP_MIN_FONT_SCALE,
+  VERTICAL_TELOP_FIT_WIDTH_RATIO,
   clampTelopYPercent,
   computeTelopBlockLayout,
   fitFontSizeForLines,
+  telopFitWidth,
   wrapSegmentsWithMaxLines,
 } from "../src/lib/telopLayout.ts";
 import { weightedTelopLineLength, wrapTelopLine } from "../src/lib/wrapTelopLine.ts";
@@ -152,4 +155,16 @@ test("clampTelopYPercent: ブロックがセーフエリアより高い場合は
     videoHeight: 1080,
   });
   assert.equal(y, 50);
+});
+
+// --- W24 Phase A-2: 縦型の幅フィット上限(右端セーフゾーン) ---
+
+test("telopFitWidth: 横型キャンバスは従来どおり92%", () => {
+  assert.equal(telopFitWidth(1920, 1080), 1920 * TELOP_FIT_WIDTH_RATIO);
+  assert.equal(TELOP_FIT_WIDTH_RATIO, 0.92);
+});
+
+test("telopFitWidth: 縦型キャンバス(高さ>幅)は右端セーフゾーン分だけ86%へ絞る", () => {
+  assert.equal(telopFitWidth(1080, 1920), 1080 * VERTICAL_TELOP_FIT_WIDTH_RATIO);
+  assert.equal(VERTICAL_TELOP_FIT_WIDTH_RATIO, 0.86);
 });

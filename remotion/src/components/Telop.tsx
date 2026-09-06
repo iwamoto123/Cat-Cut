@@ -14,13 +14,34 @@
  */
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
-import { DEFAULT_HIGHLIGHT_COLOR, splitHighlightRuns } from "../lib/telopHighlight";
-import { clampTelopYPercent, computeTelopBlockLayout, TELOP_LINE_GAP_PX } from "../lib/telopLayout";
+import { DEFAULT_HIGHLIGHT_COLOR } from "../lib/telopHighlight";
+import {
+  clampTelopYPercent,
+  computeTelopBlockLayout,
+  telopFitWidth,
+  TELOP_LINE_GAP_PX,
+  VERTICAL_TELOP_MIN_FONT_PX,
+  VERTICAL_TELOP_MIN_FONT_SCALE,
+} from "../lib/telopLayout";
+import {
+  buildHighlightMask,
+  DEFAULT_LATIN_FONT_FAMILY,
+  DEFAULT_PARTICLE_SCALE,
+  splitStyledRuns,
+  splitTypographyRuns,
+  type TypographyRunKind,
+} from "../lib/telopTypography";
 import {
   resolveTelopAnimation,
   type TelopAnimationIn,
   type TelopAnimationOut,
 } from "../lib/telopAnimation";
+import {
+  splitGraphemes,
+  typewriterLineOffsets,
+  typewriterVisibleCount,
+} from "../lib/telopTypewriter";
+import { buildGlowFilter, combineTelopFilters } from "../lib/telopGlow";
 
 // =============================================================================
 // 型定義
@@ -52,7 +73,18 @@ export interface TelopStyle {
   };
   inner_stroke?: { color: string; width: number } | null;
   outer_stroke?: { color: string; width: number } | null;
+  /**
+   * フェーズU6(詳細エディタ): outer_stroke のさらに外側の第3縁(多重テロップの「太枠」用)。
+   * -webkit-text-stroke の重ね順では最背面に描画される。null/省略で無効(後方互換)。
+   */
+  outer_stroke2?: { color: string; width: number } | null;
   drop_shadow?: string | null;
+  /**
+   * フェーズU6(詳細エディタ): 光彩(グロウ)。オフセットなしdrop-shadowの多重で表現する
+   * (lib/telopGlow.ts)。radius はプリセット font_size 基準のpxで実サイズに比例スケール。
+   * game系プリセットが drop_shadow 文字列で表現している既存グロウとは独立の明示フィールド。
+   */
+  glow?: { color: string; radius: number } | null;
   /**
    * フェーズT2.5-2(縁取りデザイン刷新): ハードなオフセット影。縁レイヤーの下に
    * (x, y) pxずらした影レイヤーを描画する(CSS filterのdrop_shadowとは別物。
@@ -99,6 +131,27 @@ export interface TelopStyle {
   animation_duration_frames?: number;
   /** フェーズT3: 登場時効果音ID(assets/sfx/。null/省略で鳴らさない。再生はComposition側)。 */
   sfx?: string | null;
+  /**
+   * 助詞縮小(タイポグラフィ): 内容語に挟まれた単独ひらがな助詞の縮小率。
+   * 省略時は0.8(80%)。1で無効。
+   */
+  particle_scale?: number | null;
+  /**
+   * 和欧混植(タイポグラフィ): 半角英数字の連続に適用する欧文フォント。
+   * 省略時は Anton。null で無効(和文フォントのまま)。
+   */
+  latin_font_family?: string | null;
+  /**
+   * フェーズW27(表現拡張): ブロック全体の回転(deg)。斜め文字プリセット
+   * (ad_slant_impact)用。登場アニメのtransformと合成される。省略=回転なし。
+   */
+  rotate?: number | null;
+  /**
+   * フェーズW27(表現拡張): 縦書き("vertical"=vertical-rl・縦1列)。
+   * 短い決めゼリフ用(ad_vertical_mincho)。折返しせず1列で描画し、
+   * 高さフィットでフォントサイズを決める。省略=横書き(後方互換)。
+   */
+  writing_mode?: "vertical" | null;
 }
 
 interface TelopData {
@@ -202,6 +255,25 @@ type AnimContext = {
   centerOffsetYPx: number;
   /** slide_left の横移動距離(px)。 */
   slideDistancePx: number;
+  /** W26: bounce_left/right の横移動距離(px。画面幅比で大きめ)。 */
+  bounceDistancePx: number;
+  /** W26: rise_bounce の下からの移動距離(px)。 */
+  riseDistancePx: number;
+  /** W26: drop_bounce の上からの移動距離(px)。 */
+  dropDistancePx: number;
+};
+
+/** drop_settle の落下開始オフセット(px。スケールはコンポジション座標系)。 */
+const DROP_SETTLE_DISTANCE_PX = 90;
+/** blur_in の初期ぼかし量(px)。 */
+const BLUR_IN_RADIUS_PX = 8;
+
+/** 登場アニメの1フレーム分の描画状態(filter/clipPathはW24 Phase B-1の新種のみ使う)。 */
+type InAnimState = {
+  opacity: number;
+  transform: string;
+  filter?: string;
+  clipPath?: string;
 };
 
 const getInAnim = (
@@ -211,7 +283,7 @@ const getInAnim = (
   fps: number,
   durationFrames: number,
   ctx: AnimContext,
-): { opacity: number; transform: string } => {
+): InAnimState => {
   const localFrame = frame - startFrame;
   if (type === "none" || localFrame < 0) return { opacity: 1, transform: "" };
 
@@ -278,6 +350,116 @@ const getInAnim = (
     return { opacity, transform: "" };
   }
 
+  if (type === "blur_in") {
+    // ぼかしが解けながら浮かび上がる(広告向け・上品)
+    const progress = interpolate(localFrame, [0, durationFrames], [0, 1], {
+      extrapolateRight: "clamp",
+    });
+    const blur = BLUR_IN_RADIUS_PX * (1 - progress);
+    return {
+      opacity: progress,
+      transform: "",
+      filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
+    };
+  }
+
+  if (type === "wipe_up") {
+    // 下からマスクで拭き上がる(clip-path inset)
+    const progress = interpolate(localFrame, [0, durationFrames], [0, 1], {
+      extrapolateRight: "clamp",
+    });
+    const inset = (1 - progress) * 100;
+    return {
+      opacity: 1,
+      transform: "",
+      clipPath: inset > 0.1 ? `inset(${inset.toFixed(2)}% 0% 0% 0%)` : undefined,
+    };
+  }
+
+  if (type === "slam") {
+    // W26: 画面全体級のスケールから叩きつけて、着地後に左右へ小さくシェイクする
+    // (ショート広告の決めゼリフ用・最強調)。dampingを低くして着地のオーバーシュートを出す。
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 11, stiffness: 220 },
+      durationInFrames: durationFrames,
+    });
+    const scale = interpolate(progress, [0, 1], [2.2, 1]);
+    // 着地後の減衰シェイク(約4フレームで収束する決定的な揺れ)
+    const settleFrame = localFrame - durationFrames;
+    const shakeX =
+      settleFrame >= 0 && settleFrame < 5
+        ? Math.sin(settleFrame * 2.6) * Math.max(0, 6 - settleFrame * 1.6)
+        : 0;
+    return {
+      opacity: Math.min(1, localFrame / 2),
+      transform: `translateX(${shakeX.toFixed(2)}px) scale(${scale})`,
+    };
+  }
+
+  if (type === "bounce_left" || type === "bounce_right") {
+    // W26: 画面外から大きくスライドして行き過ぎて戻る(バウンド)。slide_left/rightの強化版
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 9, stiffness: 150 },
+      durationInFrames: durationFrames,
+    });
+    const direction = type === "bounce_left" ? -1 : 1;
+    const translateX = direction * ctx.bounceDistancePx * (1 - progress);
+    return {
+      opacity: Math.min(1, localFrame / 2),
+      transform: `translateX(${translateX}px)`,
+    };
+  }
+
+  if (type === "rise_bounce") {
+    // W26: 下から勢いよく上がって行き過ぎて戻る(slide_upの強化版)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 9, stiffness: 160 },
+      durationInFrames: durationFrames,
+    });
+    const translateY = ctx.riseDistancePx * (1 - progress);
+    return {
+      opacity: Math.min(1, localFrame / 2),
+      transform: `translateY(${translateY}px)`,
+    };
+  }
+
+  if (type === "drop_bounce") {
+    // W26: 上から落ちて沈み込んで戻る(drop_settleの強化版・移動量大)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 9, stiffness: 160 },
+      durationInFrames: durationFrames,
+    });
+    const translateY = -ctx.dropDistancePx * (1 - progress);
+    return {
+      opacity: Math.min(1, localFrame / 2),
+      transform: `translateY(${translateY}px)`,
+    };
+  }
+
+  if (type === "drop_settle") {
+    // 上からストンと落ちて僅かに沈んで戻る(springの控えめなオーバーシュート)
+    const progress = spring({
+      frame: localFrame,
+      fps,
+      config: { damping: 12, stiffness: 180 },
+      durationInFrames: durationFrames,
+    });
+    const translateY = -DROP_SETTLE_DISTANCE_PX * (1 - progress);
+    return {
+      opacity: Math.min(1, localFrame / 2),
+      transform: `translateY(${translateY}px)`,
+    };
+  }
+
+  // typewriter: ブロック自体は動かさず、文字単位の逐次表示はTelopLayerが行う
   return { opacity: 1, transform: "" };
 };
 
@@ -322,6 +504,9 @@ const TelopLayer = ({
   style,
   opacity,
   transform,
+  animFilter,
+  clipPath,
+  typewriterCount,
   highlightWords,
 }: {
   /**
@@ -334,34 +519,100 @@ const TelopLayer = ({
   style: TelopStyle;
   opacity: number;
   transform: string;
+  /** W24 Phase B-1: 登場アニメのfilter(blur_in)。blockFilterと結合して適用する。 */
+  animFilter?: string;
+  /** W24 Phase B-1: 登場アニメのclip-path(wipe_up)。 */
+  clipPath?: string;
+  /**
+   * W24 Phase B-1(typewriter): 表示するgrapheme数(行またぎの通し番号)。
+   * null/undefined でtypewriter無効=従来描画。全レイヤー(影・縁・塗り)に同じ
+   * grapheme分割を適用して字幅・輪郭を一致させる。
+   */
+  typewriterCount?: number | null;
   highlightWords?: string[];
 }) => {
   const fontWeight = (style.font_weight ?? 900) as React.CSSProperties["fontWeight"];
   const letterSpacing = style.letter_spacing ?? "0.02em";
   const lineHeight = style.line_height ?? 1.4;
   const fontFamily = style.font_family ?? DEFAULT_FONT_FAMILY;
+  // フェーズW27(表現拡張): 縦書きと回転。回転は登場アニメのtransformへ後置合成する
+  const isVerticalWriting = style.writing_mode === "vertical";
+  const rotateDeg = Number(style.rotate ?? 0) || 0;
 
   const blockBackground = resolveBlockBackground(style);
   const lineBandBackground = blockBackground ? null : style.background;
 
-  // フェーズT1-2(部分ハイライト): 塗り潰しレイヤーの該当部分文字列だけ色を変える。
-  // 縁取りレイヤーは従来通り行全文を描くため、縁取り・サイズは変わらない。
+  // タイポグラフィ(助詞縮小・和欧混植): 字幅が変わるため、塗り・縁取り・影の
+  // 全レイヤーに「同一のスパン分割・同一のフォント指定」を適用する(片方だけに
+  // 適用するとレイヤー間で字幅がズレて多層縁が崩れる)。
+  const particleScale = style.particle_scale ?? DEFAULT_PARTICLE_SCALE;
+  const latinFontFamily =
+    style.latin_font_family === null ? null : (style.latin_font_family ?? DEFAULT_LATIN_FONT_FAMILY);
+  const runSpanStyle = (kind: TypographyRunKind): React.CSSProperties | undefined => {
+    if (kind === "particle" && particleScale !== 1) {
+      return { fontSize: Math.round(fontSize * particleScale) };
+    }
+    if (kind === "latin" && latinFontFamily) {
+      return { fontFamily: latinFontFamily };
+    }
+    return undefined;
+  };
+
+  // W24 Phase B-1(typewriter): 各行の行頭grapheme通し番号。未表示文字は opacity:0 で
+  // 字幅を保ったまま隠す(substringだと中央寄せの折返し位置がフレームごとにズレるため)。
+  // run(タイポグラフィ・ハイライト)のspanの内側にgrapheme spanを入れ子にするので、
+  // 助詞縮小・和欧混植・highlight_words の色替えと共存する。
+  const typewriterActive = typewriterCount !== null && typewriterCount !== undefined;
+  const lineStartOffsets = typewriterActive ? typewriterLineOffsets(lineTexts).offsets : null;
+  const renderTypewriterText = (text: string, startIndex: number): React.ReactNode =>
+    splitGraphemes(text).map((grapheme, graphemeIdx) => (
+      <span
+        key={graphemeIdx}
+        style={{ opacity: startIndex + graphemeIdx < (typewriterCount ?? 0) ? 1 : 0 }}
+      >
+        {grapheme}
+      </span>
+    ));
+
+  // 縁取り・影レイヤー用: タイポグラフィのみ適用(色は親のtransparent/縁色を継承)。
+  const renderLayerLine = (lineText: string, lineStart = 0): React.ReactNode => {
+    const runs = splitTypographyRuns(lineText);
+    if (!typewriterActive && runs.every((run) => run.kind === "normal")) return lineText;
+    let cursor = lineStart;
+    return runs.map((run, runIdx) => {
+      const runStart = cursor;
+      if (typewriterActive) cursor += splitGraphemes(run.text).length;
+      return (
+        <span key={runIdx} style={runSpanStyle(run.kind)}>
+          {typewriterActive ? renderTypewriterText(run.text, runStart) : run.text}
+        </span>
+      );
+    });
+  };
+
+  // フェーズT1-2(部分ハイライト): 塗り潰しレイヤーはタイポグラフィ+ハイライト色を合成する。
   const highlightColor = style.highlight_color ?? DEFAULT_HIGHLIGHT_COLOR;
-  const renderFillLine = (lineText: string): React.ReactNode => {
-    const runs = splitHighlightRuns(lineText, highlightWords);
-    if (!runs.some((run) => run.highlight)) return lineText;
-    return runs.map((run, runIdx) =>
-      run.highlight ? (
+  const renderFillLine = (lineText: string, lineStart = 0): React.ReactNode => {
+    const runs = splitStyledRuns(lineText, buildHighlightMask(lineText, highlightWords));
+    if (!typewriterActive && runs.every((run) => run.kind === "normal" && !run.highlight)) {
+      return lineText;
+    }
+    let cursor = lineStart;
+    return runs.map((run, runIdx) => {
+      const runStart = cursor;
+      if (typewriterActive) cursor += splitGraphemes(run.text).length;
+      return (
         <span
           key={runIdx}
-          style={{ color: highlightColor, WebkitTextFillColor: highlightColor }}
+          style={{
+            ...runSpanStyle(run.kind),
+            ...(run.highlight ? { color: highlightColor, WebkitTextFillColor: highlightColor } : {}),
+          }}
         >
-          {run.text}
+          {typewriterActive ? renderTypewriterText(run.text, runStart) : run.text}
         </span>
-      ) : (
-        <span key={runIdx}>{run.text}</span>
-      ),
-    );
+      );
+    });
   };
 
   const innerStrokeWidth = style.inner_stroke
@@ -370,12 +621,22 @@ const TelopLayer = ({
   const outerStrokeWidth = style.outer_stroke
     ? Math.round(style.outer_stroke.width * (fontSize / 52))
     : 0;
+  // フェーズU6: 第3縁(最背面)。スケール規則は他の縁と同一。
+  const outerStroke2Width = style.outer_stroke2
+    ? Math.round(style.outer_stroke2.width * (fontSize / 52))
+    : 0;
   // フェーズT2.5-2(オフセット影): 影のずらし量はプリセット font_size 基準の値を
   // 実フォントサイズに比例スケールする(縁取り幅と同じ規則)。影の輪郭は最も外側の
   // 縁と同じシルエット(同じstroke幅)で描く。
   const shadowOffset = style.shadow_offset ?? null;
   const shadowScale = fontSize / (style.font_size ?? 52);
-  const shadowStrokeWidth = Math.max(outerStrokeWidth, innerStrokeWidth);
+  const shadowStrokeWidth = Math.max(outerStroke2Width, outerStrokeWidth, innerStrokeWidth);
+  // フェーズU6: 光彩(グロウ)はブロック全体のfilterとしてdrop_shadowと結合する
+  // (radiusはshadow_offsetと同じ比例スケール)。
+  const blockFilter = combineTelopFilters(
+    buildGlowFilter(style.glow, shadowScale),
+    style.drop_shadow,
+  );
 
   // フェーズT2.5-1(多層縁の行ズレ根絶): 折返しはlineTextsで確定済みのため、
   // CSSの再折返し(pre-wrap)を禁止する(WebkitTextStroke幅差による行数食い違いを構造的に排除)。
@@ -387,6 +648,10 @@ const TelopLayer = ({
     lineHeight,
     textAlign: "center",
     whiteSpace: "nowrap",
+    // W27(縦書き): 縦1列・全文字直立(英数字も回転させない)
+    ...(isVerticalWriting
+      ? { writingMode: "vertical-rl" as const, textOrientation: "upright" as const }
+      : {}),
   };
 
   // 下線(underline)は塗り潰しレイヤーにのみ適用する(縁取りレイヤーは文字色が透明なため、
@@ -401,16 +666,23 @@ const TelopLayer = ({
           backgroundClip: "text",
         };
 
+  // W24 Phase B-1: 登場アニメのfilter(blur_in)は既存のblockFilter(グロウ・影)の前段に結合する
+  const combinedFilter =
+    animFilter && blockFilter ? `${animFilter} ${blockFilter}` : (animFilter ?? blockFilter);
+
   return (
     <div
       style={{
         opacity,
-        transform,
+        // W27(斜め文字): rotateは登場アニメのtransformの後に合成する(回転したまま動く)
+        transform: rotateDeg ? `${transform} rotate(${rotateDeg}deg)` : transform,
+        clipPath,
         display: "flex",
-        flexDirection: "column",
+        // W27(縦書き): 複数行は右→左の列並びにする(和文縦書きの読み順)
+        flexDirection: isVerticalWriting ? "row-reverse" : "column",
         alignItems: "center",
         gap: blockBackground ? 0 : 8,
-        filter: style.drop_shadow ?? undefined,
+        filter: combinedFilter,
         // ブロック背景: 文字ブロック全体の背後に1枚のベタ長方形を描画する(参考画像06/12/13)
         backgroundColor: blockBackground?.color,
         padding: blockBackground
@@ -443,7 +715,19 @@ const TelopLayer = ({
                 transform: `translate(${shadowOffset.x * shadowScale}px, ${shadowOffset.y * shadowScale}px)`,
               }}
             >
-              {lineText}
+              {renderLayerLine(lineText, lineStartOffsets?.[lineIdx] ?? 0)}
+            </div>
+          )}
+          {style.outer_stroke2 && (
+            // フェーズU6: 第3縁は最背面(DOM上で最初の通常フローレイヤー)に描画する
+            <div
+              style={{
+                ...textStyle,
+                color: "transparent",
+                WebkitTextStroke: `${outerStroke2Width}px ${style.outer_stroke2.color}`,
+              }}
+            >
+              {renderLayerLine(lineText, lineStartOffsets?.[lineIdx] ?? 0)}
             </div>
           )}
           {style.outer_stroke && (
@@ -452,9 +736,11 @@ const TelopLayer = ({
                 ...textStyle,
                 color: "transparent",
                 WebkitTextStroke: `${outerStrokeWidth}px ${style.outer_stroke.color}`,
+                position: style.outer_stroke2 ? "absolute" : "relative",
+                inset: 0,
               }}
             >
-              {lineText}
+              {renderLayerLine(lineText, lineStartOffsets?.[lineIdx] ?? 0)}
             </div>
           )}
           {style.inner_stroke && (
@@ -463,22 +749,25 @@ const TelopLayer = ({
                 ...textStyle,
                 color: "transparent",
                 WebkitTextStroke: `${innerStrokeWidth}px ${style.inner_stroke.color}`,
-                position: style.outer_stroke ? "absolute" : "relative",
+                position: style.outer_stroke2 || style.outer_stroke ? "absolute" : "relative",
                 inset: 0,
               }}
             >
-              {lineText}
+              {renderLayerLine(lineText, lineStartOffsets?.[lineIdx] ?? 0)}
             </div>
           )}
           <div
             style={{
               ...textStyle,
               ...fillStyle,
-              position: style.outer_stroke || style.inner_stroke ? "absolute" : "relative",
+              position:
+                style.outer_stroke2 || style.outer_stroke || style.inner_stroke
+                  ? "absolute"
+                  : "relative",
               inset: 0,
             }}
           >
-            {renderFillLine(lineText)}
+            {renderFillLine(lineText, lineStartOffsets?.[lineIdx] ?? 0)}
           </div>
         </div>
       ))}
@@ -562,24 +851,42 @@ export const Telop = ({
         const blockBackground = resolveBlockBackground(style);
         const baseFontSize = style.font_size ?? globalFontSize;
         const letterSpacingEm = Number.parseFloat(style.letter_spacing ?? "0.02em") || 0;
-        const layout = computeTelopBlockLayout({
-          segmentTexts: segments.map((segment) => segment.text),
-          maxCharsPerLine,
-          baseFontSize,
-          letterSpacingEm,
-          fitWidth:
-            videoWidth * 0.92 - (blockBackground ? (blockBackground.padding_x ?? 0) * 2 : 0),
-        });
+        const isVerticalWriting = style.writing_mode === "vertical";
+        // フェーズW27(縦書き): 折返しせず1列で描画し、高さフィットでサイズを決める
+        // (割当側 assign_vertical_accent_styles が8文字以下に制限するが、手動指定にも耐える)。
+        const layout = isVerticalWriting
+          ? (() => {
+              const flatText = segments.map((segment) => segment.text).join("").replace(/\n/g, "");
+              const charAdvance = baseFontSize * (1 + letterSpacingEm);
+              const maxColumnHeight = videoHeight * 0.5;
+              const scale = Math.min(1, maxColumnHeight / Math.max(1, flatText.length * charAdvance));
+              return { lineTexts: [flatText], fontSize: Math.round(baseFontSize * scale) };
+            })()
+          : computeTelopBlockLayout({
+              segmentTexts: segments.map((segment) => segment.text),
+              maxCharsPerLine,
+              baseFontSize,
+              letterSpacingEm,
+              // フェーズW24 Phase A-2: 縦型キャンバスは右端セーフゾーン分だけ幅上限を絞る(86%)
+              fitWidth:
+                telopFitWidth(videoWidth, videoHeight) -
+                (blockBackground ? (blockBackground.padding_x ?? 0) * 2 : 0),
+              // フェーズW26: 縦型は縮小しすぎる前に2行折返しへ逃がす(文字を大きく保つ)
+              minFontScale: videoHeight > videoWidth ? VERTICAL_TELOP_MIN_FONT_SCALE : undefined,
+              // フェーズW27: 縦型は絶対最低サイズも張る(ショートはテロップを大きく)
+              minFontPx: videoHeight > videoWidth ? VERTICAL_TELOP_MIN_FONT_PX : undefined,
+            });
 
         // 縦方向: y_position_offset 適用後もブロック全体が上下セーフエリア内に収まるようクランプする
+        // (縦書きは1列の文字数ぶんの高さを行数×行高として近似する)
         const yPercent = clampTelopYPercent({
           telopY,
           yOffset: style.y_position_offset ?? 0,
-          lineCount: layout.lineTexts.length,
-          lineHeight: style.line_height ?? 1.4,
+          lineCount: isVerticalWriting ? layout.lineTexts[0].length : layout.lineTexts.length,
+          lineHeight: isVerticalWriting ? 1 + letterSpacingEm : (style.line_height ?? 1.4),
           fontSize: layout.fontSize,
           videoHeight,
-          lineGapPx: blockBackground ? 0 : TELOP_LINE_GAP_PX,
+          lineGapPx: blockBackground || isVerticalWriting ? 0 : TELOP_LINE_GAP_PX,
           blockPaddingY: blockBackground ? (blockBackground.padding_y ?? 0) : 0,
         });
 
@@ -597,10 +904,23 @@ export const Telop = ({
           // pop_big: 画面中央(50%)から定位置(yPercent)への縦移動距離
           centerOffsetYPx: ((50 - yPercent) / 100) * videoHeight,
           slideDistancePx: videoWidth * 0.18,
+          // W26: バウンド系は移動量を大きく取る(ショートの「動きが弱い」対策)
+          bounceDistancePx: videoWidth * 0.6,
+          riseDistancePx: videoHeight * 0.16,
+          dropDistancePx: videoHeight * 0.2,
         });
         const outAnim = getOutAnim(displayEnd - frame, anim.animationOut);
         const opacity = inAnim.opacity * outAnim.opacity;
         const transform = `${inAnim.transform}${outAnim.scale !== 1 ? ` scale(${outAnim.scale})` : ""}`;
+        // W24 Phase B-1(typewriter): フレーム進捗→表示grapheme数(共有ロジック。プレビューCSSの
+        // animation-delayと同じ「文字i は progress >= i/total で表示」の規則)
+        const typewriterCount =
+          anim.animationIn === "typewriter"
+            ? typewriterVisibleCount(
+                typewriterLineOffsets(layout.lineTexts).total,
+                (frame - startFrame) / Math.max(1, anim.durationFrames),
+              )
+            : null;
 
         return (
           <div
@@ -622,6 +942,9 @@ export const Telop = ({
               style={style}
               opacity={opacity}
               transform={transform}
+              animFilter={inAnim.filter}
+              clipPath={inAnim.clipPath}
+              typewriterCount={typewriterCount}
               highlightWords={telop.highlight_words}
             />
           </div>

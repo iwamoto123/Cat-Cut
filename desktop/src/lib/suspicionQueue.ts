@@ -11,7 +11,16 @@ export type SuspicionType =
   | "proper_noun"
   | "ai_review"
   | "ai_failure"
-  | "word_split";
+  | "word_split"
+  | "suspect_word"
+  // W13-6: シーン境界の文字切れ疑い(reviewHotspots.detectSceneBoundaryTruncation由来)
+  | "boundary_truncation"
+  // W14-2: 修正履歴(correction_history)に頻出する「誤」表記が残っている(決定的検出)
+  | "correction_history"
+  // W16-7: AI最終チェック(step06dの全シーン一括LLM再チェック)の指摘
+  | "final_check"
+  // W19-B1: 弱い区間の再文字起こし(step05b)で元テキストと差分が出た区間
+  | "retranscribe";
 
 export type SuspicionItem = {
   id: string;
@@ -22,6 +31,8 @@ export type SuspicionItem = {
   timestampMs: number;
   wordIds: string[];
   detail: string;
+  /** W5-5: 修正候補(suspect_word由来)。要確認パネルの「候補: ○○ [適用]」ボタンに使う。 */
+  suggestion?: string;
 };
 
 export type SuspicionTelopFinding = {
@@ -519,9 +530,21 @@ export type AiReviewTelopNeedsReview = {
   suggestion?: string;
 };
 
+/** W5-1: step05のAI疑義ワード(ai_review.json の suspect_words)。旧runでは配列自体が無い。 */
+export type AiReviewSuspectWord = {
+  word_ids?: string[];
+  start_ms?: number;
+  end_ms?: number;
+  text?: string;
+  reason?: string;
+  suggestion?: string;
+};
+
 export type AiReviewInput = {
   enabled: boolean;
   transcriptNeedsReview?: AiReviewTranscriptNeedsReview[];
+  /** W5-3: AI疑義ワード(文脈上あやしい語)。 */
+  suspectWords?: AiReviewSuspectWord[];
   telopNeedsReview?: AiReviewTelopNeedsReview[];
   dismissedFindingIds?: string[];
   /** 改善21-B: AI校正失敗時の情報(main/index.cjs が ai_review.json / refine.json から読む)。 */
@@ -902,6 +925,42 @@ export function buildAiReviewSuspicions(
   return dedupeAiReviewSuspicions(items);
 }
 
+/**
+ * W5-3: step05のAI疑義ワード(suspect_words)を疑義キュー項目に変換する。
+ * dedupeはstep05側で済んでいるためここでは行わない。実在するword_idのみ残し、
+ * 全滅した項目(旧runとの単語IDずれ等)は捨てる。
+ */
+export function buildSuspectWordSuspicions(
+  aiReview: AiReviewInput | undefined,
+  words: TranscriptWord[],
+): SuspicionItem[] {
+  if (!aiReview?.enabled) return [];
+  const wordById = new Map(words.map((word) => [word.id, word]));
+  const items: SuspicionItem[] = [];
+  for (const [index, entry] of (aiReview.suspectWords || []).entries()) {
+    const rawWordIds = Array.isArray(entry.word_ids) ? entry.word_ids.map(String) : [];
+    const matchedWords = rawWordIds
+      .map((wordId) => wordById.get(wordId))
+      .filter((word): word is TranscriptWord => Boolean(word));
+    if (!matchedWords.length) continue;
+    const wordIds = matchedWords.map((word) => word.id);
+    const reason = String(entry.reason || "誤変換の疑い");
+    const suggestion = entry.suggestion ? String(entry.suggestion) : "";
+    items.push({
+      id: `suspect_word:${index}:${wordIds.join("_")}`,
+      type: "suspect_word",
+      severity: "high",
+      label: "文脈上あやしい語",
+      text: String(entry.text || matchedWords.map((word) => word.text).join("")),
+      timestampMs: Number(entry.start_ms) || matchedWords[0].startMs,
+      wordIds,
+      detail: suggestion ? `${reason}（候補: ${suggestion}）` : reason,
+      ...(suggestion ? { suggestion } : {}),
+    });
+  }
+  return items;
+}
+
 export type WordSplitFlag = {
   prev_end_ms: number;
   next_start_ms: number;
@@ -1045,6 +1104,8 @@ export function buildSuspicionQueue(input: SuspicionQueueInput): SuspicionItem[]
   const telopFindings = (input.telopFindings || []).filter((finding) => !dismissedIds.has(finding.id));
 
   const aiItems = buildAiReviewSuspicions(aiReview || { enabled: false }, input.words, input.keepSegments);
+  // W5-3: AI疑義ワード(dedupeはstep05側で済み)。
+  const suspectWordItems = buildSuspectWordSuspicions(aiReview, input.words);
   const wordSplitItems = buildWordSplitSuspicions(input.wordSplitFlags, input.words);
 
   const fillerItems = aiMode
@@ -1071,6 +1132,7 @@ export function buildSuspicionQueue(input: SuspicionQueueInput): SuspicionItem[]
 
   const items = [
     ...aiItems,
+    ...suspectWordItems,
     ...wordSplitItems,
     ...buildLowConfidenceSuspicions(input.words, input.lowConfidenceOptions),
     ...fillerItems,

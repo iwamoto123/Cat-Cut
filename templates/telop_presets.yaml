@@ -22,7 +22,14 @@
 #   outer_stroke        : 外縁取り (オプション)
 #     color             : 色
 #     width             : 太さ (px) ※inner_stroke より大きく
+#   outer_stroke2       : 第3縁 (フェーズU6。outer_stroke のさらに外側=最背面に描画する
+#     color             : 「太枠」用の縁。多重テロップの重厚感を出したいときに使う。
+#     width             : 太さ (px) ※outer_stroke より大きく。null/省略で無効)
 #   drop_shadow         : 影 (CSS の filter: drop-shadow() 文字列、null で無効)
+#   glow                : 光彩 (フェーズU6。オフセットなしdrop-shadowの多重で表現する
+#     color             : ネオン系の光。game系プリセットがdrop_shadow文字列で手書きしている
+#     radius            : グロウとは独立の明示フィールド。radius は font_size 基準のpx。
+#                         null/省略で無効)
 #   shadow_offset       : ハードなオフセット影 (フェーズT2.5。縁レイヤーの下に(x,y)pxずらした
 #     x                 : 影レイヤーを描画する。drop_shadowのぼかし影とは別物で、
 #     y                 : 「細い縁+オフセット影」の商用テロップ定番表現に使う。
@@ -42,12 +49,24 @@
 #                         "slide_up"   = 下から浮き上がる(質問系)
 #                         "zoom"       = その場でズームイン(要点・オチ・CTA)
 #                         "stamp"      = ハンコ(既存流用) / "fade" = フェードのみ / "none" = なし
+#                         --- フェーズW24 Phase B-1(広告向け・上品な4種) ---
+#                         "blur_in"     = ぼかしが解けながら浮かび上がる
+#                         "typewriter"  = 1文字ずつ出る(grapheme単位。広告の定番)
+#                         "wipe_up"     = 下からマスクで拭き上がる
+#                         "drop_settle" = 上からストンと落ちて僅かに沈んで戻る
 #                         省略時は timeline.animation_in (従来のグローバル設定) にフォールバック)
 #   animation_out       : 退場アニメーション ("fade" | "pop_out" | "none"。省略時は
 #                         timeline.animation_out にフォールバック)
 #   animation_duration_frames : 登場アニメの長さ(フレーム数。省略時は既定12)
 #   sfx                 : 登場時効果音ID (assets/sfx/ の "don"|"shakin"|"pon"|"jan"|"hyu"。
 #                         null/省略で鳴らさない。連発防止のため描画側で最小間隔5秒のガードあり)
+#   particle_scale      : 助詞縮小(タイポグラフィ)。内容語(漢字・カタカナ・英数字)に挟まれた
+#                         単独ひらがな助詞(の・が・を等)のフォントサイズ比率。
+#                         省略時 0.8 (80%)。1 で無効。判定は決定的ルール(AI不使用・トークン消費なし)
+#   latin_font_family   : 和欧混植(タイポグラフィ)。半角英数字の連続に適用する欧文フォント。
+#                         省略時 '-apple-system, "SF Pro Display", "Helvetica Neue", "Arial", sans-serif'
+#                         (iPhone/Macのシステムフォント)。null で無効
+#                         (明朝・手書き系などフォント固有の欧文を活かしたいプリセットは null にする)
 
 presets:
   # ----- 標準テロップ (青グラデ + 多重縁取り) -----
@@ -724,52 +743,135 @@ presets:
   # 参考画像: templates/reference/telop_analysis_20260705/telop_samples/
   # ===========================================================================
 
-  # ----- A1: 黄ベタ+黒細縁 (デフォルト事実。参考画像05,06の黄字幕) -----
+  # ----- A1: 白+黒細縁+ハード影、強調語のみ黄 (デフォルト事実) -----
+  # 2026-07リサーチ反映: プロの定番は「白文字+黒縁」がベース、色は強調箇所のみ。
+  # 縁は文字サイズの5〜10%(72px→6px)。フォントはテロップ用に仮名を拡大した
+  # 源暎ゴシックN U-KL(超極太)へ変更。
   fact_yellow:
-    description: "事実・説明のデフォルト。黄ベタ文字+黒細縁"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    description: "事実・説明のデフォルト。白+黒細縁+ハード影、強調語のみ黄"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
     font_size: 72
     font_weight: 900
-    letter_spacing: "0.02em"
+    letter_spacing: "0.03em"
     line_height: 1.35
-    fill: { type: solid, color: "#FFE600" }
+    fill: { type: solid, color: "#FFFFFF" }
     inner_stroke: null
-    outer_stroke: { color: "#000000", width: 10 }
-    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.45))"
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: { x: 4, y: 4, color: "#000000" }
     y_position_offset: 0
-    animation_in: fade
+    highlight_color: "#FFE600"
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
+    sfx: null
+
+  # ----- A1変種(フェーズW1): 話者カラー用。fact_yellowと同構造で fill 色のみ変更 -----
+  # 対談で2人目の話者の「基本」テロップ(default/reply)に使う水色系。
+  # reply_cyan(#6BDCF5)と同系トーンで調和させ、強調語は黄のまま(色の意味を統一)
+  fact_cyan:
+    description: "話者カラー(2人目)。fact_yellowの水色版、強調語のみ黄"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.35
+    fill: { type: solid, color: "#7FDFF5" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: { x: 4, y: 4, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
+    sfx: null
+
+  # ----- A1変種(フェーズW1): 話者カラー用(3人目)。薄緑系 -----
+  fact_green:
+    description: "話者カラー(3人目)。fact_yellowの薄緑版、強調語のみ黄"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.35
+    fill: { type: solid, color: "#A8ECA0" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: { x: 4, y: 4, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
+    sfx: null
+
+  # ----- A1変種: fact_yellow + 座布団(半透明黒帯) -----
+  # 背景がゴチャつく実写・ロケ系の場面向け。行ごとに半透明黒帯を敷いて可読性を確保する
+  fact_yellow_band:
+    description: "事実・説明+座布団(半透明黒帯)。背景がゴチャつく場面向け"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 72
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: null  # 帯があるため影は不要(帯+影は重たくなる)
+    background: { color: "rgba(0, 0, 0, 0.55)" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
+    sfx: null
+
+  # ----- A2変種: neutral_white + 座布団(半透明黒帯) -----
+  neutral_white_band:
+    description: "ニュートラル+座布団(半透明黒帯)。背景がゴチャつく場面向け"
+    font_family: '"GenEi Gothic N H-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: null  # 帯があるため影は不要
+    background: { color: "rgba(0, 0, 0, 0.55)" }
+    y_position_offset: 0
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
     sfx: null
 
   # ----- A2: 白+黒細縁+黒ハード影 (T2.5-2: 旧「黒縁+青の第2縁」の濃色隣接を全廃) -----
   neutral_white:
     description: "ニュートラルな相槌・つなぎ・引用。白+黒細縁+黒ハード影"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
-    font_size: 72
+    font_family: '"GenEi Gothic N H-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
     font_weight: 900
-    letter_spacing: "0.02em"
+    letter_spacing: "0.03em"
     line_height: 1.35
     fill: { type: solid, color: "#FFFFFF" }
     inner_stroke: null
-    outer_stroke: { color: "#000000", width: 8 }
+    outer_stroke: { color: "#000000", width: 6 }
     drop_shadow: null
-    shadow_offset: { x: 6, y: 6, color: "#000000" }
+    shadow_offset: { x: 4, y: 4, color: "#000000" }
     y_position_offset: 0
-    animation_in: fade
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
     sfx: null
 
   # ----- A3: 赤ベタ+白細縁+黒オフセット影 (感情・驚き・断言・煽り。参考画像13) -----
   emotion_red:
     description: "感情・驚き・断言。赤ベタ+白細縁+黒オフセット影"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
-    font_size: 76
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 78
     font_weight: 900
-    letter_spacing: "0.02em"
+    letter_spacing: "0.03em"
     line_height: 1.35
     fill: { type: solid, color: "#E60028" }
     inner_stroke: null
-    outer_stroke: { color: "#FFFFFF", width: 10 }
-    drop_shadow: null
-    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    outer_stroke: { color: "#FFFFFF", width: 7 }
+    # 色文字+白縁の3層目にハードなずらし影を重ねると輪郭が二重写りに見えるため、
+    # 短距離+ぼかしのソフトシャドウで背景から分離する(2026-07リサーチ: 影は距離2〜5px/ぼかし3〜6px)
+    drop_shadow: "drop-shadow(3px 3px 5px rgba(0,0,0,0.65))"
+    shadow_offset: null
     y_position_offset: 0
     highlight_color: "#FFE600"  # 赤地なので部分強調は黄
     animation_in: pop_big  # 強調・断言は「画面中央に大きくバッと出て」定位置へ
@@ -778,16 +880,17 @@ presets:
   # ----- A4: 青ベタ+白細縁+黒オフセット影 (聞き手の質問・ツッコミ) -----
   question_blue:
     description: "聞き手の質問・ツッコミ。青ベタ+白細縁+黒オフセット影"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
     font_size: 72
     font_weight: 900
-    letter_spacing: "0.02em"
+    letter_spacing: "0.03em"
     line_height: 1.35
-    fill: { type: solid, color: "#1D6AE5" }
+    fill: { type: solid, color: "#2E9BFF" }
     inner_stroke: null
-    outer_stroke: { color: "#FFFFFF", width: 10 }
-    drop_shadow: null
-    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    outer_stroke: { color: "#FFFFFF", width: 7 }
+    # 色文字+白縁のハードずらし影は二重写りに見えるため、ソフトシャドウで分離する
+    drop_shadow: "drop-shadow(3px 3px 5px rgba(0,0,0,0.65))"
+    shadow_offset: null
     y_position_offset: 0
     highlight_color: "#FFE600"  # 青地なので部分強調は黄
     animation_in: slide_up  # 質問は下から浮き上がる
@@ -795,32 +898,34 @@ presets:
 
   # ----- A5: 水色ベタ+黒細縁 (軽い返し・相槌) -----
   reply_cyan:
-    description: "軽い返し・相槌。水色ベタ+黒細縁"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    description: "軽い返し・相槌。けいふぉんとの水色+黒細縁でカジュアルに"
+    font_family: '"Keifont", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
     font_size: 68
-    font_weight: 900
-    letter_spacing: "0.02em"
+    font_weight: 700
+    letter_spacing: "0.03em"
     line_height: 1.35
     fill: { type: solid, color: "#6BDCF5" }
     inner_stroke: null
-    outer_stroke: { color: "#000000", width: 10 }
-    drop_shadow: "drop-shadow(0px 4px 6px rgba(0,0,0,0.4))"
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: { x: 3, y: 3, color: "#000000" }
     y_position_offset: 0
-    animation_in: fade
+    latin_font_family: null  # けいふぉんとの手書き風欧文を活かす(システム欧文の混植だと浮く)
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
     sfx: null
 
   # ----- A6: 紫グラデ+白細縁+暗紫の外縁 (特別強調・強い煽り。参考画像09) -----
   # 二重縁だが「紫 → 白(明) → 暗紫(暗)」と明度差を挟むため原則1を満たす
   special_purple:
-    description: "特別に強い煽り/ネガ。紫グラデ+白細縁+暗紫の外縁"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
-    font_size: 80
-    font_weight: 900
+    description: "特別に強い煽り/ネガ。ラノベPOPの紫グラデ+白細縁+暗紫の外縁"
+    font_family: '"LanobePOP", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 82
+    font_weight: 700
     letter_spacing: "0.02em"
     line_height: 1.3
     fill: { type: gradient, gradient_from: "#B06CF2", gradient_to: "#4E1490", gradient_direction: vertical }
-    inner_stroke: { color: "#FFFFFF", width: 8 }
-    outer_stroke: { color: "#14042E", width: 14 }
+    inner_stroke: { color: "#FFFFFF", width: 7 }
+    outer_stroke: { color: "#14042E", width: 12 }
     drop_shadow: "drop-shadow(0px 5px 10px rgba(20,4,46,0.6))"
     y_position_offset: 0
     highlight_color: "#FFE600"
@@ -830,7 +935,7 @@ presets:
   # ----- B: 黄色ベタ背景ボックス+黒文字 (要点・オチ・言い切り。参考画像06) -----
   box_yellow:
     description: "話のオチ・要約・言い切り。黄色ベタ背景ボックス+黒文字(2行)"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
     font_size: 64
     font_weight: 900
     letter_spacing: "0.02em"
@@ -847,7 +952,7 @@ presets:
   # ----- 赤ベタ背景ボックス+白文字 (プラン名・代行プラン等。analysis CH8 12:27) -----
   box_red:
     description: "プラン名等の強い提示。赤ベタ背景ボックス+白文字"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
     font_size: 64
     font_weight: 900
     letter_spacing: "0.02em"
@@ -865,7 +970,7 @@ presets:
   # ----- G: CTA用 (box_yellowの変形・下部2行。参考画像12) -----
   cta_yellow:
     description: "CTA「概要欄の公式LINEに『◯◯希望』」。黄色ベタ大ボックス+黒文字2行"
-    font_family: '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
     font_size: 76
     font_weight: 900
     letter_spacing: "0.02em"
@@ -895,6 +1000,7 @@ presets:
     outer_stroke: { color: "#000000", width: 12 }
     drop_shadow: "drop-shadow(0px 5px 10px rgba(0,0,0,0.7))"
     y_position_offset: -0.1
+    latin_font_family: null  # 毛筆の筆致を保つ(ゴシック欧文の混植だと浮く)
 
   # ----- A2変種: 白+ピンク細縁+黒ハード影 (T2.5-2: 旧「黒縁+ピンク第2縁」の濃色隣接を全廃) -----
   neutral_white_pink:
@@ -906,11 +1012,12 @@ presets:
     line_height: 1.35
     fill: { type: solid, color: "#FFFFFF" }
     inner_stroke: null
-    outer_stroke: { color: "#E8336E", width: 10 }
-    drop_shadow: null
-    shadow_offset: { x: 6, y: 6, color: "#000000" }
+    outer_stroke: { color: "#E8336E", width: 7 }
+    # 白+色縁のハードずらし影も二重写りに見えるため、ソフトシャドウへ変更
+    drop_shadow: "drop-shadow(3px 3px 5px rgba(0,0,0,0.6))"
+    shadow_offset: null
     y_position_offset: 0
-    animation_in: fade
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
     sfx: null
 
   # ===========================================================================
@@ -931,6 +1038,7 @@ presets:
     outer_stroke: { color: "#000000", width: 8 }
     drop_shadow: "drop-shadow(0px 6px 14px rgba(0,0,0,0.65))"
     y_position_offset: 0
+    latin_font_family: null  # 明朝の欧文を活かす(ゴシック欧文の混植だと浮く)
     animation_in: slide_left  # 名言は「左から現れる」
     sfx: shakin
 
@@ -944,13 +1052,451 @@ presets:
     line_height: 1.45
     fill: { type: solid, color: "#111111" }
     inner_stroke: null
-    outer_stroke: { color: "#FFFFFF", width: 10 }
-    drop_shadow: null
-    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    outer_stroke: { color: "#FFFFFF", width: 8 }
+    # 黒字+白縁のハードずらし影も二重写りに見えるため、ソフトシャドウへ変更
+    drop_shadow: "drop-shadow(3px 3px 6px rgba(0,0,0,0.7))"
+    shadow_offset: null
     y_position_offset: 0
     highlight_color: "#E60028"
+    latin_font_family: null  # 明朝の欧文を活かす
     animation_in: slide_left  # 辛辣も左から(名言系と同じ所作)
     sfx: shakin
+
+  # ===========================================================================
+  # フェーズU5: ジャンル別プロプリセット (2026-07-06)
+  #
+  # ネット調査の定石(仕様書 2026-07-06_catcut-ux-overhaul-spec.md フェーズU5)に基づく
+  # ジャンル専用プリセット。1動画のフォントは2〜3種の原則に従い、各ジャンル
+  # 「メイン / 強調 / 見出し・特殊」の2〜3系統に絞る。
+  # 縁取りデザイン原則(T2.5-2)とリント(test_telop_preset_lint.py)を全プリセットが満たす。
+  # ===========================================================================
+
+  # ----- business: ビジネス・教育 (すっきり角ゴ・白+黒縁・青アクセント・装飾最小) -----
+  # メイン。読みやすさ最優先のBIZ UD系+白文字+黒細縁(解説系の定石)
+  biz_white:
+    description: "ビジネス・メイン。BIZ UDPゴシックの白+黒細縁。装飾最小"
+    font_family: '"BIZ UDPGothic", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 68
+    font_weight: 700
+    letter_spacing: "0.03em"
+    line_height: 1.4
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: null
+    shadow_offset: { x: 3, y: 3, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#4DA3FF"  # ビジネスのアクセントは青系(黄・赤の派手色は使わない)
+    animation_in: none  # 教育・解説はアニメ最小(チカチカ防止)
+    sfx: null
+
+  # 強調。青ベタ+白細縁(青アクセントの原則。色文字+白縁はソフト影で二重写り回避)
+  biz_blue:
+    description: "ビジネス・強調。青ベタ+白細縁+ソフト影"
+    font_family: '"BIZ UDPGothic", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 76
+    font_weight: 700
+    letter_spacing: "0.03em"
+    line_height: 1.4
+    fill: { type: solid, color: "#2E86E0" }
+    inner_stroke: null
+    outer_stroke: { color: "#FFFFFF", width: 7 }
+    drop_shadow: "drop-shadow(2px 2px 5px rgba(0,0,0,0.55))"
+    shadow_offset: null
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: fade  # ビジネスは動きも控えめ(fadeのみ)
+    sfx: null
+
+  # 見出し級。紺座布団+白字(スライド見出しの文法。要点・CTAに使う)
+  biz_navy_box:
+    description: "ビジネス・見出し。紺ベタ背景ボックス+白文字"
+    font_family: '"BIZ UDPGothic", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 64
+    font_weight: 700
+    letter_spacing: "0.04em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))"
+    background: { color: "#16305E", padding_x: 36, padding_y: 14 }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: fade
+    sfx: null
+
+  # ----- vlog: Vlog・シネマティック (細めゴシック・薄い座布団・字幕に徹する) -----
+  # メイン字幕。細ウェイト白+薄め黒帯。縁なし・影なしで映像を邪魔しない
+  # (英数字は既定のシステム欧文=SF Pro系のまま、洗練された欧文表記を活かす)
+  vlog_caption:
+    description: "Vlog・メイン字幕。細めの白+薄い黒帯。縁なしで映像に馴染む"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 52
+    font_weight: 400
+    letter_spacing: "0.08em"
+    line_height: 1.5
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: null
+    shadow_offset: null
+    background: { color: "rgba(0, 0, 0, 0.40)" }
+    y_position_offset: 0
+    highlight_color: "#FFFFFF"  # 字幕に徹する: 部分強調でも色を変えない
+    particle_scale: 1  # 助詞縮小はにぎやかな演出向け。字幕らしい均一な字組みを保つ
+    animation_in: none
+    sfx: null
+
+  # 強調。同系統のまま太字+帯を少し濃く(フォントを増やさず階層はウェイトで作る)
+  vlog_caption_strong:
+    description: "Vlog・強調字幕。太字白+やや濃い黒帯。控えめ強調"
+    font_family: '"Zen Kaku Gothic Antique", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif'
+    font_size: 58
+    font_weight: 700
+    letter_spacing: "0.06em"
+    line_height: 1.5
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: null
+    shadow_offset: null
+    background: { color: "rgba(0, 0, 0, 0.45)" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    particle_scale: 1
+    animation_in: fade
+    sfx: null
+
+  # ----- variety: エンタメ・バラエティ (極太+手書きPOP・赤黄黒・アニメSFXあり) -----
+  # メイン。バラエティ定番の黄文字+黒細縁+ハード影(強調語は赤)
+  variety_yellow:
+    description: "バラエティ・メイン。極太の黄+黒細縁+ハード影"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 74
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFE600" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 7 }
+    drop_shadow: null
+    shadow_offset: { x: 4, y: 4, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FF2E2E"  # 黄地の部分強調は赤(赤黄黒の三色ルール)
+    animation_in: none  # 頻出テロップはアニメなし(チカチカ防止)
+    sfx: null
+
+  # 強調。超極太Dela Gothic Oneの赤黄グラデ+黒細縁(番組テロップ級のドン!)
+  variety_pop_red:
+    description: "バラエティ・強調。Dela Gothic Oneの黄→赤グラデ+黒細縁"
+    font_family: '"Dela Gothic One", "GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", sans-serif'
+    font_size: 88
+    font_weight: 400  # Dela Gothic One は400のみ提供(字形自体が超極太)
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: gradient, gradient_from: "#FFD93D", gradient_to: "#FF3B00", gradient_direction: vertical }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 8 }
+    drop_shadow: null
+    shadow_offset: { x: 5, y: 5, color: "#000000" }
+    y_position_offset: -0.02
+    highlight_color: "#FFFFFF"  # 赤黄地の部分強調は白抜き
+    animation_in: pop_big
+    sfx: don
+
+  # 特殊・ツッコミ。手書きPOP(ラノベPOP)の白+赤細縁でハンコ登場
+  variety_hand_shock:
+    description: "バラエティ・特殊。手書きPOPの白+赤細縁+スタンプ登場"
+    font_family: '"LanobePOP", "GenEi POPle Bk", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", sans-serif'
+    font_size: 84
+    font_weight: 700
+    letter_spacing: "0.02em"
+    line_height: 1.3
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#E60028", width: 7 }
+    # 白+色縁のハードずらし影は二重写りに見えるため、ソフトシャドウで分離する
+    drop_shadow: "drop-shadow(3px 3px 5px rgba(0,0,0,0.6))"
+    shadow_offset: null
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    latin_font_family: null  # 手書きPOPの欧文を活かす(システム欧文の混植だと浮く)
+    animation_in: stamp
+    sfx: don
+
+  # ----- beauty: 美容・ライフスタイル (明朝・白/ピンク/金・上品なソフト影) -----
+  # メイン。明朝の白+縁なし+ソフト影(縁を消して上品さを出す。帯も使わない)
+  beauty_serif:
+    description: "美容・メイン。明朝の白+縁なし+上品なソフト影"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 64
+    font_weight: 700
+    letter_spacing: "0.12em"
+    line_height: 1.6
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 3px 10px rgba(0,0,0,0.6))"
+    shadow_offset: null
+    y_position_offset: 0
+    highlight_color: "#F2A6C5"  # 白・ピンク・金の三色ルール
+    latin_font_family: null  # 明朝の欧文を活かす
+    particle_scale: 1  # 明朝の字組みを崩さない(助詞縮小はゴシック演出向け)
+    animation_in: fade
+    sfx: null
+
+  # 強調。上品なピンク+白細縁(彩度を抑えたピンクで安っぽくしない)
+  beauty_pink:
+    description: "美容・強調。くすみピンクの明朝+白細縁+ソフト影"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 72
+    font_weight: 800
+    letter_spacing: "0.08em"
+    line_height: 1.5
+    fill: { type: solid, color: "#F2A6C5" }
+    inner_stroke: null
+    outer_stroke: { color: "#FFFFFF", width: 6 }
+    drop_shadow: "drop-shadow(2px 3px 6px rgba(0,0,0,0.55))"
+    shadow_offset: null
+    y_position_offset: 0
+    highlight_color: "#FFFFFF"
+    latin_font_family: null
+    particle_scale: 1
+    animation_in: fade
+    sfx: null
+
+  # 見出し・特殊。金グラデ+白細縁(高級感。CTA・オチに使う)
+  beauty_gold:
+    description: "美容・見出し。金グラデの明朝+白細縁。高級感"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 78
+    font_weight: 800
+    letter_spacing: "0.10em"
+    line_height: 1.5
+    fill: { type: gradient, gradient_from: "#F5E0A8", gradient_to: "#C9A227", gradient_direction: vertical }
+    inner_stroke: null
+    outer_stroke: { color: "#FFFFFF", width: 6 }
+    drop_shadow: "drop-shadow(0px 4px 10px rgba(0,0,0,0.5))"
+    shadow_offset: null
+    y_position_offset: 0
+    highlight_color: "#FFFFFF"
+    latin_font_family: null
+    particle_scale: 1
+    animation_in: fade
+    sfx: null
+
+  # ----- game: ゲーム実況 (極太+ネオングロウ・黒座布団・レトロはドット) -----
+  # メイン。白+シアン細縁+シアングロウ+黒座布団
+  # (グロウは分離影ではなくネオン演出のため、帯と併用する)
+  game_neon_cyan:
+    description: "ゲーム・メイン。白+シアン縁+ネオングロウ+黒座布団"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 70
+    font_weight: 900
+    letter_spacing: "0.04em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#00CFEF", width: 6 }
+    drop_shadow: "drop-shadow(0px 0px 10px rgba(0,229,255,0.95)) drop-shadow(0px 0px 24px rgba(0,229,255,0.6))"
+    shadow_offset: null
+    background: { color: "rgba(0, 0, 0, 0.55)" }
+    y_position_offset: 0
+    highlight_color: "#B6FF3D"  # ネオン三色(シアン/マゼンタ/黄緑)の黄緑を部分強調に
+    animation_in: none
+    sfx: null
+
+  # 強調。白+マゼンタ縁+マゼンタグロウ(被弾・大事件級の強調)
+  game_neon_magenta:
+    description: "ゲーム・強調。白+マゼンタ縁+ネオングロウ+黒座布団"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 82
+    font_weight: 900
+    letter_spacing: "0.04em"
+    line_height: 1.3
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#FF2ED2", width: 7 }
+    drop_shadow: "drop-shadow(0px 0px 10px rgba(255,46,210,0.95)) drop-shadow(0px 0px 24px rgba(255,46,210,0.6))"
+    shadow_offset: null
+    background: { color: "rgba(0, 0, 0, 0.55)" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: pop_big
+    sfx: don
+
+  # 特殊・オチ。レトロゲーム風ドット文字の黄緑+黒細縁+黒座布団
+  game_retro_dot:
+    description: "ゲーム・特殊。ドット文字(DotGothic16)の黄緑+黒座布団。レトロ演出"
+    font_family: '"DotGothic16", "GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", monospace'
+    font_size: 72
+    font_weight: 400  # DotGothic16 は400のみ提供(ドットの字形を保つため疑似ボールドは使わない)
+    letter_spacing: "0.06em"
+    line_height: 1.4
+    fill: { type: solid, color: "#B6FF3D" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 6 }
+    drop_shadow: "drop-shadow(0px 0px 12px rgba(182,255,61,0.7))"
+    shadow_offset: null
+    background: { color: "rgba(0, 0, 0, 0.55)" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    latin_font_family: null  # ドット文字の欧文を活かす
+    animation_in: stamp
+    sfx: pon
+
+  # ===========================================================================
+  # フェーズW24 Phase B-2: 広告向けテロッププリセット (縦型ショート広告)
+  #
+  # ビジネス広告として上品に目立つ3種。既存の描画機能(細フチ+オフセット影/
+  # 半透明黒帯/行ごと帯)の範囲で構成し、新規描画機能は使わない。
+  # 縁取りデザイン原則(T2.5-2)とリント(test_telop_preset_lint.py)を満たす。
+  # ===========================================================================
+
+  # ----- 広告・ゴシックインパクト (縦型ショートの標準テロップ。W26でFable v5準拠に刷新) -----
+  # 太いが画数が潰れないHウェイトを使う(極太U+縁だと「塾」「講師」等の密な漢字が潰れる。
+  # 2026-08-21 実機フィードバックで確認)。強調語(highlight_words)は黄色。
+  ad_gothic_impact:
+    description: "広告・標準テロップ。太ゴシック白+黒縁+ハード影、強調語は黄(縦型の基本)"
+    font_family: '"GenEi Gothic N H-KL", "GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    # W30: 76→84。意味の塊分割(1行11字目安)でフィット幅86%に縮小なしで収まる最大級
+    font_size: 84
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.3
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 8 }
+    drop_shadow: null
+    shadow_offset: { x: 5, y: 6, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    # W31: 既定はシンプルな下から浮上(bounce_leftの震えスライドが全テロップに付くと
+    # 目が疲れる)。地の文はstep08のローテーション(slide_up/fade/drop_settle/wipe_up)、
+    # 強調系typeはマッピングの強いアニメがこの既定より優先される
+    animation_in: slide_up
+    sfx: null
+
+  # ----- 広告・明朝インパクト (縦型ショートの決めゼリフ。W26でFable v5準拠に刷新) -----
+  # 帯なしの明朝大文字+黒縁+ハード影(v5「暗転画面の決めゼリフは明朝のみ」)。
+  # dim(画面暗転)エフェクトと組み合わせると視認性・ドラマ性が最大になる。
+  ad_mincho_impact:
+    description: "広告・決めゼリフ。明朝の大文字+黒縁+ハード影(暗転と併用で最強調)"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 96
+    font_weight: 800
+    letter_spacing: "0.06em"
+    line_height: 1.4
+    fill: { type: solid, color: "#FFFFFF" }
+    # W27: 明朝は横画が細く映像上で痩せるため、塗りと同色のインナーストロークで肥やす
+    inner_stroke: { color: "#FFFFFF", width: 3 }
+    outer_stroke: { color: "#000000", width: 7 }
+    drop_shadow: null
+    shadow_offset: { x: 4, y: 6, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"  # 決め語は鮮やかな黄(Fable v5と同一)
+    latin_font_family: null  # 明朝の欧文を活かす
+    particle_scale: 1  # 明朝の字組みを崩さない
+    animation_in: slam  # 叩きつけ+着地シェイク(W26)
+    animation_duration_frames: 10
+    sfx: null
+
+  # ----- 広告・ハイライト帯 (縦型ショートのCTAボタン風。W26でFable v5準拠に刷新) -----
+  ad_highlight_band:
+    description: "広告・CTAボタン風。黒のゴシック+黄色ザブトン帯(LINE登録・申込の行動喚起)"
+    font_family: '"GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 80  # W30: 74→80(文字を大きく)
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.35
+    fill: { type: solid, color: "#111111" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))"
+    background: { color: "#FFE600", borderRadius: "14px" }
+    y_position_offset: 0
+    highlight_color: "#E60028"  # 黄帯の上の部分強調は赤
+    animation_in: rise_bounce  # 下から勢いよく上がって戻る(W26)
+    sfx: null
+
+  # ----- 広告・緊急赤帯 (縦型ショートの締切・限定訴求。W26新設・Fable v5移植) -----
+  ad_urgent_band:
+    description: "広告・緊急赤帯。白のゴシック+赤ザブトン帯(先着・締切・定員の緊急訴求)"
+    font_family: '"GenEi Gothic N H-KL", "GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 78  # W30: 70→78(文字を大きく)
+    font_weight: 900
+    letter_spacing: "0.04em"
+    line_height: 1.35
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: null
+    drop_shadow: "drop-shadow(0px 4px 8px rgba(0,0,0,0.35))"
+    background: { color: "#DE1C24", borderRadius: "14px" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: rise_bounce
+    sfx: null
+
+  # ----- 広告・特大インパクト (W27新設。短い決め語専用のサイズ暴力) -----
+  ad_mega_impact:
+    description: "広告・特大文字。6文字以下の決め語を画面幅いっぱいに(サイズのインパクト)"
+    font_family: '"GenEi Gothic N H-KL", "GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 150
+    font_weight: 900
+    letter_spacing: "0.02em"
+    line_height: 1.2
+    fill: { type: solid, color: "#FFFFFF" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 8 }
+    drop_shadow: null
+    shadow_offset: { x: 6, y: 8, color: "#000000" }
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    animation_in: slam
+    animation_duration_frames: 9
+    sfx: null
+
+  # ----- 広告・斜めインパクト (W27新設。勢いのある煽り・驚き用) -----
+  ad_slant_impact:
+    description: "広告・斜め文字。ブロック全体を傾けて勢いを出す(煽り・驚きの中文用)"
+    font_family: '"GenEi Gothic N H-KL", "GenEi Gothic N U-KL", "Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif'
+    font_size: 92
+    font_weight: 900
+    letter_spacing: "0.03em"
+    line_height: 1.3
+    fill: { type: solid, color: "#FFE600" }
+    inner_stroke: null
+    outer_stroke: { color: "#000000", width: 7 }
+    drop_shadow: null
+    shadow_offset: { x: 5, y: 7, color: "#000000" }
+    rotate: -6
+    y_position_offset: 0
+    highlight_color: "#FFFFFF"
+    animation_in: bounce_left
+    sfx: null
+
+  # ----- 広告・縦書き明朝 (W27新設。短い決めゼリフの和風演出) -----
+  ad_vertical_mincho:
+    description: "広告・縦書き明朝。7文字以下の決めゼリフを縦一列で見せる(和のインパクト)"
+    font_family: '"Shippori Mincho B1", "Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", "YuMincho", serif'
+    font_size: 92
+    font_weight: 800
+    letter_spacing: "0.08em"
+    line_height: 1.15
+    fill: { type: solid, color: "#FFFFFF" }
+    # W27: 明朝の痩せ対策(ad_mincho_impactと同じ白インナーストローク)
+    inner_stroke: { color: "#FFFFFF", width: 3 }
+    outer_stroke: { color: "#000000", width: 7 }
+    drop_shadow: null
+    shadow_offset: { x: 4, y: 5, color: "#000000" }
+    writing_mode: vertical
+    y_position_offset: 0
+    highlight_color: "#FFE600"
+    latin_font_family: null
+    particle_scale: 1
+    animation_in: zoom
+    sfx: null
 
   # ----- 質問・ホスト発言 (グリーン系) -----
   question:

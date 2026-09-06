@@ -208,6 +208,19 @@ def remap_telops_to_words(
             ]
             if kept_highlights:
                 next_telop["highlight_words"] = kept_highlights
+        # フェーズW31: 演出メタデータ(type/アニメ/SFX/話者/上書きフラグ)をremapで
+        # 落とさない。従来はここで毎回剥がれており、type別アニメ・SFX・W31の
+        # アニメローテーションがレンダリングに一切反映されていなかった
+        # (Remotionのテロップ描画は voice_data.cuts.telops を読む)。
+        # sfx は「キーあり+null=明示的に鳴らさない」の意味を持つためキー存在で判定する
+        if isinstance(source_telop, dict):
+            for key in (
+                "type", "animation_in", "animation_out", "sfx", "speaker",
+                "style_overridden", "animation_overridden",
+                "video_effect", "video_effect_overridden",
+            ):
+                if key in source_telop and key not in next_telop:
+                    next_telop[key] = source_telop[key]
         telops.append(next_telop)
 
         if exact_match:

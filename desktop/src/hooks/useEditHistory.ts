@@ -25,6 +25,23 @@ export function useEditHistory<T>(initialPresent: T) {
     });
   }, []);
 
+  /**
+   * W16-5: 履歴エントリを積まずに現在値だけ差し替える。テロップ編集中のキーストロークに使い、
+   * 「編集セッション(focus→blur)=Undo1回」を実現する(初回入力だけsetPresentでpushする)。
+   * 通常のsetPresentと同様、差し替え後のredo(future)は無効化する(標準的なエディタの挙動)。
+   */
+  const replacePresent = useCallback((next: T | ((current: T) => T)) => {
+    setHistory((current) => {
+      const value = typeof next === "function" ? (next as (input: T) => T)(current.present) : next;
+      if (Object.is(value, current.present)) return current;
+      return {
+        past: current.past,
+        present: value,
+        future: [],
+      };
+    });
+  }, []);
+
   const reset = useCallback((nextPresent: T) => {
     setHistory({
       past: [],
@@ -64,12 +81,13 @@ export function useEditHistory<T>(initialPresent: T) {
     () => ({
       present: history.present,
       setPresent,
+      replacePresent,
       reset,
       undo,
       redo,
       canUndo,
       canRedo,
     }),
-    [canRedo, canUndo, history.present, redo, reset, setPresent, undo],
+    [canRedo, canUndo, history.present, redo, replacePresent, reset, setPresent, undo],
   );
 }

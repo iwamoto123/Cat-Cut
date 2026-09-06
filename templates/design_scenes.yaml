@@ -1,0 +1,185 @@
+# フェーズU2-1/U5: 使用シーン=動画ジャンルバンドル(テロップデザインの初期テンプレート)
+#
+# ユーザーは起動フローで「動画ジャンル」を選び、そのジャンルの type_styles を
+# 出発点としてシーン種類ごとの割り当てを微調整→名前をつけてデザインテーマとして保存する。
+# type_styles のスキーマは templates/telop_type_mapping.yaml と同一
+# (semantic type → { style, animation_in?, sfx? })。
+#
+# フェーズU5: ネット調査のジャンル別定石(仕様書 2026-07-06_catcut-ux-overhaul-spec.md)に
+# 基づき8ジャンルへ拡張。「1動画のフォントは2〜3種」の原則に従い、各ジャンルの
+# 割当は メイン/強調/見出し・特殊 の2〜3系統に絞る。
+#
+# 制約:
+# - style は templates/telop_presets.yaml に実在するプリセット名のみ
+#   (かつ python/shared/direction.py の ALLOWED_DIRECTIVE_STYLES に含まれること。
+#    desktop/tests/designScenesTemplate.test.ts が両方を機械検証する)
+# - semantic type の一覧(10種)は telop_type_mapping.yaml / shared/telop_types.py と同期
+#
+# フェーズU7: overlay_title = 左上シーンタイトル(chapter_title)の既定
+# { enabled: bool, style: box_accent | band_gradient | tag_ribbon | minimal_line | neon_plate }。
+# パターンIDは remotion/src/lib/overlayStyles.ts の CHAPTER_TITLE_PATTERNS と同期。
+# ジャンルの性格で選ぶ(vlog=控えめな細字下線 / variety・beauty=帯 / game=ネオン / 他=現行の紺箱風)
+#
+# フェーズV2→V5: op = OP(オープニング)の既定
+# { pattern: none | highlight_teaser, decoration: flash_pop | cinema_bars | color_wipe |
+#   neon_frame, text_animation: slide_left | slide_up | stamp }
+# (remotion/src/lib/opTimeline.ts の OP_DECORATIONS / OP_TEXT_ANIMATIONS と同期)。
+# 新規テーマ作成の初期値になる(タイトル・キャッチはユーザー入力なのでここでは持たない)。
+# V5でOPはハイライト予告へ一本化し、ジャンルの性格は装飾で出す:
+#   solo/dialogue/beauty = flash_pop(白フラッシュの現行相当。beautyは上品さ優先で装飾なし寄り)
+#   podcast/business     = cinema_bars(レターボックスの落ち着いた映画予告風)
+#   variety              = color_wipe(アクセント色ワイプで賑やかに。テロップはstampで勢い)
+#   game                 = neon_frame(縁ネオン+ズームイン転換のゲーミング演出)
+#   vlog                 = none(映像を主役にする=OPを付けない)
+
+version: 1
+scenes:
+  # 一人語り・解説: 既定マッピングに近い万能構成。解説系の一人撮りを想定(現行維持)
+  - id: solo
+    label: 一人語り・解説
+    description: 解説・ノウハウ系の一人撮りに合う標準構成
+    overlay_title: { enabled: true, style: box_accent }
+    op: { pattern: highlight_teaser, decoration: flash_pop, text_animation: slide_left }
+    type_styles:
+      default: { style: fact_yellow }
+      surprise: { style: box_yellow }
+      harsh: { style: serif_harsh }
+      quote: { style: serif_quote }
+      emphasis: { style: emotion_red }
+      question: { style: question_blue }
+      reply: { style: reply_cyan }
+      punchline: { style: box_yellow }
+      hype: { style: special_purple }
+      cta: { style: cta_yellow }
+
+  # ビジネス・教育: すっきり角ゴ(BIZ UD系)・白+黒縁+青アクセント・装飾/アニメ最小・SFXなし
+  # (調査定石: 解説/ビジネスは装飾最小・ウェイトと青系アクセントで階層を作る)
+  - id: business
+    label: ビジネス・教育
+    description: 白+黒縁と青アクセントのすっきり構成。研修・解説・教育向け
+    overlay_title: { enabled: true, style: box_accent }
+    op: { pattern: highlight_teaser, decoration: cinema_bars, text_animation: slide_left }
+    type_styles:
+      default: { style: biz_white, animation_in: none, sfx: none }
+      surprise: { style: biz_blue, animation_in: fade, sfx: none }
+      harsh: { style: biz_blue, animation_in: fade, sfx: none }
+      quote: { style: biz_white, animation_in: fade, sfx: none }
+      emphasis: { style: biz_blue, animation_in: fade, sfx: none }
+      question: { style: biz_blue, animation_in: fade, sfx: none }
+      reply: { style: biz_white, animation_in: none, sfx: none }
+      punchline: { style: biz_navy_box, animation_in: fade, sfx: none }
+      hype: { style: biz_navy_box, animation_in: fade, sfx: none }
+      cta: { style: biz_navy_box, animation_in: fade, sfx: none }
+
+  # 対談・インタビュー: 質問・返しのやり取りを立たせる。地の文は白で会話の色分けを際立たせる(現行維持)
+  - id: dialogue
+    label: 対談・インタビュー
+    description: 質問と返しのやり取りが映える対談・インタビュー向け
+    overlay_title: { enabled: true, style: box_accent }
+    op: { pattern: highlight_teaser, decoration: flash_pop, text_animation: slide_left }
+    type_styles:
+      default: { style: neutral_white }
+      surprise: { style: box_yellow }
+      harsh: { style: serif_harsh }
+      quote: { style: serif_quote }
+      emphasis: { style: emotion_red }
+      question: { style: question_blue, animation_in: slide_up }
+      reply: { style: reply_cyan, animation_in: slide_up }
+      punchline: { style: box_yellow }
+      hype: { style: special_purple }
+      cta: { style: cta_yellow }
+
+  # ビデオポッドキャスト: 落ち着いた白基調・フェード中心・効果音は要所のみ(現行維持)
+  - id: podcast
+    label: ビデオポッドキャスト
+    description: 落ち着いた配色と控えめな演出で長尺の視聴に向く
+    overlay_title: { enabled: true, style: box_accent }
+    op: { pattern: highlight_teaser, decoration: cinema_bars, text_animation: slide_left }
+    type_styles:
+      default: { style: neutral_white, animation_in: none, sfx: none }
+      surprise: { style: box_yellow, animation_in: fade }
+      harsh: { style: serif_harsh, animation_in: fade }
+      quote: { style: serif_quote, animation_in: fade }
+      emphasis: { style: emotion_red, animation_in: fade }
+      question: { style: question_blue, animation_in: fade, sfx: none }
+      reply: { style: neutral_white, animation_in: none, sfx: none }
+      punchline: { style: box_yellow, animation_in: fade }
+      hype: { style: special_purple, animation_in: fade }
+      cta: { style: cta_yellow, animation_in: fade }
+
+  # Vlog・シネマティック: フェーズU5で「控えめ・字幕に徹する」方針へ再設計
+  # (調査定石: Vlogは細めゴシック+装飾なし・テロップは少なめ・英語表記の洗練を活かす。
+  #  旧「にぎやかな座布団構成」はバラエティ(variety)へ役割を譲る)
+  - id: vlog
+    label: Vlog・シネマティック
+    description: 細めの白字幕+薄い座布団。映像を主役にする控えめ構成
+    overlay_title: { enabled: true, style: minimal_line }
+    op: { pattern: none }
+    type_styles:
+      default: { style: vlog_caption, animation_in: none, sfx: none }
+      surprise: { style: vlog_caption_strong, animation_in: fade, sfx: none }
+      harsh: { style: vlog_caption_strong, animation_in: fade, sfx: none }
+      quote: { style: serif_quote, animation_in: fade, sfx: none }
+      emphasis: { style: vlog_caption_strong, animation_in: fade, sfx: none }
+      question: { style: vlog_caption, animation_in: none, sfx: none }
+      reply: { style: vlog_caption, animation_in: none, sfx: none }
+      punchline: { style: vlog_caption_strong, animation_in: fade, sfx: none }
+      hype: { style: vlog_caption_strong, animation_in: fade, sfx: none }
+      cta: { style: vlog_caption_strong, animation_in: fade, sfx: none }
+
+  # エンタメ・バラエティ: 極太+手書きPOP・赤黄黒の強色・アニメ/SFX多用
+  # (調査定石: バラエティのテロップは総合格闘技。感情ごとに書体・色を変えてよい)
+  - id: variety
+    label: エンタメ・バラエティ
+    description: 極太と手書きPOPの赤黄黒。動きと効果音で盛るエンタメ構成
+    overlay_title: { enabled: true, style: band_gradient }
+    op: { pattern: highlight_teaser, decoration: color_wipe, text_animation: stamp }
+    type_styles:
+      default: { style: variety_yellow }
+      surprise: { style: variety_hand_shock }
+      harsh: { style: serif_harsh }
+      quote: { style: serif_quote }
+      emphasis: { style: variety_pop_red }
+      question: { style: question_blue, animation_in: slide_up }
+      reply: { style: reply_cyan }
+      punchline: { style: box_yellow }
+      hype: { style: variety_pop_red }
+      cta: { style: cta_yellow }
+
+  # 美容・ライフスタイル: 明朝(Shippori Mincho B1)・白/ピンク/金・フェードのみで上品に
+  # (調査定石: 美容系は明朝で高級感。SFXは使わない)
+  - id: beauty
+    label: 美容・ライフスタイル
+    description: 明朝の白・ピンク・金で上品に。美容・暮らし系向け
+    overlay_title: { enabled: true, style: band_gradient }
+    op: { pattern: highlight_teaser, decoration: flash_pop, text_animation: slide_left }
+    type_styles:
+      default: { style: beauty_serif, animation_in: fade, sfx: none }
+      surprise: { style: beauty_pink, animation_in: fade, sfx: none }
+      harsh: { style: serif_harsh, animation_in: fade, sfx: none }
+      quote: { style: serif_quote, animation_in: fade, sfx: none }
+      emphasis: { style: beauty_pink, animation_in: fade, sfx: none }
+      question: { style: beauty_serif, animation_in: fade, sfx: none }
+      reply: { style: beauty_serif, animation_in: fade, sfx: none }
+      punchline: { style: beauty_gold, animation_in: fade, sfx: none }
+      hype: { style: beauty_gold, animation_in: fade, sfx: none }
+      cta: { style: beauty_gold, animation_in: fade, sfx: none }
+
+  # ゲーム実況: 極太+ネオングロウ(シアン/マゼンタ)+黒座布団。レトロ強調はドット文字
+  # (調査定石: ゲーム実況は極太ゴシック+光彩。レトロ系ならドット文字)
+  - id: game
+    label: ゲーム実況
+    description: ネオングロウ+黒座布団のゲーミング構成。レトロ演出つき
+    overlay_title: { enabled: true, style: neon_plate }
+    op: { pattern: highlight_teaser, decoration: neon_frame, text_animation: slide_up }
+    type_styles:
+      default: { style: game_neon_cyan }
+      surprise: { style: game_neon_magenta }
+      harsh: { style: game_neon_magenta }
+      quote: { style: serif_quote }
+      emphasis: { style: game_neon_magenta }
+      question: { style: game_neon_cyan, animation_in: slide_up }
+      reply: { style: game_neon_cyan }
+      punchline: { style: game_retro_dot }
+      hype: { style: game_neon_magenta }
+      cta: { style: cta_yellow }

@@ -10,6 +10,7 @@ import {
   hasRuntimeTheme,
   paletteOptionsForTheme,
   registerPresetCatalog,
+  registerRuntimeStyles,
   resolveEffectiveStyle,
   resolveEffectiveStyleId,
   resolveStyleById,
@@ -279,4 +280,37 @@ test("buildTelopStylePlan: 'saved'テーマを既定にした場合も書き出�
   } finally {
     clearRuntimeTheme(SAVED_THEME_ID);
   }
+});
+
+// --- フェーズU6: カスタムスタイルの実行時登録(詳細エディタの即時プレビュー反映) ---
+
+test("registerRuntimeStyles: custom_* 定義をカタログへ追記し getPresetStyle で解決できる", () => {
+  const def: TelopStyleDef = {
+    font_size: 72,
+    fill: { type: "solid", color: "#FF00AA" },
+    outer_stroke2: { color: "#FFFFFF", width: 30 },
+    glow: { color: "#00E5FF", radius: 12 },
+  };
+  registerRuntimeStyles({ custom_scene_test: def });
+  assert.deepEqual(getPresetStyle("custom_scene_test"), def);
+  // 既存プリセットは消えない(registerPresetCatalogと違い追記のみ)
+  assert.ok(getPresetStyle("default"));
+  // 上書き登録(再保存)は後勝ち
+  const updated = { ...def, fill: { type: "solid" as const, color: "#000000" } };
+  registerRuntimeStyles({ custom_scene_test: updated });
+  assert.equal(getPresetStyle("custom_scene_test")?.fill.color, "#000000");
+  // fill無し・null定義は無視される
+  registerRuntimeStyles({ broken: {} as TelopStyleDef });
+  assert.equal(getPresetStyle("broken"), null);
+  registerRuntimeStyles(null);
+});
+
+test("telopStyleSwatchColors: 第3縁(outer_stroke2)があれば最外縁の色をborderColorに使う", () => {
+  const colors = telopStyleSwatchColors({
+    fill: { type: "solid", color: "#FFFFFF" },
+    inner_stroke: { color: "#111111", width: 8 },
+    outer_stroke: { color: "#222222", width: 16 },
+    outer_stroke2: { color: "#333333", width: 26 },
+  });
+  assert.equal(colors.borderColor, "#333333");
 });

@@ -46,14 +46,14 @@ export function computePeaksFromPcm16(
 }
 
 export type WaveformCurveOptions = {
-  /** 非線形カーブの指数。1未満の値で小音量を持ち上げる。既定0.6(改善2「波形の縦スケール改善」節)。 */
+  /** 非線形カーブの指数。1超の値で小音量を抑え、音量差を強調する。既定1.2。 */
   curveExponent?: number;
-  /** ノイズフロア比率(0〜1)。基準ピーク(ローカル最大 or フルスケール1.0)に対してこの比率未満は無音(0)扱い。既定0.02。 */
+  /** ノイズフロア比率(0〜1)。基準ピーク(ローカル最大 or フルスケール1.0)に対してこの比率以下は無音(0)扱い。既定0.06。 */
   noiseFloorRatio?: number;
 };
 
-const DEFAULT_CURVE_EXPONENT = 0.6;
-const DEFAULT_NOISE_FLOOR_RATIO = 0.02;
+const DEFAULT_CURVE_EXPONENT = 1.2;
+const DEFAULT_NOISE_FLOOR_RATIO = 0.06;
 
 /**
  * Math.max(...peaks) はビン数が多い(60分級長尺など)場合に引数展開でスタックサイズの上限に
@@ -82,9 +82,9 @@ export type LocalWaveformCurveOptions = WaveformCurveOptions & {
 
 /**
  * シーン行ミニ波形向け(改善2「波形の縦スケール改善」節): 渡されたピーク配列(=表示範囲内に
- * スライス済みのもの)自身の最大値を基準にローカル正規化し、非線形カーブ(振幅^curveExponent、
- * 既定0.6)で小音量を持ち上げる。ノイズフロア(既定は録音全体のグローバルピークの2%)未満の値は
- * 0(無音)のまま区別する。
+ * スライス済みのもの)をローカル最大と録音全体ピークの35%の大きい方で正規化し、
+ * 非線形カーブ(振幅^curveExponent、既定1.2)で音量差を強調する。
+ * ノイズフロア(既定は録音全体のグローバルピークの6%)以下の値は0(無音)のまま区別する。
  */
 export function scaleWaveformPeaksLocal(peaks: number[], options: LocalWaveformCurveOptions = {}): number[] {
   if (!peaks.length) return [];
@@ -94,9 +94,10 @@ export function scaleWaveformPeaksLocal(peaks: number[], options: LocalWaveformC
   if (localMax <= 0) return peaks.map(() => 0);
   const noiseFloorReferenceMax = options.globalMax ?? localMax;
   const noiseFloor = noiseFloorReferenceMax * noiseFloorRatio;
+  const normalizationMax = Math.max(localMax, noiseFloorReferenceMax * 0.35);
   return peaks.map((value) => {
     if (value <= noiseFloor) return 0;
-    const normalized = Math.max(0, Math.min(1, value / localMax));
+    const normalized = Math.max(0, Math.min(1, value / normalizationMax));
     return Math.pow(normalized, curveExponent);
   });
 }

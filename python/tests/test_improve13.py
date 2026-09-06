@@ -54,7 +54,7 @@ class ApplyLlmResponseTests(unittest.TestCase):
             "retakes": [{"reason": "言い直し", "remove_sentence_ids": ["s-001", "s-002"]}],
             "needs_review": [],
         }
-        retakes, needs, count, fillers_removed = ai_retake.apply_llm_response(
+        retakes, needs, count, fillers_removed, _suspects = ai_retake.apply_llm_response(
             response, self.sentences, self.sentence_map, self.word_map,
         )
         self.assertEqual(count, 1)
@@ -68,7 +68,7 @@ class ApplyLlmResponseTests(unittest.TestCase):
             "retakes": [{"reason": "言い直し", "remove_sentence_ids": ["s-999"]}],
             "needs_review": [{"sentence_ids": ["s-404"], "reason": "missing"}],
         }
-        retakes, needs, count, fillers_removed = ai_retake.apply_llm_response(
+        retakes, needs, count, fillers_removed, _suspects = ai_retake.apply_llm_response(
             response, self.sentences, self.sentence_map, self.word_map,
         )
         self.assertEqual(retakes, [])
@@ -82,7 +82,7 @@ class ApplyLlmResponseTests(unittest.TestCase):
             ],
             "needs_review": [],
         }
-        retakes, needs, count, fillers_removed = ai_retake.apply_llm_response(
+        retakes, needs, count, fillers_removed, _suspects = ai_retake.apply_llm_response(
             response, self.sentences, self.sentence_map, self.word_map,
         )
         self.assertEqual(count, 1)
@@ -95,12 +95,44 @@ class ApplyLlmResponseTests(unittest.TestCase):
         )
         self.assertEqual(retakes[0]["original_sentence_ids"], expected_word_ids)
 
+    def test_partial_retake_removes_only_matched_span(self):
+        # フェーズW29: 文中の言い直しは remove_surface の範囲だけ word 単位でカットする
+        sentences = [
+            {"id": "s-101", "text": "全部やらないと不安だったりここを捨てるのが不安という"},
+            {"id": "s-102", "text": "ここを捨てるのが怖いという感情が先に来てしまうからです"},
+        ]
+        word_map = {}
+        for sentence in sentences:
+            wids = []
+            for i, ch in enumerate(sentence["text"]):
+                wid = f"w-{sentence['id']}-{i}"
+                wids.append(wid)
+                word_map[wid] = {"id": wid, "text": ch, "start_ms": i * 100, "end_ms": (i + 1) * 100}
+            sentence["word_ids"] = wids
+        sentence_map = {s["id"]: s for s in sentences}
+        response = {
+            "partial_retakes": [
+                {"sentence_id": "s-101", "remove_surface": "ここを捨てるのが不安という",
+                 "reason": "文中の言い直し: 直後に言い直している"},
+                {"sentence_id": "s-101", "remove_surface": "存在しない文言", "reason": "幻覚"},
+                {"sentence_id": "s-101", "remove_surface": "全部", "reason": "3文字未満は無視"},
+            ],
+        }
+        retakes, needs, count, fillers_removed, _suspects = ai_retake.apply_llm_response(
+            response, sentences, sentence_map, word_map,
+        )
+        self.assertEqual(count, 1)
+        self.assertEqual(len(retakes), 1)
+        removed_text = "".join(word_map[w]["text"] for w in retakes[0]["original_sentence_ids"])
+        self.assertEqual(removed_text, "ここを捨てるのが不安という")
+        self.assertEqual(needs, [])
+
     def test_needs_review_resolves_word_span(self):
         response = {
             "retakes": [],
             "needs_review": [{"sentence_ids": ["s-004"], "reason": "復元困難"}],
         }
-        retakes, needs, count, fillers_removed = ai_retake.apply_llm_response(
+        retakes, needs, count, fillers_removed, _suspects = ai_retake.apply_llm_response(
             response, self.sentences, self.sentence_map, self.word_map,
         )
         self.assertEqual(retakes, [])

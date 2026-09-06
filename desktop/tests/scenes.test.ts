@@ -6,25 +6,30 @@ import { fileURLToPath } from "node:url";
 import {
   addCutMark,
   attachSuspicionsToScenes,
+  autoTelopTextFromWords,
   computeSceneKeptSubRanges,
   countTelopOccurrencesInOtherScenes,
   deriveKeepSegments,
   deriveTelopOverrides,
+  findNextSelectionAfterSceneDelete,
   findSceneIndexAtMs,
   findTelopOccurrencesInOtherScenes,
   highestSeveritySuspicion,
   initializeScenes,
+  isSceneFullyDeleted,
   mergeSceneWithNext,
   replaceTelopOccurrences,
   resetSceneIdCounterForTests,
   setChipDeleted,
   setChipsDeleted,
   setSceneTelopText,
+  splitEditedTelopText,
   splitSceneAtMs,
   splitSceneAtWord,
   toggleChipDeleted,
   toggleChipsDeleted,
   type Scene,
+  type SceneWord,
   type SourceSentence,
   type SourceWord,
   type TelopPageBoundary,
@@ -76,7 +81,9 @@ test("initializeScenes: telopPageBoundariesを指定すると、ヒューリス�
   });
   assert.equal(scenes.length, 2, "ヒューリスティックなら併合されるはずの短い行もページ境界通りに分かれる");
   assert.equal(scenes[0].telopText, "こんにちは");
-  assert.equal(scenes[1].telopText, "です");
+  // W10-7(仕様変更): 正規化後2文字以下の極短シーンは初期telopTextが空欄になる("です"は2文字)。
+  assert.equal(scenes[1].telopText, "");
+  assert.equal(scenes[1].telopEdited, false, "空欄化は見た目のみでtelopEditedは立てない");
   assert.equal(scenes[0].sourceStartMs, 0);
   assert.equal(scenes[0].sourceEndMs, scenes[1].sourceStartMs, "ページ間の境界は前後ページの中点になる");
   assert.equal(scenes[1].sourceEndMs, 800);
@@ -456,15 +463,18 @@ test("splitSceneAtWord: チップ境界で前後シーンに分配される", ()
   assert.deepEqual(deriveKeepSegments(split), [{ startMs: 0, endMs: 300 }]);
 });
 
-test("splitSceneAtWord: 編集済みtelopTextは前半に残り、後半は単語連結で再生成される", () => {
+test("splitSceneAtWord: 編集済みtelopTextは前後半へ分配され、両側telopEditedが維持される(W10-4)", () => {
+  // W10-4(仕様変更): 旧挙動「前半に全文コピー+後半は自動再生成」は上下同一表示の原因のため廃止。
+  // words("あ","い","う")のテキストは編集文と一致しないため比率フォールバック(1:2)で分配される。
   const testWords = words(["w1", "あ", 0, 100], ["w2", "い", 100, 200], ["w3", "う", 200, 300]);
   const scenes = initializeScenes({ words: testWords, keepSegments: [{ startMs: 0, endMs: 300 }] });
   const edited = setSceneTelopText(scenes, scenes[0].id, "編集済み全文");
   const split = splitSceneAtWord(edited, edited[0].id, "w2");
   assert.equal(split[0].telopEdited, true);
-  assert.equal(split[0].telopText, "編集済み全文");
-  assert.equal(split[1].telopEdited, false);
-  assert.equal(split[1].telopText, "いう");
+  assert.equal(split[1].telopEdited, true, "後半も編集済み扱い(自動再生成で編集文言を失わない)");
+  assert.equal(split[0].telopText + split[1].telopText, "編集済み全文", "全文が過不足なく前後半へ分配される");
+  assert.notEqual(split[0].telopText, "編集済み全文", "前半への全文複製はしない");
+  assert.notEqual(split[1].telopText, "編集済み全文", "後半への全文複製はしない");
 });
 
 test("mergeSceneWithNext: 2つのシーンを1つに結合する", () => {
@@ -485,6 +495,195 @@ test("mergeSceneWithNext: 2つのシーンを1つに結合する", () => {
   assert.equal(merged[0].sourceEndMs, 1200);
   assert.deepEqual(merged[0].words.map((w) => w.id), ["w1", "w2"]);
   assert.equal(merged[0].telopText, "おはようございます今日もよろしくお願いします");
+});
+
+test("W13-4 mergeSceneWithNext: 未編集でもAI整形済み表示テキスト同士の連結になる(words由来への巻き戻り禁止)", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "今日もよろしくお願いします", 550, 1200, "s2"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 1200 }] });
+  // AI整形済みテキスト(composition.jsonのpageText相当)はwords連結と異なるがtelopEdited=false
+  const refined = scenes.map((scene, index) => ({
+    ...scene,
+    telopText: index === 0 ? "おはよう\nございます!" : "今日もよろしく\nお願いします!",
+  }));
+  const merged = mergeSceneWithNext(refined, refined[0].id);
+  assert.equal(merged.length, 1);
+  // 表示テキスト同士の連結(境界の改行以外は保持)。words由来の再生成はしない
+  assert.equal(merged[0].telopText, "おはよう\nございます!今日もよろしく\nお願いします!");
+  // 自動生成と異なるため編集済み扱い=以降のwords再生成から保護される
+  assert.equal(merged[0].telopEdited, true);
+});
+
+test("W13-4 mergeSceneWithNext: 編集済みシーンとの結合も表示テキスト連結(編集フラグ維持)", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "今日もよろしくお願いします", 550, 1200, "s2"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 1200 }] });
+  const edited = setSceneTelopText(scenes, scenes[0].id, "おはよう！");
+  assert.equal(edited[0].telopEdited, true);
+  const merged = mergeSceneWithNext(edited, edited[0].id);
+  assert.equal(merged[0].telopText, "おはよう！今日もよろしくお願いします");
+  assert.equal(merged[0].telopEdited, true);
+});
+
+test("W13-4 mergeSceneWithNext: 空テロップ(相槌等)との結合は相手側のテキストだけ残る", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "今日もよろしくお願いします", 550, 1200, "s2"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 1200 }] });
+  const blanked = scenes.map((scene, index) => (index === 0 ? { ...scene, telopText: "" } : scene));
+  const merged = mergeSceneWithNext(blanked, blanked[0].id);
+  assert.equal(merged[0].telopText, "今日もよろしくお願いします");
+});
+
+test("W28 mergeSceneWithNext: 間の丸ごと削除済みシーンをまたいで次の生きたシーンと結合する", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "えっと言い直します", 550, 1200, "s2"],
+    ["w3", "今日もよろしくお願いします", 1250, 2000, "s3"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+    { id: "s3", wordIds: ["w3"], startMs: 1250, endMs: 2000 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 2000 }] });
+  assert.equal(scenes.length, 3);
+  // 言い直しで中央シーンを丸ごと削除した状態を作る
+  const deletedMiddle = scenes.map((scene, index) =>
+    index === 1 ? { ...scene, words: scene.words.map((word) => ({ ...word, deleted: true })) } : scene,
+  );
+  assert.equal(isSceneFullyDeleted(deletedMiddle[1]), true);
+  const merged = mergeSceneWithNext(deletedMiddle, deletedMiddle[0].id);
+  assert.equal(merged.length, 1, "削除済みシーンをまたいで1つに結合される");
+  assert.equal(merged[0].sourceStartMs, 0);
+  assert.equal(merged[0].sourceEndMs, 2000);
+  // 削除済みワードは削除状態のまま取り込む(チップから復元可能)
+  assert.deepEqual(merged[0].words.map((word) => word.id), ["w1", "w2", "w3"]);
+  assert.deepEqual(merged[0].words.map((word) => word.deleted), [false, true, false]);
+  // テロップ本文に削除済みシーンのテキストは混ぜない
+  assert.equal(merged[0].telopText, "おはようございます今日もよろしくお願いします");
+});
+
+test("W29 mergeSceneWithNext: 末尾の残存シーンから結合しても間の削除済みをまたいで1つになる", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "えっと言い直します", 550, 1200, "s2"],
+    ["w3", "今日もよろしくお願いします", 1250, 2000, "s3"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+    { id: "s3", wordIds: ["w3"], startMs: 1250, endMs: 2000 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 2000 }] });
+  const deletedMiddle = scenes.map((scene, index) =>
+    index === 1 ? { ...scene, words: scene.words.map((word) => ({ ...word, deleted: true })) } : scene,
+  );
+  const merged = mergeSceneWithNext(deletedMiddle, deletedMiddle[2].id);
+  assert.equal(merged.length, 1, "後ろの残存行から結合しても1つになる");
+  assert.equal(merged[0].telopText, "おはようございます今日もよろしくお願いします");
+});
+
+test("W29 mergeSceneWithNext: 削除済みの中間行を起点にしても前後の残存行が結合される", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "えっと言い直します", 550, 1200, "s2"],
+    ["w3", "今日もよろしくお願いします", 1250, 2000, "s3"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+    { id: "s3", wordIds: ["w3"], startMs: 1250, endMs: 2000 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 2000 }] });
+  const deletedMiddle = scenes.map((scene, index) =>
+    index === 1 ? { ...scene, words: scene.words.map((word) => ({ ...word, deleted: true })) } : scene,
+  );
+  const merged = mergeSceneWithNext(deletedMiddle, deletedMiddle[1].id);
+  assert.equal(merged.length, 1, "削除済み中間行を起点にしても前後が結合される");
+  assert.equal(merged[0].telopText, "おはようございます今日もよろしくお願いします");
+});
+
+test("W28 mergeSceneWithNext: 結合後の見た目は上のシーンを全面優先する(下のエフェクト・スタイルを引き継がない)", () => {
+  const testWords = words(
+    ["w1", "おはようございます", 0, 500, "s1"],
+    ["w2", "今日もよろしくお願いします", 550, 1200, "s2"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1"], startMs: 0, endMs: 500 },
+    { id: "s2", wordIds: ["w2"], startMs: 550, endMs: 1200 },
+  ];
+  const scenes = initializeScenes({ words: testWords, sentences, keepSegments: [{ startMs: 0, endMs: 1200 }] });
+  const styled = scenes.map((scene, index) =>
+    index === 1
+      ? {
+          ...scene,
+          directedStyleId: "emotion_red",
+          directedType: "emphasis",
+          directedAnimationIn: "slam",
+          styleOverrideId: "pop_energetic",
+          videoEffectOverride: "zoom" as const,
+        }
+      : scene,
+  );
+  const merged = mergeSceneWithNext(styled, styled[0].id);
+  assert.equal(merged[0].directedStyleId, undefined, "下のdirectedスタイルを引き継がない");
+  assert.equal(merged[0].directedType, undefined, "下のtypeを引き継がない");
+  assert.equal(merged[0].directedAnimationIn, undefined, "下のアニメ上書きを引き継がない");
+  assert.equal(merged[0].styleOverrideId, null, "下のスタイル上書きを引き継がない");
+  assert.equal(merged[0].videoEffectOverride, undefined, "下の映像演出を引き継がない");
+});
+
+test("W28 splitSceneAtMs: シーン先頭の無音(ワード無し区間)でも分割でき、空側に無音チップが生成される", () => {
+  const testWords = words(["w1", "こんにちは", 2000, 2500]);
+  const scenes = initializeScenes({ words: testWords, keepSegments: [{ startMs: 0, endMs: 2500 }] });
+  assert.equal(scenes[0].sourceStartMs, 0);
+  const split = splitSceneAtMs(scenes, scenes[0].id, 1000);
+  assert.equal(split.length, 2, "旧実装(両側に単語必須)では分割できなかったケース");
+  assert.equal(split[0].words.length, 1);
+  assert.equal(split[0].words[0].silence, true, "空側はその区間を表す無音チップになる");
+  assert.equal(split[0].words[0].startMs, 0);
+  assert.equal(split[0].words[0].endMs, 1000);
+  assert.equal(split[0].telopText, "");
+  assert.deepEqual(split[1].words.map((word) => word.id), ["w1"]);
+});
+
+test("W28 splitSceneAtMs: 無音チップ内部での分割はチップを2つに割って両側へ入れる", () => {
+  // w1とw2の間に1000msのギャップ → 無音チップ sil_w1(500〜1500ms)が挿入される
+  const testWords = words(["w1", "こんにちは", 0, 500], ["w2", "です", 1500, 2000]);
+  const scenes = initializeScenes({ words: testWords, keepSegments: [{ startMs: 0, endMs: 2000 }] });
+  assert.equal(scenes[0].words.some((word) => word.silence), true);
+  const split = splitSceneAtMs(scenes, scenes[0].id, 1000);
+  assert.equal(split.length, 2);
+  assert.deepEqual(split[0].words.map((word) => word.id), ["w1", "sil_w1L"]);
+  assert.equal(split[0].words[1].endMs, 1000);
+  assert.deepEqual(split[1].words.map((word) => word.id), ["sil_w1R", "w2"]);
+  assert.equal(split[1].words[0].startMs, 1000);
+});
+
+test("W28 splitSceneAtMs: 分割点が音声ワードの内部に落ちて片側が空になる場合は従来どおり分割しない", () => {
+  const testWords = words(["w1", "こんにちは", 0, 1000]);
+  const scenes = initializeScenes({ words: testWords, keepSegments: [{ startMs: 0, endMs: 1000 }] });
+  // 300msはw1(中点500ms)の内部 → w1は後半側扱いで前半が空になるが、無音ではないので分割しない
+  const split = splitSceneAtMs(scenes, scenes[0].id, 300);
+  assert.equal(split.length, 1);
 });
 
 test("splitSceneAtMs: 切り込み位置ちょうどでシーンが分割され、境界にまたがるチップは中点が属する側に丸ごと入る", () => {
@@ -555,6 +754,80 @@ test("computeSceneKeptSubRanges: 削除区間を除いた残存区間を計算�
   assert.deepEqual(computeSceneKeptSubRanges(scene), [
     { startMs: 0, endMs: 100 },
     { startMs: 200, endMs: 300 },
+  ]);
+});
+
+test("computeSceneKeptSubRanges: 全単語削除なら単語間ポーズ・シーン端の余白ごと空になる(無音断片を残さない)", () => {
+  // 単語間にポーズ(100-150, 250-280)、シーン端に余白(0-50, 380-400)があっても、
+  // 全単語deletedならシーン全体が削除扱いになること(V8追補: リップル削除の無音断片対策)。
+  const scene: Scene = {
+    id: "s",
+    sourceStartMs: 0,
+    sourceEndMs: 400,
+    words: [
+      { id: "w1", text: "あ", startMs: 50, endMs: 100, deleted: true },
+      { id: "w2", text: "い", startMs: 150, endMs: 250, deleted: true },
+      { id: "w3", text: "う", startMs: 280, endMs: 380, deleted: true },
+    ],
+    telopText: "",
+    telopEdited: false,
+    cutMarks: [],
+  };
+  assert.deepEqual(computeSceneKeptSubRanges(scene), []);
+});
+
+test("computeSceneKeptSubRanges: 先頭/末尾単語を含む削除ランはシーン境界まで拡張され、連続ラン内のポーズも消える", () => {
+  const scene: Scene = {
+    id: "s",
+    sourceStartMs: 0,
+    sourceEndMs: 500,
+    words: [
+      { id: "w1", text: "あ", startMs: 30, endMs: 100, deleted: true }, // 先頭ラン→[0,100]
+      { id: "w2", text: "い", startMs: 150, endMs: 200, deleted: false },
+      { id: "w3", text: "う", startMs: 240, endMs: 300, deleted: true }, // 連続ラン(w3+w4)→ポーズ300-330も削除
+      { id: "w4", text: "え", startMs: 330, endMs: 400, deleted: true },
+      { id: "w5", text: "お", startMs: 440, endMs: 470, deleted: false }, // 末尾は残存→[400,500]
+    ],
+    telopText: "いお",
+    telopEdited: false,
+    cutMarks: [],
+  };
+  assert.deepEqual(computeSceneKeptSubRanges(scene), [
+    { startMs: 100, endMs: 240 },
+    { startMs: 400, endMs: 500 },
+  ]);
+});
+
+test("deriveKeepSegments: シーン丸ごと削除で無音断片が残らず、前後シーンだけになる", () => {
+  // 3シーンが隙間なく並ぶ中で中央シーンの全単語を削除→中央のシーン区間が丸ごと消えること。
+  const testWords = words(
+    ["w1", "あ", 0, 90],
+    ["w2", "い", 110, 200],
+    ["w3", "う", 220, 300], // 中央シーン(200-400)の単語(ポーズ・余白入り)
+    ["w4", "え", 320, 380],
+    ["w5", "お", 410, 500],
+    ["w6", "か", 520, 600],
+  );
+  const scenes = initializeScenes({
+    words: testWords,
+    keepSegments: [{ startMs: 0, endMs: 600 }],
+    telopPageBoundaries: [
+      { startMs: 0, endMs: 200 },
+      { startMs: 200, endMs: 400 },
+      { startMs: 400, endMs: 600 },
+    ],
+  });
+  assert.equal(scenes.length, 3);
+  const middle = scenes[1];
+  const deleted = setChipsDeleted(
+    scenes,
+    middle.id,
+    middle.words.map((word) => word.id),
+    true,
+  );
+  assert.deepEqual(deriveKeepSegments(deleted), [
+    { startMs: 0, endMs: middle.sourceStartMs },
+    { startMs: middle.sourceEndMs, endMs: 600 },
   ]);
 });
 
@@ -743,4 +1016,191 @@ test("runs/20260428_test の実データからscenesを初期化できる", () =
     "こうやって間があっても",
     "カットできるかテストしてます",
   ]);
+});
+
+// =============================================================================
+// W10-7(相槌・極短シーンのテロップ空欄化): 正規化後2文字以下 or フィラーのみのシーンは
+// 初期telopTextを空欄にする(words・尺は残す。telopEditedは立てない)。
+// =============================================================================
+
+test("initializeScenes: フィラーのみのシーンは初期telopTextが空欄になる(W10-7)", () => {
+  const testWords = words(
+    ["w1", "え", 0, 100, "s1"],
+    ["w2", "っ", 100, 200, "s1"],
+    ["w3", "と", 200, 300, "s1"],
+    ["w4", "こんにちは皆さん", 400, 1200, "s2"],
+  );
+  const sentences: SourceSentence[] = [
+    { id: "s1", wordIds: ["w1", "w2", "w3"], startMs: 0, endMs: 300 },
+    { id: "s2", wordIds: ["w4"], startMs: 400, endMs: 1200 },
+  ];
+  const scenes = initializeScenes({
+    words: testWords,
+    sentences,
+    keepSegments: [
+      { startMs: 0, endMs: 300 },
+      { startMs: 400, endMs: 1200 },
+    ],
+  });
+  assert.equal(scenes.length, 2);
+  assert.equal(scenes[0].telopText, "", "「えっと」はフィラーのみなので空欄");
+  assert.equal(scenes[0].telopEdited, false, "空欄化は初期値の扱いでtelopEditedは立てない");
+  assert.equal(scenes[0].words.length, 3, "wordsと尺はそのまま残る");
+  assert.equal(scenes[1].telopText, "こんにちは皆さん", "通常の長さのシーンは従来どおり");
+});
+
+// =============================================================================
+// W10-4(分割時のテロップ文言分配): splitEditedTelopText
+// =============================================================================
+
+/** テスト用: 1文字ずつのSceneWordを組み立てる(時刻はダミー連番)。 */
+function sceneWords(chars: string[], deletedChars: string[] = []): SceneWord[] {
+  return chars.map((text, index) => ({
+    id: `sw${index}_${text}`,
+    text,
+    startMs: index * 100,
+    endMs: (index + 1) * 100,
+    deleted: deletedChars.includes(text),
+  }));
+}
+
+test("splitEditedTelopText: 後半wordsの先頭列が編集文中に見つかればそこで分割する(一致探索)", () => {
+  // ユーザーが句点を追加した編集文。後半words「今日はいい天気です」の接頭辞
+  // 「今日はいい天気」が(正規化一致で)見つかるので、その直前で分割される。
+  const result = splitEditedTelopText(
+    "こんにちは。今日はいい天気",
+    sceneWords(["こ", "ん", "に", "ち", "は"]),
+    sceneWords(["今", "日", "は", "い", "い", "天", "気", "で", "す"]),
+  );
+  assert.equal(result.first, "こんにちは。");
+  assert.equal(result.second, "今日はいい天気");
+});
+
+test("splitEditedTelopText: 同じ語が2回出る場合は最後の出現位置で分割する", () => {
+  const result = splitEditedTelopText(
+    "また今度、また明日",
+    sceneWords(["そ", "れ", "で", "は"]),
+    sceneWords(["ま", "た", "明", "日"]),
+  );
+  assert.equal(result.first, "また今度、");
+  assert.equal(result.second, "また明日");
+});
+
+test("splitEditedTelopText: 一致しなければ前半words比率で分割し、後半に残りを全て割当する(W10-12)", () => {
+  // words("ナ"x5 / "マ"x5)はどちらも編集文に現れない→比率(5:5)フォールバック。
+  const result = splitEditedTelopText(
+    "あいうえお かきくけこ",
+    sceneWords(["ナ", "ナ", "ナ", "ナ", "ナ"]),
+    sceneWords(["マ", "マ", "マ", "マ", "マ"]),
+  );
+  assert.equal(result.first, "あいうえお");
+  assert.equal(result.second, "かきくけこ");
+});
+
+test("splitEditedTelopText: 比率フォールバックは助詞スナップなしで文字数比のみ(W10-12)", () => {
+  const result = splitEditedTelopText(
+    "今日は晴れました",
+    sceneWords(["ナ", "ナ", "ナ"]),
+    sceneWords(["マ", "マ", "マ", "マ", "マ"]),
+  );
+  assert.equal(result.first, "今日は");
+  assert.equal(result.second, "晴れました");
+});
+
+test("splitEditedTelopText: どちらの半分にも全文が複製されない", () => {
+  const edited = "編集済みの長いテロップ文言です";
+  const result = splitEditedTelopText(
+    edited,
+    sceneWords(["ナ", "ナ", "ナ", "ナ"]),
+    sceneWords(["マ", "マ", "マ", "マ"]),
+  );
+  assert.notEqual(result.first, edited);
+  assert.notEqual(result.second, edited);
+  assert.equal((result.first + result.second).replace(/\s/g, ""), edited.replace(/\s/g, ""));
+});
+
+test("splitSceneAtWord: 編集済みシーンの分割で一致探索が効くと両側に正しい文言が残る(W10-4)", () => {
+  // words「おはようございます」を前半「おはよう」/後半「ございます」で分割。
+  // 編集文にも「ございます」がそのまま含まれるため一致探索で正確に分かれる。
+  const testWords = words(
+    ["w1", "お", 0, 100],
+    ["w2", "は", 100, 200],
+    ["w3", "よ", 200, 300],
+    ["w4", "う", 300, 400],
+    ["w5", "ご", 400, 500],
+    ["w6", "ざ", 500, 600],
+    ["w7", "い", 600, 700],
+    ["w8", "ま", 700, 800],
+    ["w9", "す", 800, 900],
+  );
+  const scenes = initializeScenes({ words: testWords, keepSegments: [{ startMs: 0, endMs: 900 }] });
+  const edited = setSceneTelopText(scenes, scenes[0].id, "おっはよーうございます");
+  const split = splitSceneAtWord(edited, edited[0].id, "w5");
+  assert.equal(split.length, 2);
+  assert.equal(split[0].telopText, "おっはよーう");
+  assert.equal(split[1].telopText, "ございます");
+  assert.equal(split[0].telopEdited, true);
+  assert.equal(split[1].telopEdited, true);
+});
+
+test("splitSceneAtWord: 省略編集テキストの分割で後半にautoTelop全文が復活しない(W10-12)", () => {
+  const testWords = words(
+    ["w1", "今", 0, 100],
+    ["w2", "日", 100, 200],
+    ["w3", "は", 200, 300],
+    ["w4", "晴", 300, 400],
+    ["w5", "れ", 400, 500],
+    ["w6", "で", 500, 600],
+    ["w7", "し", 600, 700],
+    ["w8", "た", 700, 800],
+  );
+  const scenes = initializeScenes({ words: testWords, keepSegments: [{ startMs: 0, endMs: 800 }] });
+  const edited = setSceneTelopText(scenes, scenes[0].id, "晴れ");
+  const split = splitSceneAtWord(edited, edited[0].id, "w5");
+  assert.equal(split.length, 2);
+  assert.equal(split[0].telopEdited, true);
+  assert.equal(split[1].telopEdited, true);
+  assert.notEqual(split[0].telopText, "今日は晴");
+  assert.notEqual(split[1].telopText, "れでした");
+  assert.notEqual(split[1].telopText, autoTelopTextFromWords(split[1].words));
+});
+
+// =============================================================================
+// W10-1(シーン単位の削除・復元): isSceneFullyDeleted / findNextSelectionAfterSceneDelete
+// =============================================================================
+
+function sceneStub(id: string, allDeleted: boolean): Scene {
+  return {
+    id,
+    sourceStartMs: 0,
+    sourceEndMs: 100,
+    words: [
+      { id: `${id}_w1`, text: "あ", startMs: 0, endMs: 50, deleted: allDeleted },
+      { id: `${id}_w2`, text: "い", startMs: 50, endMs: 100, deleted: allDeleted },
+    ],
+    telopText: "あい",
+    telopEdited: false,
+    cutMarks: [],
+  };
+}
+
+test("isSceneFullyDeleted: 全単語deletedのときだけtrue", () => {
+  assert.equal(isSceneFullyDeleted(sceneStub("s1", true)), true);
+  assert.equal(isSceneFullyDeleted(sceneStub("s2", false)), false);
+  const partial = sceneStub("s3", false);
+  partial.words[0].deleted = true;
+  assert.equal(isSceneFullyDeleted(partial), false);
+});
+
+test("findNextSelectionAfterSceneDelete: 直前の未削除シーンを優先し、削除済みはスキップする", () => {
+  const scenes = [sceneStub("a", false), sceneStub("b", true), sceneStub("c", false), sceneStub("d", false)];
+  // cを削除→直前bは削除済みなのでスキップしてaへ。
+  assert.equal(findNextSelectionAfterSceneDelete(scenes, 2), "a");
+});
+
+test("findNextSelectionAfterSceneDelete: 先頭シーン削除時は次の未削除シーンへ、全滅ならnull", () => {
+  const scenes = [sceneStub("a", false), sceneStub("b", true), sceneStub("c", false)];
+  assert.equal(findNextSelectionAfterSceneDelete(scenes, 0), "c");
+  const allDeleted = [sceneStub("a", true), sceneStub("b", true)];
+  assert.equal(findNextSelectionAfterSceneDelete(allDeleted, 0), null);
 });

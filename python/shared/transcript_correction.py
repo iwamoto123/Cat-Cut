@@ -96,6 +96,50 @@ def load_user_dictionary(path: str | None) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def load_correction_history(path: str | None) -> List[Dict[str, Any]]:
+    """W14-2: correction_history.json ({pairs: [{before, after, count}, ...]}) を読む。
+
+    ファイルが無い・壊れている場合は空リスト(=完全従来動作)。before/after が欠ける・
+    同一のペアは捨て、count は最低1へ正規化する。
+    """
+    if not path:
+        return []
+    abs_path = os.path.abspath(path)
+    if not os.path.exists(abs_path):
+        return []
+    try:
+        with open(abs_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    raw_pairs = data.get("pairs") if isinstance(data, dict) else None
+    if not isinstance(raw_pairs, list):
+        return []
+    pairs: List[Dict[str, Any]] = []
+    for entry in raw_pairs:
+        if not isinstance(entry, dict):
+            continue
+        before = str(entry.get("before") or "").strip()
+        after = str(entry.get("after") or "").strip()
+        if not before or not after or before == after:
+            continue
+        try:
+            count = max(1, int(entry.get("count") or 1))
+        except (TypeError, ValueError):
+            count = 1
+        pairs.append({"before": before, "after": after, "count": count})
+    return pairs
+
+
+def top_correction_examples(
+    pairs: List[Dict[str, Any]],
+    limit: int = 30,
+) -> List[Dict[str, Any]]:
+    """W14-2: プロンプト注入用に頻度上位 limit 件の修正例を返す(頻度降順・同率は表記順)。"""
+    ordered = sorted(pairs, key=lambda p: (-int(p.get("count") or 1), str(p.get("before") or "")))
+    return ordered[: max(0, limit)]
+
+
 def _iter_user_dictionary_entries(data: Dict[str, Any] | None) -> List[Tuple[str, str]]:
     """Yield (from, to) pairs from user dictionary format."""
     if not data:

@@ -1,11 +1,33 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+// W16-6: powerMonitor はスリープ/画面ロック時にレンダラーへ再生停止を通知するために使う。
+const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
+const os = require("os");
 const path = require("path");
 const yaml = require("js-yaml");
 const { createApiKeysModule } = require("./apiKeys.cjs");
+// W12-2: ライセンス基盤(userData/license.json・billing-server呼び出し)
+const { createLicenseModule, registerLicenseIpc } = require("./license.cjs");
+// フェーズW8(素材選択時の縦横選択): ffprobe結果のパース・orientation解決の純ロジック
+const {
+  parseProbeOutput,
+  resolveRunOrientationValue,
+  sanitizeOrientation,
+} = require("./orientation.cjs");
+// W13-1: 派生キャッシュ(segments/・preview_cut_sequence等)の統計・クリーンアップ
+const { collectCacheStats, cleanCaches } = require("./cache.cjs");
+// W14-2: 編集前→編集後の修正ペア学習(edit_history.json / correction_history.json)
+const editLearning = require("./editLearning.cjs");
+// W19-C2: 差分なしなら step08 を完全スキップするための入力合成ハッシュ
+const {
+  computeStep08InputHash,
+  canSkipStep08,
+  writeStep08InputHash,
+} = require("./step08Hash.cjs");
+// フェーズW23(改善1): 解析開始前のOP有無チェック → run正本op_config初期値の決定
+const { resolveStartOpConfig } = require("./opStart.cjs");
 
 const DEV_SERVER_URL = "http://127.0.0.1:5174";
 const DEFAULT_OLLAMA_MODEL = "qwen2.5:7b";
@@ -24,12 +46,17 @@ const steps = [
   { id: "step03_vad", label: "無音検出" },
   { id: "step04_filler_detect", label: "フィラー検出" },
   { id: "step05_ai_retake", label: "AI言い直し検出" },
+  // W19-B1: 弱区間の再文字起こし(step05b)。キー無し・失敗はnon-fatalでスキップされる
+  { id: "step05b_retranscribe", label: "弱区間の再文字起こし" },
   { id: "step07_cut_proposal", label: "カット提案" },
+  { id: "step06c_direction", label: "演出決定" },
   { id: "step08_composition", label: "コンポジション" },
   { id: "extract_telop", label: "テロップ抽出" },
   { id: "review_telop", label: "書き出し前チェック" },
   { id: "step06b_ai_refine", label: "AI校正" },
   { id: "font_directives", label: "フォント反映" },
+  // W19-B2: AI最終チェック(step06d)の自動実行。検品準備完了の直前に走る(non-fatal)
+  { id: "step06d_final_check", label: "AI最終チェック" },
   { id: "apply_telop", label: "テロップ反映" },
   { id: "render", label: "書き出し" },
 ];
@@ -100,28 +127,320 @@ const TELOP_TYPE_FALLBACK_MAPPING = {
   cta: "cta_yellow",
 };
 
-function telopTypeMappingPath() {
-  return userDataPath("telop_type_mapping.json");
-}
+// フェーズT3: マッピングエントリが指定できる登場アニメ・効果音ID
+// (python/shared/telop_types.py / src/lib/telopAnimations.ts と同期)。
+// フェーズW24 Phase B-1: 広告向け4種(blur_in/typewriter/wipe_up/drop_settle)を追加
+const TELOP_ANIMATION_IN_TYPES = [
+  "pop_big", "slide_left", "slide_up", "zoom", "stamp", "fade",
+  "blur_in", "typewriter", "wipe_up", "drop_settle", "none",
+];
+// フェーズW2: teen(チーン。映像ギミックpinchの既定SFX)を追加
+const TELOP_SFX_IDS = ["don", "shakin", "pon", "jan", "hyu", "teen"];
 
-function extractTypeStyles(raw) {
-  const source = raw && typeof raw === "object" ? (raw.type_styles ?? raw) : {};
-  const result = {};
-  if (!source || typeof source !== "object") return result;
-  for (const type of TELOP_SEMANTIC_TYPES) {
-    const value = source[type];
-    if (typeof value === "string" && value.trim()) result[type] = value.trim();
+// フェーズW1: 話者カラーの既定(templates/telop_type_mapping.yaml の speaker_colors と同内容の保険)。
+// python/shared/telop_types.py / src/lib/designExtras.ts と同期すること。
+const SPEAKER_COLORS_FALLBACK = {
+  enabled: true,
+  apply_types: ["default", "reply"],
+  styles: { speaker_1: "fact_cyan", speaker_2: "fact_green" },
+};
+
+// フェーズU7: シーンタイトル(chapter_title)の描画パターンID
+// (remotion/src/lib/overlayStyles.ts CHAPTER_TITLE_PATTERNS / python shared/telop_types.py と同期)。
+const OVERLAY_TITLE_PATTERNS = ["box_accent", "band_gradient", "tag_ribbon", "minimal_line", "neon_plate"];
+// フェーズU8→V5: OPパターンID。V5で「なし/ハイライト予告」の2択へ一本化
+// (src/lib/designExtras.ts と同期)。旧パターンは読み込み時に highlight_teaser へ移行する。
+const OP_PATTERN_IDS = ["none", "highlight_teaser"];
+const LEGACY_OP_PATTERN_IDS = ["title_card", "question_hook"];
+// フェーズV5: OP装飾・テロップ登場アニメID(remotion/src/lib/opTimeline.ts と同期)。
+const OP_DECORATION_IDS = ["flash_pop", "cinema_bars", "color_wipe", "neon_frame"];
+const OP_TEXT_ANIMATION_IDS = ["slide_left", "slide_up", "stamp"];
+
+/** フェーズU7: overlay_title 設定の正規化(欠落・不正は「有効・box_accent」=従来挙動)。 */
+function sanitizeOverlayTitleConfig(raw) {
+  const result = { enabled: true, style: "box_accent" };
+  if (!raw || typeof raw !== "object") return result;
+  if (raw.enabled === false) result.enabled = false;
+  if (typeof raw.style === "string" && OVERLAY_TITLE_PATTERNS.includes(raw.style)) {
+    result.style = raw.style;
   }
   return result;
 }
 
-/** 既定マッピング(フォールバック定数 < templates/telop_type_mapping.yaml)。 */
-function loadDefaultTelopTypeMapping() {
-  const mapping = { ...TELOP_TYPE_FALLBACK_MAPPING };
+/**
+ * フェーズW1: speaker_colors 設定1ソース分の部分正規化
+ * (python shared/telop_types.py の sanitize_speaker_colors と同じ規則)。
+ * 存在する有効フィールドだけ返し、欠落は呼び出し側のマージで下位ソースの値が残る。
+ */
+function sanitizeSpeakerColorsPartial(raw) {
+  const result = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return result;
+  if (typeof raw.enabled === "boolean") result.enabled = raw.enabled;
+  const applyTypes = Array.isArray(raw.apply_types) ? raw.apply_types : raw.applyTypes;
+  if (Array.isArray(applyTypes)) {
+    const valid = applyTypes.map(String).filter((type) => TELOP_SEMANTIC_TYPES.includes(type));
+    if (valid.length) result.apply_types = valid;
+  }
+  const styles = raw.styles;
+  if (styles && typeof styles === "object" && !Array.isArray(styles)) {
+    const clean = {};
+    for (const [key, value] of Object.entries(styles)) {
+      const speaker = String(key || "").trim();
+      if (speaker && typeof value === "string" && value.trim()) clean[speaker] = value.trim();
+    }
+    if (Object.keys(clean).length) result.styles = clean;
+  }
+  return result;
+}
+
+/** フェーズW1: 話者カラーの既定(フォールバック定数 < templates/telop_type_mapping.yaml)。常に完全形。 */
+function loadDefaultSpeakerColors() {
+  const result = {
+    enabled: SPEAKER_COLORS_FALLBACK.enabled,
+    apply_types: [...SPEAKER_COLORS_FALLBACK.apply_types],
+    styles: { ...SPEAKER_COLORS_FALLBACK.styles },
+  };
   try {
     const defaultPath = path.join(repoRoot(), "templates", "telop_type_mapping.yaml");
     if (fs.existsSync(defaultPath)) {
-      Object.assign(mapping, extractTypeStyles(yaml.load(fs.readFileSync(defaultPath, "utf-8"))));
+      const parsed = yaml.load(fs.readFileSync(defaultPath, "utf-8"));
+      Object.assign(result, sanitizeSpeakerColorsPartial(parsed && parsed.speaker_colors));
+    }
+  } catch (error) {
+    console.error("[speaker-colors] failed to load default yaml:", error);
+  }
+  return result;
+}
+
+/** フェーズW1: 部分設定を既定の上に重ねて完全形にする。 */
+function resolveSpeakerColorsConfig(rawPartial) {
+  return { ...loadDefaultSpeakerColors(), ...sanitizeSpeakerColorsPartial(rawPartial) };
+}
+
+/**
+ * フェーズW2: シーン映像ギミック(video_effects)設定の正規化
+ * (python shared/video_effects.py の sanitize_video_effects_enabled と同じ規則)。
+ * - pinch / zoom: 欠落・不正はON(既定=W2からの後方互換)。明示的な false のみOFF。
+ * - dim / face_zoom / slow_push(W24 Phase C): 欠落・不正はOFF(既定=既存テーマは
+ *   従来動作)。明示的な true のみON。
+ */
+function sanitizeVideoEffectsConfig(raw) {
+  const result = { pinch: true, zoom: true, dim: false, face_zoom: false, slow_push: false };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return result;
+  if (raw.pinch === false) result.pinch = false;
+  if (raw.zoom === false) result.zoom = false;
+  if (raw.dim === true) result.dim = true;
+  if (raw.face_zoom === true) result.face_zoom = true;
+  if (raw.slow_push === true) result.slow_push = true;
+  return result;
+}
+
+// W13-3: OPタイトル/キャッチコピーに実データとして混入しがちなプレースホルダ的文言。
+// テーマ設定への試し入力が design_themes.json → 各runの op_config.json へ伝播して
+// 動画に「タイトルテキスト」等が表示される事故があったため、読み込み時に空へ正規化する。
+// desktop/src/lib/designExtras.ts / python shared/opening.py と同一リストを保つこと
+const OP_PLACEHOLDER_TEXTS = ["タイトルテキスト", "タイトルテスト", "キャッチコピー", "サンプルテキスト"];
+
+/** W13-3: プレースホルダ的文言は空文字へ正規化する(trim込み)。 */
+function normalizeOpUserText(value) {
+  const trimmed = String(value || "").trim();
+  return OP_PLACEHOLDER_TEXTS.includes(trimmed) ? "" : trimmed;
+}
+
+/**
+ * フェーズU8: op 設定の正規化(欠落・不正は pattern=none=OPなし)。
+ * フェーズV5: 旧パターン(title_card等)は highlight_teaser へ無警告マイグレーション。
+ * decoration / text_animation は未知値を既定(flash_pop / slide_left)へ落とす。
+ */
+function sanitizeOpConfig(raw) {
+  const result = {
+    pattern: "none",
+    decoration: "flash_pop",
+    text_animation: "slide_left",
+    title: "",
+    // W11-5: タイトルを表示するか。明示false のみ「表示しない」(省略=true=後方互換)
+    title_enabled: true,
+    catch_copy: "",
+  };
+  if (!raw || typeof raw !== "object") return result;
+  if (typeof raw.pattern === "string") {
+    if (OP_PATTERN_IDS.includes(raw.pattern)) {
+      result.pattern = raw.pattern;
+    } else if (LEGACY_OP_PATTERN_IDS.includes(raw.pattern)) {
+      result.pattern = "highlight_teaser";
+    }
+  }
+  if (typeof raw.decoration === "string" && OP_DECORATION_IDS.includes(raw.decoration)) {
+    result.decoration = raw.decoration;
+  }
+  if (typeof raw.text_animation === "string" && OP_TEXT_ANIMATION_IDS.includes(raw.text_animation)) {
+    result.text_animation = raw.text_animation;
+  }
+  // W13-3: プレースホルダ的文言(「タイトルテキスト」等)は空扱いに正規化する
+  if (typeof raw.title === "string") result.title = normalizeOpUserText(raw.title);
+  result.title_enabled = raw.title_enabled !== false;
+  // UI側はcamelCase(catchCopy)、保存形式はsnake_case(catch_copy)の両方を受ける
+  const catchCopy = raw.catch_copy !== undefined ? raw.catch_copy : raw.catchCopy;
+  if (typeof catchCopy === "string") result.catch_copy = normalizeOpUserText(catchCopy);
+  return result;
+}
+
+/**
+ * フェーズV2: run単位op_config.jsonのクリップ配列の正規化。
+ * python側 shared/opening.py の _normalize_op_clips と同一規則
+ * (不正エントリは捨て、有効クリップ0件は null=AI自動選定)。
+ * start_ms/end_ms は元動画の絶対ms(カット編集後もpython側が中点でカットへ再解決する)。
+ */
+function sanitizeOpClips(raw) {
+  if (!Array.isArray(raw)) return null;
+  const clips = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const startMs = Math.round(Number(entry.start_ms));
+    const endMs = Math.round(Number(entry.end_ms));
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+    // フェーズW: フックワード系メタ(display/hook_text/keyword/keyword_color)を保持する
+    const hookText = typeof entry.hook_text === "string" ? entry.hook_text.trim() : "";
+    const displayRaw = entry.display;
+    const display =
+      displayRaw === "hook" || displayRaw === "verbatim"
+        ? displayRaw === "hook" && !hookText
+          ? "verbatim"
+          : displayRaw
+        : hookText
+          ? "hook"
+          : "verbatim";
+    clips.push({
+      cut_id: typeof entry.cut_id === "string" ? entry.cut_id : "",
+      start_ms: startMs,
+      end_ms: endMs,
+      text: typeof entry.text === "string" ? entry.text.trim() : "",
+      style: typeof entry.style === "string" ? entry.style.trim() : "",
+      display,
+      hook_text: hookText,
+      keyword: typeof entry.keyword === "string" ? entry.keyword.trim() : "",
+      keyword_color:
+        entry.keyword_color === "red" || entry.keyword_color === "white" ? entry.keyword_color : "yellow",
+    });
+  }
+  return clips.length ? clips : null;
+}
+
+/** フェーズV2: run単位OP設定({pattern,title,catch_copy,clips})の正規化。 */
+function sanitizeRunOpConfig(raw) {
+  return {
+    ...sanitizeOpConfig(raw),
+    clips: raw && typeof raw === "object" ? sanitizeOpClips(raw.clips) : null,
+  };
+}
+
+/** フェーズV2: run単位のOP設定ファイル(このrunのOPの正本)。 */
+function runOpConfigPath(runDir) {
+  return path.join(runDir, "op_config.json");
+}
+
+/** run単位OP設定を読む(ファイルなし・破損は null=未生成扱い)。 */
+function readRunOpConfig(runDir) {
+  try {
+    const filePath = runOpConfigPath(runDir);
+    if (!fs.existsSync(filePath)) return null;
+    return sanitizeRunOpConfig(readJson(filePath));
+  } catch (error) {
+    console.error("[op-config] failed to read op_config.json:", error);
+    return null;
+  }
+}
+
+/** run単位OP設定を書き込み、正規化後の値を返す。 */
+function writeRunOpConfig(runDir, config) {
+  const sanitized = sanitizeRunOpConfig(config);
+  writeJson(runOpConfigPath(runDir), sanitized);
+  return sanitized;
+}
+
+/**
+ * run単位OP設定を返す。無ければテーマ(orスタンダード)のOP設定から生成して保存する
+ * (以降はこのrunの op_config.json が正本になり、テーマ変更の影響を受けない)。
+ * clips: null = AI自動選定(select_highlight_clips)。
+ */
+function ensureRunOpConfig(runDir) {
+  const existing = readRunOpConfig(runDir);
+  if (existing) return existing;
+  const initial = { ...resolveDesignExtras().op, clips: null };
+  return writeRunOpConfig(runDir, initial);
+}
+
+function telopTypeMappingPath() {
+  return userDataPath("telop_type_mapping.json");
+}
+
+/**
+ * マッピング1エントリの正規化(フェーズT3: 新旧形式対応)。
+ * 旧形式(文字列=styleのみ)は { style } へ包み、新形式は不正フィールドを落とす。
+ * 有効なフィールドが1つも無ければ null。
+ */
+function normalizeTelopTypeEntry(value) {
+  if (typeof value === "string") {
+    return value.trim() ? { style: value.trim() } : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const entry = {};
+  if (typeof value.style === "string" && value.style.trim()) entry.style = value.style.trim();
+  if (typeof value.animation_in === "string" && TELOP_ANIMATION_IN_TYPES.includes(value.animation_in)) {
+    entry.animation_in = value.animation_in;
+  }
+  if (typeof value.sfx === "string" && (TELOP_SFX_IDS.includes(value.sfx) || value.sfx === "none")) {
+    entry.sfx = value.sfx;
+  }
+  return Object.keys(entry).length ? entry : null;
+}
+
+/** type_stylesセクション(または直下)から有効なエントリ({style, animation_in?, sfx?})だけ拾う。 */
+function extractTypeEntries(raw) {
+  const source = raw && typeof raw === "object" ? (raw.type_styles ?? raw) : {};
+  const result = {};
+  if (!source || typeof source !== "object") return result;
+  for (const type of TELOP_SEMANTIC_TYPES) {
+    const entry = normalizeTelopTypeEntry(source[type]);
+    if (entry) result[type] = entry;
+  }
+  return result;
+}
+
+/**
+ * フェーズU6: カスタムスタイル定義(id → TelopStyle)を検証する。
+ * python側 sanitize_custom_styles と同じ規則(辞書かつfillを持つエントリのみ残す)。
+ */
+function sanitizeCustomStyles(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const styleId = String(key || "").trim();
+    if (!styleId || !value || typeof value !== "object" || Array.isArray(value)) continue;
+    if (!value.fill || typeof value.fill !== "object") continue;
+    result[styleId] = value;
+  }
+  return result;
+}
+
+/** エントリをフィールド単位でマージする(python load_type_mapping_entries と同じ規則)。 */
+function mergeTypeEntries(base, loaded) {
+  for (const [type, entry] of Object.entries(loaded)) {
+    base[type] = { ...(base[type] || {}), ...entry };
+  }
+  return base;
+}
+
+/** 既定マッピング(フォールバック定数 < templates/telop_type_mapping.yaml)。値はフルエントリ。 */
+function loadDefaultTelopTypeMapping() {
+  const mapping = {};
+  for (const [type, style] of Object.entries(TELOP_TYPE_FALLBACK_MAPPING)) {
+    mapping[type] = { style };
+  }
+  try {
+    const defaultPath = path.join(repoRoot(), "templates", "telop_type_mapping.yaml");
+    if (fs.existsSync(defaultPath)) {
+      mergeTypeEntries(mapping, extractTypeEntries(yaml.load(fs.readFileSync(defaultPath, "utf-8"))));
     }
   } catch (error) {
     console.error("[telop-type-mapping] failed to load default yaml:", error);
@@ -129,13 +448,16 @@ function loadDefaultTelopTypeMapping() {
   return mapping;
 }
 
-/** 解決済みのtype→presetマッピング(既定 + ユーザー上書き)。常に全typeのエントリを持つ。 */
+/**
+ * 解決済みのtype→エントリマッピング(既定 + ユーザー上書き)。常に全typeのエントリ(styleあり)を持つ。
+ * フェーズT3: 値は { style, animation_in?, sfx? } の新形式(旧形式のuserDataも読める)。
+ */
 function loadTelopTypeMapping() {
   const mapping = loadDefaultTelopTypeMapping();
   try {
     const filePath = telopTypeMappingPath();
     if (fs.existsSync(filePath)) {
-      Object.assign(mapping, extractTypeStyles(readJson(filePath)));
+      mergeTypeEntries(mapping, extractTypeEntries(readJson(filePath)));
     }
   } catch (error) {
     console.error("[telop-type-mapping] failed to load user mapping:", error);
@@ -143,17 +465,310 @@ function loadTelopTypeMapping() {
   return mapping;
 }
 
-/** ユーザーマッピングをuserDataへ保存し、解決済みマッピングを返す。 */
-function saveTelopTypeMapping(input) {
-  const sanitized = extractTypeStyles(input);
+/** userData/telop_type_mapping.json の生JSON(スタンダードのU7/U8設定の読み出しに使う)。 */
+function readUserTelopMappingRaw() {
+  try {
+    const filePath = telopTypeMappingPath();
+    if (!fs.existsSync(filePath)) return {};
+    const parsed = readJson(filePath);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * ユーザーマッピングをuserDataへ保存し(常に新形式)、解決済みマッピングを返す。
+ * フェーズU7/U8: スタンダード(テーマ未選択)のシーンタイトル・OP設定も同じファイルに持つ。
+ * extras 未指定(undefined)の保存では既存の設定を維持する(マッピングだけの保存で消さない)。
+ */
+function saveTelopTypeMapping(input, extras) {
+  const sanitized = extractTypeEntries(input);
+  const existing = readUserTelopMappingRaw();
+  const overlayTitle =
+    extras && extras.overlayTitle !== undefined
+      ? sanitizeOverlayTitleConfig(extras.overlayTitle)
+      : sanitizeOverlayTitleConfig(existing.overlay_title);
+  const opConfig =
+    extras && extras.op !== undefined ? sanitizeOpConfig(extras.op) : sanitizeOpConfig(existing.op);
+  // フェーズW1: 話者カラー設定。未指定の保存では既存を維持する(overlayTitleと同じ規則)。
+  const speakerColors =
+    extras && extras.speakerColors !== undefined
+      ? resolveSpeakerColorsConfig(extras.speakerColors)
+      : resolveSpeakerColorsConfig(existing.speaker_colors);
+  // フェーズW2: シーン映像ギミック設定。未指定の保存では既存を維持する(同上)。
+  const videoEffects =
+    extras && extras.videoEffects !== undefined
+      ? sanitizeVideoEffectsConfig(extras.videoEffects)
+      : sanitizeVideoEffectsConfig(existing.video_effects);
   const filePath = telopTypeMappingPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   writeJson(filePath, {
-    version: "1.0",
+    version: "2.0",
     updated_at: new Date().toISOString(),
     type_styles: sanitized,
+    overlay_title: overlayTitle,
+    op: opConfig,
+    speaker_colors: speakerColors,
+    video_effects: videoEffects,
   });
+  return loadEffectiveTelopTypeMapping();
+}
+
+// --- フェーズU2: 使用シーンバンドル(templates/design_scenes.yaml) と保存済みデザインテーマ ---
+//
+// デザインテーマ = ユーザーが名前をつけて保存した type→preset マッピング一式
+// (userData/design_themes.json)。settings.activeDesignThemeId が指すテーマがあれば、
+// 従来の telop_type_mapping 経路(プレビュー用のIPC・step08への --type-mapping)より
+// テーマの type_styles を優先する。未選択(空文字)は「スタンダード」=従来動作のまま。
+
+function designScenesPath() {
+  return path.join(repoRoot(), "templates", "design_scenes.yaml");
+}
+
+function designThemesPath() {
+  return userDataPath("design_themes.json");
+}
+
+/** step08へ渡す実行時マッピングの書き出し先(テーマ選択時のみ生成)。 */
+function effectiveTypeMappingRuntimePath() {
+  return userDataPath("telop_type_mapping.effective.json");
+}
+
+/**
+ * templates/design_scenes.yaml を読み込み、有効なシーンだけ返す。
+ * type_styles は extractTypeEntries でバリデーション(未知type・不正エントリは捨てる)。
+ */
+function loadDesignScenes() {
+  try {
+    const filePath = designScenesPath();
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = yaml.load(fs.readFileSync(filePath, "utf-8"));
+    const scenes = parsed && typeof parsed === "object" && Array.isArray(parsed.scenes) ? parsed.scenes : [];
+    return scenes
+      .filter((scene) => scene && typeof scene === "object" && typeof scene.id === "string" && scene.id.trim() && typeof scene.label === "string" && scene.label.trim())
+      .map((scene) => ({
+        id: scene.id.trim(),
+        label: scene.label.trim(),
+        description: typeof scene.description === "string" ? scene.description.trim() : "",
+        type_styles: extractTypeEntries(scene.type_styles),
+        // フェーズU7: ジャンルごとのシーンタイトル既定(新規テーマ作成の初期値)
+        overlay_title: sanitizeOverlayTitleConfig(scene.overlay_title),
+        // フェーズV2: ジャンルごとのOP既定パターン(新規テーマ作成の初期値)
+        op: sanitizeOpConfig(scene.op),
+      }));
+  } catch (error) {
+    console.error("[design-scenes] failed to load templates/design_scenes.yaml:", error);
+    return [];
+  }
+}
+
+/** userData/design_themes.json のテーマ配列(壊れたエントリは捨てる)。 */
+function loadDesignThemes() {
+  try {
+    const filePath = designThemesPath();
+    if (!fs.existsSync(filePath)) return [];
+    const parsed = readJson(filePath);
+    const themes = parsed && typeof parsed === "object" && Array.isArray(parsed.themes) ? parsed.themes : [];
+    return themes
+      .filter((theme) => theme && typeof theme === "object" && typeof theme.id === "string" && theme.id.trim() && typeof theme.name === "string" && theme.name.trim())
+      .map((theme) => ({
+        id: theme.id.trim(),
+        name: theme.name.trim(),
+        base_scene: typeof theme.base_scene === "string" ? theme.base_scene : "",
+        type_styles: extractTypeEntries(theme.type_styles),
+        // フェーズU6: テーマ専属のカスタムプリセット定義(type_stylesから参照される)
+        custom_styles: sanitizeCustomStyles(theme.custom_styles),
+        // フェーズU7/U8: シーンタイトル(chapter_title)とOPのテーマ設定
+        overlay_title: sanitizeOverlayTitleConfig(theme.overlay_title),
+        op: sanitizeOpConfig(theme.op),
+        // フェーズW1: 話者カラーのテーマ設定(旧テーマは既定=有効で補完)
+        speaker_colors: resolveSpeakerColorsConfig(theme.speaker_colors),
+        // フェーズW2: シーン映像ギミックのテーマ設定(旧テーマは既定=両方ONで補完)
+        video_effects: sanitizeVideoEffectsConfig(theme.video_effects),
+        created_at: typeof theme.created_at === "string" ? theme.created_at : "",
+        updated_at: typeof theme.updated_at === "string" ? theme.updated_at : "",
+      }));
+  } catch (error) {
+    console.error("[design-themes] failed to load design_themes.json:", error);
+    return [];
+  }
+}
+
+function writeDesignThemes(themes) {
+  const filePath = designThemesPath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  writeJson(filePath, { version: 1, themes });
+}
+
+/**
+ * テーマの新規作成(id無し)または上書き(id一致)。
+ * 保存した type_styles は「既定マッピング+入力」の完全形にする
+ * (欠落typeがあると実行時に既定YAMLへフォールバックし、テーマの意図とズレるため)。
+ */
+function saveDesignTheme(input) {
+  const themes = loadDesignThemes();
+  const now = new Date().toISOString();
+  const typeStyles = mergeTypeEntries(loadDefaultTelopTypeMapping(), extractTypeEntries(input.typeStyles ?? input.type_styles));
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) throw new Error("テーマ名が空です");
+  const id = typeof input.id === "string" && input.id.trim() ? input.id.trim() : `theme_${crypto.randomUUID()}`;
+  const existingIndex = themes.findIndex((theme) => theme.id === id);
+  // フェーズU6: customStyles未指定の上書き保存では既存のカスタム定義を維持する
+  // (type_stylesだけの更新でカスタムプリセットが消えると参照切れになるため)。
+  const customStylesInput = input.customStyles ?? input.custom_styles;
+  const customStyles =
+    customStylesInput !== undefined
+      ? sanitizeCustomStyles(customStylesInput)
+      : existingIndex >= 0
+        ? themes[existingIndex].custom_styles || {}
+        : {};
+  // フェーズU7/U8: 未指定の上書き保存では既存のシーンタイトル・OP設定を維持する
+  // (customStylesと同じ規則。type_stylesだけの更新で設定が消えないように)。
+  const overlayTitleInput = input.overlayTitle ?? input.overlay_title;
+  const overlayTitle =
+    overlayTitleInput !== undefined
+      ? sanitizeOverlayTitleConfig(overlayTitleInput)
+      : sanitizeOverlayTitleConfig(existingIndex >= 0 ? themes[existingIndex].overlay_title : null);
+  const opInput = input.op;
+  const opConfig =
+    opInput !== undefined
+      ? sanitizeOpConfig(opInput)
+      : sanitizeOpConfig(existingIndex >= 0 ? themes[existingIndex].op : null);
+  // フェーズW1: 話者カラー。未指定の上書き保存では既存を維持する(overlayTitleと同じ規則)。
+  const speakerColorsInput = input.speakerColors ?? input.speaker_colors;
+  const speakerColors =
+    speakerColorsInput !== undefined
+      ? resolveSpeakerColorsConfig(speakerColorsInput)
+      : resolveSpeakerColorsConfig(existingIndex >= 0 ? themes[existingIndex].speaker_colors : null);
+  // フェーズW2: シーン映像ギミック。未指定の上書き保存では既存を維持する(同上)。
+  const videoEffectsInput = input.videoEffects ?? input.video_effects;
+  const videoEffects =
+    videoEffectsInput !== undefined
+      ? sanitizeVideoEffectsConfig(videoEffectsInput)
+      : sanitizeVideoEffectsConfig(existingIndex >= 0 ? themes[existingIndex].video_effects : null);
+  const theme = {
+    id,
+    name,
+    base_scene:
+      typeof input.baseScene === "string"
+        ? input.baseScene
+        : typeof input.base_scene === "string"
+          ? input.base_scene
+          : existingIndex >= 0
+            ? themes[existingIndex].base_scene
+            : "",
+    type_styles: typeStyles,
+    custom_styles: customStyles,
+    overlay_title: overlayTitle,
+    op: opConfig,
+    speaker_colors: speakerColors,
+    video_effects: videoEffects,
+    created_at: existingIndex >= 0 ? themes[existingIndex].created_at || now : now,
+    updated_at: now,
+  };
+  if (existingIndex >= 0) {
+    themes[existingIndex] = theme;
+  } else {
+    themes.push(theme);
+  }
+  writeDesignThemes(themes);
+  return { themes: loadDesignThemes(), theme };
+}
+
+function deleteDesignTheme(themeId) {
+  const themes = loadDesignThemes().filter((theme) => theme.id !== themeId);
+  writeDesignThemes(themes);
+  return themes;
+}
+
+/** settings.activeDesignThemeId が指す実在テーマ(無い・削除済みなら null=スタンダード)。 */
+function resolveActiveDesignTheme() {
+  const raw = readSettingsRaw();
+  const activeId = typeof raw.activeDesignThemeId === "string" ? raw.activeDesignThemeId : "";
+  if (!activeId) return null;
+  return loadDesignThemes().find((theme) => theme.id === activeId) || null;
+}
+
+/**
+ * プレビュー・UIに使う解決済みマッピング。
+ * アクティブなデザインテーマがあればその type_styles を優先し、
+ * 無ければ従来どおり「既定YAML+userDataのユーザー上書き」を返す。
+ */
+function loadEffectiveTelopTypeMapping() {
+  const theme = resolveActiveDesignTheme();
+  if (theme) {
+    return mergeTypeEntries(loadDefaultTelopTypeMapping(), theme.type_styles);
+  }
   return loadTelopTypeMapping();
+}
+
+/**
+ * step08(書き出し・再実行)へ渡す --type-mapping 引数。
+ * テーマ選択時はテーマの type_styles を実行時ファイルへ書き出して渡す
+ * (python側は「既定YAML < このファイル」の順で解決するため、テーマが正になる)。
+ * スタンダード時は従来のユーザーマッピングファイルをそのまま渡す(完全後方互換)。
+ */
+function effectiveTypeMappingArgs() {
+  const theme = resolveActiveDesignTheme();
+  if (theme) {
+    const runtimePath = effectiveTypeMappingRuntimePath();
+    fs.mkdirSync(path.dirname(runtimePath), { recursive: true });
+    writeJson(runtimePath, {
+      version: "2.0",
+      source: `design_theme:${theme.id}`,
+      updated_at: new Date().toISOString(),
+      type_styles: theme.type_styles,
+      // フェーズU6: テーマ専属カスタム定義。step08が composition の telop_styles へ注入する
+      custom_styles: theme.custom_styles || {},
+      // フェーズU7: シーンタイトル設定。step08が chapter_title の生成有無・styleに使う
+      overlay_title: sanitizeOverlayTitleConfig(theme.overlay_title),
+      // フェーズW1: 話者カラー設定。step08の load_speaker_colors が読む
+      speaker_colors: resolveSpeakerColorsConfig(theme.speaker_colors),
+      // フェーズW2: シーン映像ギミック設定。step08の load_video_effects_config が読む
+      video_effects: sanitizeVideoEffectsConfig(theme.video_effects),
+    });
+    return ["--type-mapping", runtimePath];
+  }
+  // スタンダード時はユーザーマッピングファイルをそのまま渡す(overlay_titleも同ファイル内)
+  return fs.existsSync(telopTypeMappingPath()) ? ["--type-mapping", telopTypeMappingPath()] : [];
+}
+
+/**
+ * フェーズU7/U8: 現在の選択(テーマ or スタンダード)のシーンタイトル・OP設定。
+ * UIの初期値表示(design-extras:get)と --op-config の組み立てに使う。
+ */
+function resolveDesignExtras() {
+  const theme = resolveActiveDesignTheme();
+  if (theme) {
+    return {
+      overlayTitle: sanitizeOverlayTitleConfig(theme.overlay_title),
+      op: sanitizeOpConfig(theme.op),
+      // フェーズW1: 話者カラー設定(UI初期値・プレビュー解決に使う)
+      speakerColors: resolveSpeakerColorsConfig(theme.speaker_colors),
+      // フェーズW2: シーン映像ギミック設定(UI初期値に使う)
+      videoEffects: sanitizeVideoEffectsConfig(theme.video_effects),
+    };
+  }
+  const raw = readUserTelopMappingRaw();
+  return {
+    overlayTitle: sanitizeOverlayTitleConfig(raw.overlay_title),
+    op: sanitizeOpConfig(raw.op),
+    speakerColors: resolveSpeakerColorsConfig(raw.speaker_colors),
+    videoEffects: sanitizeVideoEffectsConfig(raw.video_effects),
+  };
+}
+
+/**
+ * フェーズU8: step08へ渡す --op-config 引数。pattern=none(既定)は引数なし=完全に従来通り。
+ * タイトル未入力の既定(動画ファイル名)はpython側(shared/opening.py)が補完する。
+ * フェーズV2: runDir 指定時は runs/<run>/op_config.json を正本として優先する
+ * (無ければテーマ設定から生成)。未指定は従来のテーマ設定のみ(後方互換)。
+ */
+function opConfigArgs(runDir) {
+  const op = runDir ? ensureRunOpConfig(runDir) : resolveDesignExtras().op;
+  if (!op || op.pattern === "none") return [];
+  return ["--op-config", JSON.stringify(op)];
 }
 
 function settingsPath() {
@@ -166,6 +781,62 @@ function fontProfilesPath() {
 
 function userDictionaryPath() {
   return userDataPath("user_dictionary.json");
+}
+
+/** W14-2: 全run横断の修正ペア履歴(userData/correction_history.json)。 */
+function correctionHistoryPath() {
+  return userDataPath("correction_history.json");
+}
+
+/**
+ * 学習データ共有用のNextcloudフォルダ(<Nextcloud>/CatCut-learning)。
+ * Nextcloud同期フォルダが見つからないPCでは null(完全従来動作)。
+ * 同期フォルダの場所が特殊な場合は環境変数 CATCUT_NEXTCLOUD_DIR で上書きできる。
+ */
+function nextcloudLearningDir() {
+  const home = require("os").homedir();
+  const candidates = process.env.CATCUT_NEXTCLOUD_DIR
+    ? [process.env.CATCUT_NEXTCLOUD_DIR]
+    : [
+        path.join(home, "Desktop", "NextCloud"),
+        path.join(home, "Nextcloud"),
+        path.join(home, "NextCloud"),
+      ];
+  for (const base of candidates) {
+    if (fs.existsSync(base)) return path.join(base, "CatCut-learning");
+  }
+  return null;
+}
+
+/**
+ * AI校正へ注入する修正ペア履歴のパスを返す。
+ * Nextcloudに開発機が公開した統合学習(shared_correction_history.json)があれば
+ * ローカル学習と合成した correction_history.effective.json を生成して返し、
+ * 無ければ従来どおりローカルの correction_history.json を返す。
+ * 書き手の分離: 共有ファイルを書くのは開発機の eval_edit_learning.py だけ。
+ * 各PCはここで読むだけなのでNextcloudのコンフリクトは発生しない。
+ */
+function effectiveCorrectionHistoryPath() {
+  const localPath = correctionHistoryPath();
+  const learningDir = nextcloudLearningDir();
+  const sharedPath = learningDir ? path.join(learningDir, "shared_correction_history.json") : null;
+  if (!sharedPath || !fs.existsSync(sharedPath)) return localPath;
+  try {
+    const combined = editLearning.combineCorrectionHistories(
+      editLearning.loadCorrectionHistory(localPath),
+      editLearning.loadCorrectionHistory(sharedPath),
+    );
+    const effectivePath = userDataPath("correction_history.effective.json");
+    fs.writeFileSync(effectivePath, `${JSON.stringify(combined, null, 2)}\n`, "utf-8");
+    return effectivePath;
+  } catch {
+    return localPath;
+  }
+}
+
+/** W17: 全run横断の完全編集例(source→AI表示→編集者確定)。 */
+function editExamplesPath() {
+  return userDataPath("telop_edit_examples.json");
 }
 
 function userRulesPath() {
@@ -216,6 +887,26 @@ function sendJobEvent(event) {
   }
 }
 
+/** W19-C5: 適用(step08セグメント抽出)中の進捗をrendererへ中継する。 */
+function sendApplyProgress(percent) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("apply:progress", { percent });
+  }
+}
+
+/**
+ * W19-C4: 書き出し・適用系の子プロセスのOS優先度を下げる(nice相当)。
+ * 書き出し中もUI(プレビュー・編集操作)の応答性を優先する趣旨。
+ * 解析パイプライン(初回STT等)は対象外。失敗してもnon-fatal(優先度はそのまま)。
+ */
+function lowerChildPriority(child) {
+  try {
+    if (child?.pid) os.setPriority(child.pid, 10);
+  } catch {
+    // non-fatal: サポート外プラットフォーム・権限不足は無視
+  }
+}
+
 function appendRunLog(event) {
   const runDir = activeJob?.runDir;
   if (!runDir) return;
@@ -249,6 +940,111 @@ function readJson(filePath) {
 function writeJson(filePath, data) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+}
+
+/** W10-9: run正本へのシーン編集ドラフト(scene_edits_draft.json)のパス。 */
+function sceneEditsDraftPath(runDir) {
+  return path.join(resolveRunDir(runDir), "scene_edits_draft.json");
+}
+
+/** W14-2: run正本のシーン編集履歴(edit_history.json)のパス。 */
+function editHistoryPath(runDir) {
+  return path.join(resolveRunDir(runDir), "edit_history.json");
+}
+
+/**
+ * W14-2: テロップ編集確定(blur)の記録。run正本 edit_history.json(シーン単位・初期テキスト保持)と
+ * userData/correction_history.json(全run横断の語レベルペア・頻度カウント・LRU上限)を同時に更新する。
+ * ペアの抽出(語レベルdiff・ノイズ除外)はrenderer側(correctionPairs.ts)で済んでいる。
+ */
+function recordTelopEditLearning(input) {
+  const runDir = String(input?.runDir || "");
+  const editHistory = runDir
+    ? editLearning.recordSceneEdit(editHistoryPath(runDir), {
+        sceneId: String(input?.sceneId || ""),
+        source: String(input?.source ?? ""),
+        before: String(input?.before ?? ""),
+        after: String(input?.after ?? ""),
+      })
+    : null;
+  const pairs = Array.isArray(input?.pairs) ? input.pairs : [];
+  const correctionHistory = pairs.length
+    ? editLearning.recordCorrectionPairs(correctionHistoryPath(), pairs)
+    : editLearning.loadCorrectionHistory(correctionHistoryPath());
+  if (runDir) {
+    editLearning.recordEditExample(editExamplesPath(), {
+      run: path.basename(runDir),
+      sceneId: String(input?.sceneId || ""),
+      source: String(input?.source ?? ""),
+      before: String(input?.before ?? ""),
+      after: String(input?.after ?? ""),
+    });
+  }
+  return { editHistory, correctionHistory };
+}
+
+/** W11-2: ドラフトのオブジェクト辞書フィールド(overlayEdits/customStyles)の正規化。 */
+function sanitizeDraftRecord(raw) {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+}
+
+/**
+ * W10-9: ドラフト保存用に scenes + keepSegments + updatedAt を残す。
+ * W11-2(適用ボタン廃止): applySceneEdits の送信内容のうち scenes から導出できない
+ * overlayEdits(オーバーレイ文言の未保存編集) / customStyles(シーン個別カスタムスタイル定義)も
+ * ドラフトへ含める(version 1.1.0)。
+ */
+function sanitizeSceneEditsDraft(input) {
+  return {
+    version: "1.1.0",
+    updatedAt: new Date().toISOString(),
+    scenes: Array.isArray(input?.scenes) ? input.scenes : [],
+    keepSegments: Array.isArray(input?.keepSegments) ? input.keepSegments : [],
+    overlayEdits: sanitizeDraftRecord(input?.overlayEdits),
+    customStyles: sanitizeDraftRecord(input?.customStyles),
+  };
+}
+
+function loadSceneEditsDraft(runDir) {
+  const filePath = sceneEditsDraftPath(runDir);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const parsed = readJson(filePath);
+    return {
+      version: String(parsed.version || "1.0.0"),
+      updatedAt: String(parsed.updatedAt || ""),
+      scenes: Array.isArray(parsed.scenes) ? parsed.scenes : [],
+      keepSegments: Array.isArray(parsed.keepSegments) ? parsed.keepSegments : [],
+      // W11-2: 旧ドラフト(1.0.0)にはフィールドが無いため空辞書へフォールバック(後方互換)
+      overlayEdits: sanitizeDraftRecord(parsed.overlayEdits),
+      customStyles: sanitizeDraftRecord(parsed.customStyles),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * W19-A6: ドラフト保存の非同期化・compact化。
+ * - fs.promises.writeFile(メインプロセスのイベントループを塞がない)
+ * - JSON.stringify(インデントなし。数百シーンのpretty printはCPU/サイズとも重い)
+ * - tmp→rename のアトミック書き込み(書き込み途中のクラッシュで正本を壊さない)
+ * 読み込み(loadSceneEditsDraft)はJSON.parseなのでpretty/compact両形式を透過的に受ける。
+ */
+async function saveSceneEditsDraft(runDir, input) {
+  const resolved = resolveRunDir(runDir);
+  const draft = sanitizeSceneEditsDraft(input);
+  const filePath = sceneEditsDraftPath(resolved);
+  const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  try {
+    await fs.promises.writeFile(tmpPath, `${JSON.stringify(draft)}\n`, "utf-8");
+    await fs.promises.rename(tmpPath, filePath);
+  } catch (error) {
+    await fs.promises.rm(tmpPath, { force: true }).catch(() => {});
+    throw error;
+  }
+  return draft;
 }
 
 function defaultUserRules() {
@@ -1645,16 +2441,34 @@ function ensurePreviewServer() {
   });
 }
 
+/** フェーズU9: プレビュー配信のContent-Type(拡張子ベース)。BGM音源とサムネイル画像を追加。 */
+const PREVIEW_CONTENT_TYPES = {
+  ".mp4": "video/mp4",
+  ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  // V4(画像挿入トラック): 挿入画像のプレビュー配信で使う追加形式
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
 function servePreviewVideo(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
-  const match = url.pathname.match(/^\/video\/([A-Fa-f0-9]+)\.mp4$/);
+  // U1-6(効果音): /audio/<id>.wav はプレビュー効果音(assets/sfx/*.wav)の配信。
+  // U9: /audio/<id>.(mp3|m4a|aac) はBGM音源、/image/<id>.jpg はフィルムストリップのサムネイル。
+  // いずれも動画と同じ previewFiles レジストリを使う(登録は registerPreviewFile)。
+  const match = url.pathname.match(/^\/(video|audio|image)\/([A-Fa-f0-9]+)\.(mp4|wav|mp3|m4a|aac|jpg|jpeg|png|webp|gif)$/);
   if (!match) {
     response.writeHead(404);
     response.end("not found");
     return;
   }
 
-  const filePath = previewFiles.get(match[1]);
+  const filePath = previewFiles.get(match[2]);
   if (!filePath || !fs.existsSync(filePath)) {
     response.writeHead(404);
     response.end("video not found");
@@ -1664,7 +2478,7 @@ function servePreviewVideo(request, response) {
   const stat = fs.statSync(filePath);
   const range = request.headers.range;
   const commonHeaders = {
-    "Content-Type": "video/mp4",
+    "Content-Type": PREVIEW_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream",
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-store",
   };
@@ -1697,12 +2511,56 @@ function servePreviewVideo(request, response) {
   fs.createReadStream(filePath).pipe(response);
 }
 
-function registerPreviewVideo(filePath) {
+/**
+ * フェーズU9: 任意のローカルファイルをプレビューサーバー配信へ登録する共通処理。
+ * kind(URLの種別セグメント)と実ファイルの拡張子からURLを組み立てる。
+ */
+function registerPreviewFile(filePath, kind, urlExt) {
   const absPath = path.resolve(filePath);
   if (!fs.existsSync(absPath) || !previewServerPort) return null;
   const id = crypto.createHash("sha1").update(absPath).digest("hex").slice(0, 20);
   previewFiles.set(id, absPath);
-  return `http://127.0.0.1:${previewServerPort}/video/${id}.mp4`;
+  return `http://127.0.0.1:${previewServerPort}/${kind}/${id}${urlExt}`;
+}
+
+function registerPreviewVideo(filePath) {
+  return registerPreviewFile(filePath, "video", ".mp4");
+}
+
+/** U1-6(効果音): assets/sfx/*.wav をプレビューサーバー経由でレンダラーへ配信するURLを返す。 */
+function registerPreviewAudio(filePath) {
+  return registerPreviewFile(filePath, "audio", ".wav");
+}
+
+/** U9(BGM): 音源(mp3/wav/m4a/aac)を実拡張子つきURLで配信登録する。 */
+function registerPreviewBgmAudio(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return registerPreviewFile(filePath, "audio", PREVIEW_CONTENT_TYPES[ext] ? ext : ".mp3");
+}
+
+/** U9(フィルムストリップ): サムネイルjpgを配信登録する。 */
+function registerPreviewImage(filePath) {
+  return registerPreviewFile(filePath, "image", ".jpg");
+}
+
+/** V4(画像挿入トラック): 挿入画像(png/jpg/jpeg/webp/gif)を実拡張子つきURLで配信登録する。 */
+function registerPreviewOverlayImage(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return registerPreviewFile(filePath, "image", PREVIEW_CONTENT_TYPES[ext] ? ext : ".png");
+}
+
+/** U1-6: 同梱効果音ID一覧(remotion/src/lib/telopSfx.ts の SFX_IDS と同期)。
+ * フェーズW2: teen(映像ギミックpinchのSFX。プレビューのpinch開始で鳴らす)を追加。 */
+const PREVIEW_SFX_IDS = ["don", "shakin", "pon", "jan", "hyu", "teen"];
+
+/** U1-6: 効果音ID→プレビュー配信URLの辞書を組み立てる(存在するwavのみ)。 */
+function buildPreviewSfxUrls() {
+  const urls = {};
+  for (const sfxId of PREVIEW_SFX_IDS) {
+    const url = registerPreviewAudio(path.join(repoRoot(), "assets", "sfx", `${sfxId}.wav`));
+    if (url) urls[sfxId] = url;
+  }
+  return urls;
 }
 
 function quoteConcatPath(filePath) {
@@ -1726,17 +2584,18 @@ function ensureCutPreviewVideo(outputs, cuts) {
   if (segmentPaths.length === 1) return segmentPaths[0];
 
   const previewPath = path.join(path.dirname(outputs.composition), "preview_cut_sequence.mp4");
+  const listPath = path.join(path.dirname(outputs.composition), "preview_cut_sequence.txt");
+  const listContent = `${segmentPaths.map((segmentPath) => `file ${quoteConcatPath(segmentPath)}`).join("\n")}\n`;
   const previewExists = fs.existsSync(previewPath);
   const previewMtime = previewExists ? fs.statSync(previewPath).mtimeMs : 0;
   const sourceMtime = Math.max(...segmentPaths.map((segmentPath) => fs.statSync(segmentPath).mtimeMs));
-  if (previewExists && previewMtime >= sourceMtime) return previewPath;
+  // W11-1a(差分キャッシュ追従): セグメントは編集後もmtimeが古いまま再利用されるため、
+  // mtime比較だけでは編集(セグメント構成の変化)を検出できない。前回の結合リストと
+  // パス列が同一であることも合わせて確認する
+  const previousList = fs.existsSync(listPath) ? fs.readFileSync(listPath, "utf-8") : "";
+  if (previewExists && previewMtime >= sourceMtime && previousList === listContent) return previewPath;
 
-  const listPath = path.join(path.dirname(outputs.composition), "preview_cut_sequence.txt");
-  fs.writeFileSync(
-    listPath,
-    `${segmentPaths.map((segmentPath) => `file ${quoteConcatPath(segmentPath)}`).join("\n")}\n`,
-    "utf-8",
-  );
+  fs.writeFileSync(listPath, listContent, "utf-8");
 
   fs.mkdirSync(path.dirname(previewPath), { recursive: true });
   let result = spawnSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", previewPath], {
@@ -1775,6 +2634,31 @@ function ensureCutPreviewVideo(outputs, cuts) {
   return result.status === 0 && fs.existsSync(previewPath) ? previewPath : "";
 }
 
+function loadProjectTelopMode(projectRelativePath) {
+  try {
+    const projectPath = path.join(repoRoot(), projectRelativePath);
+    const parsed = yaml.load(fs.readFileSync(projectPath, "utf-8"));
+    return parsed?.telop?.mode === "directed" ? "directed" : "full";
+  } catch {
+    return "full";
+  }
+}
+
+/** フェーズT2: テロップ演出モード。UI設定 > 環境変数 > project.yaml の順で解決する。 */
+function resolveTelopMode(options, projectRelativePath) {
+  if (options?.telopMode === "directed" || options?.telopMode === "full") {
+    return options.telopMode;
+  }
+  const envMode = String(process.env.CATCUT_TELOP_MODE || "").trim();
+  if (envMode === "directed" || envMode === "full") return envMode;
+  return loadProjectTelopMode(projectRelativePath);
+}
+
+function normalizeTelopModeSetting(rawMode) {
+  if (rawMode === "directed" || rawMode === "full") return rawMode;
+  return process.env.CATCUT_TELOP_MODE === "directed" ? "directed" : "full";
+}
+
 function loadSettings() {
   const elevenConfigured = apiKeys.isElevenConfigured();
   if (!fs.existsSync(settingsPath())) {
@@ -1789,6 +2673,8 @@ function loadSettings() {
       outputFileName: "",
       elevenApiKeySet: elevenConfigured,
       telopTheme: "simple",
+      telopMode: normalizeTelopModeSetting(),
+      activeDesignThemeId: "",
     };
   }
 
@@ -1807,6 +2693,10 @@ function loadSettings() {
     // 生成マトリクスのテーマIDや"saved"を含む動的な文字列を取り得るため、非空文字列であれば
     // そのまま受け入れる(有効なテーマIDかどうかはレンダラー側でTHEME_IDS/SAVED_THEME_IDと突合する)。
     telopTheme: typeof raw.telopTheme === "string" && raw.telopTheme ? raw.telopTheme : "simple",
+    telopMode: normalizeTelopModeSetting(raw.telopMode),
+    // フェーズU2: 選択中のデザインテーマ(空文字=スタンダード)。どのrunでどのテーマを
+    // 使ったかの記録も兼ねる(開始時点の値がそのまま実行時マッピングに使われる)
+    activeDesignThemeId: typeof raw.activeDesignThemeId === "string" ? raw.activeDesignThemeId : "",
   };
 }
 
@@ -1840,6 +2730,19 @@ function saveSettings(input) {
         : typeof existing.telopTheme === "string" && existing.telopTheme
           ? existing.telopTheme
           : "simple",
+    telopMode:
+      input.telopMode === "directed" || input.telopMode === "full"
+        ? input.telopMode
+        : existing.telopMode === "directed" || existing.telopMode === "full"
+          ? existing.telopMode
+          : normalizeTelopModeSetting(),
+    // フェーズU2: 空文字=スタンダードも有効値のため undefined 判定で既存値と区別する
+    activeDesignThemeId:
+      input.activeDesignThemeId !== undefined
+        ? String(input.activeDesignThemeId || "")
+        : typeof existing.activeDesignThemeId === "string"
+          ? existing.activeDesignThemeId
+          : "",
   };
 
   if (input.elevenApiKey !== undefined && input.elevenApiKey !== "") {
@@ -1996,7 +2899,7 @@ function createRunName(videoPath) {
   return `${stamp}_${base || "video"}`;
 }
 
-function spawnCommand({ command, args, cwd, env, stepId }) {
+function spawnCommand({ command, args, cwd, env, stepId, lowPriority }) {
   return new Promise((resolve, reject) => {
     if (!activeJob || activeJob.cancelled) {
       reject(new Error("Job cancelled"));
@@ -2011,6 +2914,8 @@ function spawnCommand({ command, args, cwd, env, stepId }) {
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    // W19-C4: 書き出し経路(呼び出し側が指定)のみ優先度を下げる
+    if (lowPriority) lowerChildPriority(child);
     activeJob.child = child;
 
     let recentOutput = "";
@@ -2074,20 +2979,26 @@ function cleanProcessTail(output) {
   return normalized.slice(-8000);
 }
 
-function spawnUtility({ command, args, cwd, env }) {
+function spawnUtility({ command, args, cwd, env, lowPriority, onOutput }) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    // W19-C4: 書き出し・適用経路(呼び出し側が指定)のみ優先度を下げる
+    if (lowPriority) lowerChildPriority(child);
 
     let output = "";
     child.stdout.on("data", (chunk) => {
-      output += chunk.toString();
+      const text = chunk.toString();
+      output += text;
+      if (onOutput) onOutput(text);
     });
     child.stderr.on("data", (chunk) => {
-      output += chunk.toString();
+      const text = chunk.toString();
+      output += text;
+      if (onOutput) onOutput(text);
     });
 
     child.on("error", (error) => reject(error));
@@ -2123,6 +3034,9 @@ function buildOutputs(runDir) {
   const finalVideo = readRenderOutputPath(runDir) || defaultRenderOutputPath(runDir);
   return {
     runDir,
+    // フェーズW7(書き出し完了ダイアログ): レンダリング済みMP4が実在するか。
+    // job:doneは「適用のみ(renderFinal=false)」でも飛ぶため、Finder表示の判定に使う。
+    finalVideoExists: fs.existsSync(finalVideo),
     telop: path.join(runDir, "telop.txt"),
     telopReview: path.join(runDir, "telop_review.json"),
     fontDirectives: path.join(runDir, "font_directives.md"),
@@ -2167,6 +3081,35 @@ function resolveRenderOutputPath(runDir, options) {
     return ensureMp4OutputPath(options.outputPath);
   }
   return defaultRenderOutputPath(runDir);
+}
+
+/** W25: macOSの既定ファイルシステムは大文字小文字を区別しないため、パスを小文字化して同一判定する。 */
+function isSameFileCaseInsensitive(a, b) {
+  return path.resolve(String(a || "")).toLowerCase() === path.resolve(String(b || "")).toLowerCase();
+}
+
+/**
+ * W25: 元動画の上書き防止。書き出し先が元動画と同一ファイルを指す場合
+ * (例: 元動画「〜.MP4」と同じフォルダへ同名「〜.mp4」で書き出す)、
+ * 「<名前>-edited.mp4」へ自動退避する。
+ */
+function avoidSourceOverwrite(outputPath, sourceVideoPath) {
+  if (!sourceVideoPath || !isSameFileCaseInsensitive(outputPath, sourceVideoPath)) {
+    return outputPath;
+  }
+  const dir = path.dirname(outputPath);
+  const base = path.basename(outputPath, path.extname(outputPath));
+  let candidate = path.join(dir, `${base}-edited.mp4`);
+  let index = 2;
+  while (isSameFileCaseInsensitive(candidate, sourceVideoPath)) {
+    candidate = path.join(dir, `${base}-edited-${index}.mp4`);
+    index += 1;
+  }
+  sendJobEvent({
+    type: "log",
+    message: `[export] 書き出し先が元動画と同じため上書きを避けて保存します: ${candidate}\n`,
+  });
+  return candidate;
 }
 
 function buildPreviewPages(outputs) {
@@ -2318,13 +3261,14 @@ function normalizeSegmentsForProposal(segments, durationMs) {
       end_ms: Math.max(0, Math.min(safeDuration, Math.round(Number(segment.end_ms ?? segment.endMs ?? 0)))),
       text: typeof segment.text === "string" ? segment.text : "",
       scene_id: segment.scene_id ?? segment.sceneId ?? null,
+      ...([1.25, 1.5, 2].includes(Number(segment.speed)) ? { speed: Number(segment.speed) } : {}),
     }))
     .filter((segment) => segment.end_ms > segment.start_ms)
     .sort((a, b) => a.start_ms - b.start_ms);
   const merged = [];
   for (const segment of normalized) {
     const last = merged[merged.length - 1];
-    if (last && segment.start_ms <= last.end_ms) {
+    if (last && segment.start_ms <= last.end_ms && (last.speed || 1) === (segment.speed || 1)) {
       last.end_ms = Math.max(last.end_ms, segment.end_ms);
       if (segment.text) last.text = `${last.text || ""}${segment.text}`;
       continue;
@@ -2437,14 +3381,86 @@ function updateCutProposalKeepSegments(runDir, keepSegmentsInput) {
   return proposal;
 }
 
+/**
+ * フェーズW8: run直下 orientation.json(ユーザーの縦横選択の正本)。無い・読めない場合は null。
+ * 旧run(ファイルなし)は従来どおり preprocess の自動判定が使われる(完全後方互換)。
+ */
+function readRunOrientationJson(runDir) {
+  const orientationPath = path.join(runDir, "orientation.json");
+  if (!fs.existsSync(orientationPath)) return null;
+  try {
+    const data = readJson(orientationPath);
+    return data && typeof data === "object" ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** フェーズW8: orientation.json があれば step08 へ渡す --orientation 引数(無ければ空=従来動作)。 */
+function orientationArgsForRun(runDir) {
+  const orientation = sanitizeOrientation(readRunOrientationJson(runDir)?.orientation);
+  return orientation ? ["--orientation", orientation] : [];
+}
+
 function projectPathForRun(runDir) {
+  const runProjectPath = path.join(runDir, "project.yaml");
+  if (fs.existsSync(runProjectPath)) {
+    return path.relative(repoRoot(), runProjectPath);
+  }
   const preprocessPath = path.join(runDir, "step01_preprocess", "preprocess.json");
   const preprocess = fs.existsSync(preprocessPath) ? readJson(preprocessPath) : {};
-  const orientation = preprocess.orientation === "vertical" ? "vertical" : "horizontal";
+  // フェーズW8: ユーザーの縦横選択(orientation.json)を最優先し、無ければ従来どおり自動判定
+  const orientation = resolveRunOrientationValue(readRunOrientationJson(runDir), preprocess.orientation);
   return path.join("templates", `${orientation}.yaml`);
 }
 
-async function rerunCompositionAndTelop(runDir) {
+function editOverridesForSilenceTightness(tightness) {
+  if (tightness === "tight") {
+    return {
+      max_gap_ms: 180,
+      lead_padding_ms: 70,
+      tail_padding_ms: 50,
+      min_internal_silence_ms: 280,
+    };
+  }
+  if (tightness === "loose") {
+    return {
+      max_gap_ms: 1000,
+      lead_padding_ms: 280,
+      tail_padding_ms: 200,
+      min_internal_silence_ms: 800,
+    };
+  }
+  return null;
+}
+
+/**
+ * 開始画面で標準以外が選ばれた場合だけ、向き別テンプレートをrun内へ複製してeditを上書きする。
+ * テンプレート本体は変更せず、以後の再適用でもrun固有project.yamlを使う。
+ */
+function projectPathForSilenceTightness(root, runDir, templateProjectPath, tightness) {
+  const editOverrides = editOverridesForSilenceTightness(tightness);
+  if (!editOverrides) return templateProjectPath;
+
+  const templateAbsolutePath = path.join(root, templateProjectPath);
+  const parsed = yaml.load(fs.readFileSync(templateAbsolutePath, "utf-8"));
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`プロジェクト設定を読み込めません: ${templateProjectPath}`);
+  }
+
+  const project = {
+    ...parsed,
+    edit: {
+      ...(parsed.edit && typeof parsed.edit === "object" && !Array.isArray(parsed.edit) ? parsed.edit : {}),
+      ...editOverrides,
+    },
+  };
+  const runProjectPath = path.join(runDir, "project.yaml");
+  fs.writeFileSync(runProjectPath, yaml.dump(project, { noRefs: true, lineWidth: -1 }), "utf-8");
+  return path.relative(root, runProjectPath);
+}
+
+async function rerunCompositionAndTelop(runDir, options = {}) {
   const root = repoRoot();
   const python = path.join(root, ".venv", "bin", "python");
   if (!fs.existsSync(python)) throw new Error(`Python venv not found: ${python}`);
@@ -2456,41 +3472,84 @@ async function rerunCompositionAndTelop(runDir) {
   const project = projectPathForRun(runDir);
   // フェーズT2.5-4: ユーザーのtype→presetマッピング(userData)があればstep08へ渡す。
   // directedモードのスロットは実行のたびに最新マッピングでスタイルが再解決される。
-  const typeMappingFile = telopTypeMappingPath();
-  const typeMappingArgs = fs.existsSync(typeMappingFile) ? ["--type-mapping", typeMappingFile] : [];
+  // フェーズU2: アクティブなデザインテーマがあればテーマの type_styles を優先する。
+  const typeMappingArgs = effectiveTypeMappingArgs();
+  const sourceVideoPath = preprocess.video_path || source.composition?.meta?.source_video || "";
+  const step08Args = [
+    "python/step08_composition.py",
+    "--proposal",
+    path.join(relRunDir, "step07_cut_proposal", "cut_proposal.json"),
+    "--stt",
+    sttPath,
+    "--video",
+    sourceVideoPath,
+    "--output",
+    path.join(relRunDir, "step08_composition"),
+    "--project",
+    project,
+    "--review",
+    reviewPath,
+    ...typeMappingArgs,
+    // フェーズV2: run単位 op_config.json を正本に使う(無ければテーマ設定から生成)
+    ...opConfigArgs(runDir),
+    // フェーズW8: ユーザーの縦横選択(orientation.json)をキャンバスへ反映する
+    ...orientationArgsForRun(runDir),
+  ];
+
+  // W19-C2: step08の入力を決めるものの合成ハッシュ。前回成功時と一致し、
+  // composition.jsonと全セグメントファイルが実在すればstep08・extract_telop・
+  // review_telopを丸ごとスキップする(編集差分ゼロの書き出しを数秒にする)。
+  // 旧run(ハッシュファイル無し)・不一致・欠損は従来どおり実行=完全後方互換。
+  const typeMappingIndex = typeMappingArgs.indexOf("--type-mapping");
+  const inputHash = computeStep08InputHash({
+    runDir,
+    keepSegments: Array.isArray(source.proposal?.keep_segments) ? source.proposal.keep_segments : [],
+    step08Args,
+    sourceVideoPath,
+    sttPath: source.sttPath,
+    reviewPath: path.join(runDir, "step06_review", "review.json"),
+    typeMappingPath: typeMappingIndex >= 0 ? typeMappingArgs[typeMappingIndex + 1] : "",
+    // 非directedモードのシーン本文上書き。skip時はtelop.txtが再生成されないため、
+    // 「上書き→autoへ戻す」変更を確実に再実行へ倒す(step08Hash.cjsのコメント参照)
+    telopOverrides: options.telopOverrides,
+  });
+  if (canSkipStep08(runDir, inputHash.hash)) {
+    console.log(`step08 skipped (no changes): ${runDir}`);
+    sendJobEvent({ type: "log", message: "step08 skipped (no changes)\n" });
+    return;
+  }
+
   await spawnUtility({
     command: python,
-    args: [
-      "python/step08_composition.py",
-      "--proposal",
-      path.join(relRunDir, "step07_cut_proposal", "cut_proposal.json"),
-      "--stt",
-      sttPath,
-      "--video",
-      preprocess.video_path || source.composition?.meta?.source_video || "",
-      "--output",
-      path.join(relRunDir, "step08_composition"),
-      "--project",
-      project,
-      "--review",
-      reviewPath,
-      ...typeMappingArgs,
-    ],
+    args: step08Args,
     cwd: root,
     env: apiKeys.buildPipelineEnv(),
+    // W19-C4: 適用中もUI応答性を優先する(優先度を下げる)
+    lowPriority: true,
+    // W19-C5: step08のセグメント抽出進捗(Progress: <n>%)を適用中UIへ中継する。
+    // Remotionレンダリングの Progress: パース(handleProcessOutput)とは経路が別で衝突しない。
+    onOutput: (text) => {
+      const matches = [...text.matchAll(/Progress:\s*(\d+)%/g)];
+      if (matches.length) sendApplyProgress(Number(matches[matches.length - 1][1]));
+    },
   });
   await spawnUtility({
     command: python,
     args: ["python/tools/extract_telop.py", relRunDir],
     cwd: root,
     env: apiKeys.buildPipelineEnv(),
+    lowPriority: true,
   });
   await spawnUtility({
     command: python,
     args: ["python/tools/review_telop.py", relRunDir, "--dictionary", "templates/domain_dictionary.yaml"],
     cwd: root,
     env: apiKeys.buildPipelineEnv(),
+    lowPriority: true,
   });
+
+  // 成功時のみ保存する(途中失敗した実行を「変更なし」と誤判定しないため)
+  writeStep08InputHash(runDir, inputHash);
 }
 
 async function rerunCutProposalWithGap(runDir, maxGapMs) {
@@ -2551,6 +3610,7 @@ function buildTelopPageBoundaries(source) {
     const segment = keepSegments[index];
     if (!segment) return;
     const segStartMs = Number(segment.start_ms || 0);
+    const segmentSpeed = [1.25, 1.5, 2].includes(Number(segment.speed)) ? Number(segment.speed) : 1;
     const words = Array.isArray(cut?.voice?.words) ? cut.voice.words : [];
     const telops = Array.isArray(cut?.telops) ? cut.telops : [];
     const timelineCut = timelineCuts[index];
@@ -2560,8 +3620,8 @@ function buildTelopPageBoundaries(source) {
       let startMs = null;
       let endMs = null;
       if (directed && typeof telop?.start === "number" && typeof telop?.end === "number") {
-        startMs = segStartMs + Math.round(Number(telop.start) * 1000);
-        endMs = segStartMs + Math.round(Number(telop.end) * 1000);
+        startMs = segStartMs + Math.round(Number(telop.start) * 1000 * segmentSpeed);
+        endMs = segStartMs + Math.round(Number(telop.end) * 1000 * segmentSpeed);
       } else {
         const indices = Array.isArray(telop?.word_indices) ? telop.word_indices : [];
         if (!indices.length) continue;
@@ -2570,8 +3630,8 @@ function buildTelopPageBoundaries(source) {
         const firstWord = words[minIndex];
         const lastWord = words[maxIndex];
         if (!firstWord || !lastWord) continue;
-        startMs = segStartMs + Math.round(Number(firstWord.start || 0) * 1000);
-        endMs = segStartMs + Math.round(Number(lastWord.end || 0) * 1000);
+        startMs = segStartMs + Math.round(Number(firstWord.start || 0) * 1000 * segmentSpeed);
+        endMs = segStartMs + Math.round(Number(lastWord.end || 0) * 1000 * segmentSpeed);
       }
       if (endMs <= startMs) continue;
       const timelinePage = timelinePages[pageIndex];
@@ -2585,9 +3645,30 @@ function buildTelopPageBoundaries(source) {
           ? telop.type
           : "";
       const styleOverridden = Boolean(directed && telop?.style_overridden);
+      // フェーズT3: UIピッカー由来のアニメ上書き(animation_overridden)のみシーンへ復元する。
+      // マッピング・プリセット既定由来の解決結果は復元しない(シーンは「上書きなし」のまま
+      // 最新のマッピングに追従させるため)。
+      const animationIn =
+        directed &&
+        telop?.animation_overridden &&
+        typeof telop?.animation_in === "string" &&
+        TELOP_ANIMATION_IN_TYPES.includes(telop.animation_in)
+          ? telop.animation_in
+          : "";
+      // シーン検品で明示指定した映像演出だけを復元する。自動選定結果は
+      // timeline.video_effects 側にしか無く、シーンの上書き状態にはしない。
+      const videoEffectOverride =
+        directed &&
+        telop?.video_effect_overridden &&
+        typeof telop?.video_effect === "string" &&
+        ["none", "pinch", "zoom", "dim", "face_zoom", "slow_push"].includes(telop.video_effect)
+          ? telop.video_effect
+          : "";
       const highlightWords = Array.isArray(telop?.highlight_words)
         ? telop.highlight_words.map(String).filter(Boolean)
         : [];
+      // フェーズW1: スロットの話者ID(composition telops[].speaker 由来。旧runはなし)
+      const speaker = directed && typeof telop?.speaker === "string" && telop.speaker ? telop.speaker : "";
       boundaries.push({
         startMs,
         endMs,
@@ -2595,12 +3676,57 @@ function buildTelopPageBoundaries(source) {
         ...(styleId ? { styleId } : {}),
         ...(typeId ? { typeId } : {}),
         ...(styleOverridden ? { styleOverridden: true } : {}),
+        ...(animationIn ? { animationIn } : {}),
+        ...(videoEffectOverride ? { videoEffectOverride } : {}),
         ...(styleId && highlightWords.length ? { highlightWords } : {}),
+        ...(speaker ? { speaker } : {}),
       });
     }
   });
   boundaries.sort((a, b) => a.startMs - b.startMs);
   return boundaries;
+}
+
+/**
+ * U1-5(オーバーレイのプレビュー写像): timeline.cuts[i](書き出し後タイムラインms)と
+ * proposal.keep_segments[i](元動画の絶対ms)の対応表を組み立てる。
+ * step08_composition.py が keep_segments と同じ順序(startMs昇順)で cut_001, cut_002, ... を
+ * 割り当てる前提(buildTelopPageBoundariesと同じ)を利用する。
+ * レンダラー側は lib/previewTimeline.ts の sourceMsToTimelineMs でオーバーレイ表示判定に使う。
+ */
+function buildTimelineCutRanges(source) {
+  const keepSegments = Array.isArray(source.proposal?.keep_segments) ? source.proposal.keep_segments : [];
+  const timelineCuts = Array.isArray(source.composition?.timeline?.cuts) ? source.composition.timeline.cuts : [];
+  const ranges = [];
+  timelineCuts.forEach((cut, index) => {
+    const segment = keepSegments[index];
+    if (!segment) return;
+    const sourceStartMs = Number(segment.start_ms || 0);
+    const sourceEndMs = Number(segment.end_ms || 0);
+    const timelineStartMs = Number(cut?.timeline?.start_ms);
+    const timelineEndMs = Number(cut?.timeline?.end_ms);
+    if (!Number.isFinite(timelineStartMs) || !Number.isFinite(timelineEndMs)) return;
+    if (sourceEndMs <= sourceStartMs || timelineEndMs <= timelineStartMs) return;
+    const entry = { sourceStartMs, sourceEndMs, timelineStartMs, timelineEndMs };
+    const speed = Number(cut?.video?.speed ?? segment.speed);
+    if ([1.25, 1.5, 2].includes(speed)) entry.speed = speed;
+    // フェーズW24 Phase A-2: cut単位のテロップ縦位置(縦型の顔回避配置)をプレビューへ転写する。
+    // 無い既存run(横型・旧縦型)はキー自体を付けない=グローバルtelop_yのまま(後方互換)。
+    const cutTelopY = Number(cut?.telop_y);
+    if (Number.isFinite(cutTelopY) && cutTelopY >= 0 && cutTelopY <= 1) entry.telopY = cutTelopY;
+    // フェーズW26: cut単位のパンチイン(交互ズーム)をプレビューへ転写する。
+    // 無い既存run・横型はキー自体を付けない=変形なし(後方互換)。
+    const punchScale = Number(cut?.punch_scale);
+    if (Number.isFinite(punchScale) && punchScale > 1) {
+      entry.punchScale = punchScale;
+      const originX = Number(cut?.punch_origin?.x);
+      const originY = Number(cut?.punch_origin?.y);
+      if (Number.isFinite(originX)) entry.punchOriginX = originX;
+      if (Number.isFinite(originY)) entry.punchOriginY = originY;
+    }
+    ranges.push(entry);
+  });
+  return ranges;
 }
 
 /** フェーズT2: このrunがdirectedモード(演出ディレクティブ駆動)かどうか。 */
@@ -2633,6 +3759,7 @@ function loadTranscriptEditorState(runDir) {
     ? source.proposal.keep_segments.map((segment) => ({
         startMs: Number(segment.start_ms || 0),
         endMs: Number(segment.end_ms || 0),
+        ...([1.25, 1.5, 2].includes(Number(segment.speed)) ? { speed: Number(segment.speed) } : {}),
       }))
     : [];
   // 改善10: step07が既に除去したフィラー(removed_word_ids)は「カットされずに残っています」
@@ -2663,6 +3790,8 @@ function loadTranscriptEditorState(runDir) {
       endMs: Number(word.end_ms || word.start_ms || 0),
       sentenceId,
       confidence: word.confidence == null ? 1 : Number(word.confidence),
+      // フェーズW1: diarize時の話者ID(speaker無しの旧runはフィールドなし=後方互換)
+      ...(typeof word.speaker === "string" && word.speaker ? { speaker: word.speaker } : {}),
     };
   });
   const sentences = source.sentences.map((sentence, index) => ({
@@ -2687,6 +3816,14 @@ function loadTranscriptEditorState(runDir) {
   const sourceVideoPath = String(source.preprocess?.video_path || source.composition?.meta?.source_video || "");
   const sourceVideoUrl = sourceVideoPath && previewServerPort ? registerPreviewVideo(sourceVideoPath) || "" : "";
 
+  // W19-B1: 弱区間の再文字起こし(step05b)の差分候補。旧run(ファイル無し)は空=完全従来動作。
+  const retranscribePath = path.join(resolved, "step05b_retranscribe", "retranscribe.json");
+  const retranscribeRaw = fs.existsSync(retranscribePath) ? readJson(retranscribePath) : null;
+  const retranscribe = {
+    enabled: Boolean(retranscribeRaw?.enabled),
+    items: Array.isArray(retranscribeRaw?.items) ? retranscribeRaw.items : [],
+  };
+
   const aiReviewPath = path.join(resolved, "step05_ai_retake", "ai_review.json");
   const refinePath = path.join(resolved, "step06b_ai_refine", "refine.json");
   const aiReviewRaw = fs.existsSync(aiReviewPath) ? readJson(aiReviewPath) : null;
@@ -2697,6 +3834,8 @@ function loadTranscriptEditorState(runDir) {
   const aiReview = {
     enabled: aiReviewEnabled,
     transcriptNeedsReview: Array.isArray(aiReviewRaw?.needs_review) ? aiReviewRaw.needs_review : [],
+    // W5-2: step05のAI疑義ワード(文脈上あやしい語)。旧runのai_review.jsonには無い=空配列。
+    suspectWords: Array.isArray(aiReviewRaw?.suspect_words) ? aiReviewRaw.suspect_words : [],
     telopNeedsReview: Array.isArray(refineRaw?.needs_review) ? refineRaw.needs_review : [],
     dismissedFindingIds: Array.isArray(refineRaw?.dismissed_finding_ids)
       ? refineRaw.dismissed_finding_ids.map(String)
@@ -2763,7 +3902,57 @@ function loadTranscriptEditorState(runDir) {
     // フェーズT2: directedモード(演出ディレクティブ駆動)かどうか。UIのスタイルバッジ表示に使う。
     telopMode: isDirectedTelopMode(source) ? "directed" : "full",
     aiReview,
+    // W19-B1: 再文字起こしの差分候補(要確認パネルの種別 retranscribe に出す)。
+    retranscribe,
     wordSplitFlags,
+    // --- フェーズU1(プレビュー忠実化): 書き出しと同じ見た目に必要なcomposition情報 ---
+    // U1-3: 縦位置(0〜1の中心基準)とコンポジション高さ(クランプ計算用)。
+    telopY: Number(source.composition?.timeline?.telop_y ?? 0.5),
+    telopBaseHeight: Number(source.composition?.meta?.display_height || 720),
+    // フェーズW8(キャンバス基準プレビュー): コンポジションのキャンバス寸法。
+    // telopBase* と違い既定値を持たず、composition未生成時は0(プレビューは
+    // video intrinsic基準へフォールバックする)。
+    canvasWidth: Number(source.composition?.meta?.display_width || 0),
+    canvasHeight: Number(source.composition?.meta?.display_height || 0),
+    // フェーズW9(映像フレーミング): ソース動画の表示解像度(rotation適用後)。
+    // composition meta.source_*(W8で追加)優先、無い旧runは preprocess の display_* へ
+    // フォールバック(どちらも無ければ0=プレビューはキャンバス寸法とみなす)。
+    sourceWidth: Number(
+      source.composition?.meta?.source_width || source.preprocess?.display_width || 0,
+    ),
+    sourceHeight: Number(
+      source.composition?.meta?.source_height || source.preprocess?.display_height || 0,
+    ),
+    // フェーズW9: run正本 video_framing.json の正規化済みフレーミング(無ければidentity)。
+    videoFraming: loadVideoFramingForRun(resolved),
+    // U1-6: アニメ長さ換算(frames→ms)用fpsと、timeline既定の登場アニメ(旧popIn等互換)。
+    timelineFps: Number(source.composition?.timeline?.fps || 30),
+    timelineAnimationIn: String(source.composition?.timeline?.animation_in || "none"),
+    // U1-6: 効果音の音量(composition準拠)と同梱wavのプレビュー配信URL。
+    sfxVolume: Number(source.composition?.timeline?.sfx_volume ?? 0.25),
+    sfxUrls: buildPreviewSfxUrls(),
+    // U1-1: 書き出し時に実際に使われるスタイル辞書(directedプリセット解決の第一候補)。
+    telopStyles:
+      source.composition?.timeline?.telop_styles && typeof source.composition.timeline.telop_styles === "object"
+        ? source.composition.timeline.telop_styles
+        : {},
+    defaultTelopStyle: String(source.composition?.timeline?.default_telop_style || "default"),
+    // U1-5: オーバーレイ(タイムラインms基準)と、元動画ms⇔タイムラインmsの対応表。
+    overlays: Array.isArray(source.composition?.timeline?.overlays)
+      ? source.composition.timeline.overlays
+      : [],
+    timelineCutRanges: buildTimelineCutRanges(source),
+    // U9(BGMトラック): タイムライン総尺(OP含む)。BGMクリップUIの横軸スケールに使う。
+    timelineDurationMs: Math.max(0, Math.round(Number(source.composition?.timeline?.total_duration_ms) || 0)),
+    // V1(タイムラインView): timeline.op(U8)。映像トラック先頭のOPグループブロック表示用
+    // (正規化はレンダラー側 lib/timelineLayout.ts の normalizeTimelineOp が行う)。
+    timelineOp: source.composition?.timeline?.op ?? null,
+    // フェーズW2: シーン映像ギミック(pinch/zoom。タイムラインms基準)。
+    // 正規化はレンダラー側 lib/videoEffects.ts の normalizeVideoEffects が行う。
+    // video_effects の無い既存compositionは空配列=効果なし。
+    videoEffects: Array.isArray(source.composition?.timeline?.video_effects)
+      ? source.composition.timeline.video_effects
+      : [],
   };
 }
 
@@ -2794,8 +3983,28 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
     const startMs = Math.round(Number(edit?.startMs ?? 0));
     const endMs = Math.round(Number(edit?.endMs ?? 0));
     const text = String(edit?.text || "").trim();
-    if (endMs <= startMs || !text) return;
+    if (endMs <= startMs) return;
     const existing = findExisting(startMs, endMs);
+    // テロップ空欄のシーン(相槌の自動空欄=W10-7・ユーザーの文言削除)は「テロップなし」の
+    // 明示マーカーとして残す(step06cのdrop:trueと同形)。スロットごと落とすと、step08が
+    // 「スロットの無いカット」としてSTTテキストからテロップを自動再生成してしまい、
+    // 消したはずの文言が書き出しに復活する(実機FB「一番最後のテキストが削除しても残り続ける」)。
+    if (!text) {
+      nextSlots.push({
+        slot_id: existing?.slot_id || `ui_s${String(index + 1).padStart(3, "0")}`,
+        cut_id: existing?.cut_id || "",
+        source_start_ms: startMs,
+        source_end_ms: endMs,
+        source_text: existing?.source_text ?? "",
+        text: "",
+        style: typeof edit?.styleId === "string" && edit.styleId ? edit.styleId : "fact_yellow",
+        ...(typeof existing?.speaker === "string" && existing.speaker ? { speaker: existing.speaker } : {}),
+        highlight_words: [],
+        fallback: false,
+        dropped: true,
+      });
+      return;
+    }
     const highlightWords = Array.isArray(edit?.highlightWords)
       ? edit.highlightWords.map(String).filter((word) => word && text.includes(word))
       : [];
@@ -2803,6 +4012,17 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
     // type×最新マッピングで再解決される(styleはtypeを読めない旧経路向けのスナップショット)。
     const typeId =
       typeof edit?.typeId === "string" && TELOP_SEMANTIC_TYPES.includes(edit.typeId) ? edit.typeId : "";
+    // フェーズT3: アニメーションピッカーの個別上書き。slots[].animation_in の存在=上書きであり、
+    // 未指定(null)のスロットは書かない(step08がtype×マッピング→プリセット既定で解決する)。
+    const animationIn =
+      typeof edit?.animationIn === "string" && TELOP_ANIMATION_IN_TYPES.includes(edit.animationIn)
+        ? edit.animationIn
+        : "";
+    const videoEffectOverride =
+      typeof edit?.videoEffectOverride === "string" &&
+      ["none", "pinch", "zoom"].includes(edit.videoEffectOverride)
+        ? edit.videoEffectOverride
+        : "";
     nextSlots.push({
       slot_id: existing?.slot_id || `ui_s${String(index + 1).padStart(3, "0")}`,
       cut_id: existing?.cut_id || "",
@@ -2811,8 +4031,12 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
       source_text: existing?.source_text ?? text,
       text,
       style: typeof edit?.styleId === "string" && edit.styleId ? edit.styleId : "fact_yellow",
+      // フェーズW1: 話者IDはUIで編集しないため既存スロットから引き継ぐ(無ければ書かない)
+      ...(typeof existing?.speaker === "string" && existing.speaker ? { speaker: existing.speaker } : {}),
       ...(typeId ? { type: typeId } : {}),
       ...(edit?.styleOverridden ? { style_overridden: true } : {}),
+      ...(animationIn ? { animation_in: animationIn } : {}),
+      ...(videoEffectOverride ? { video_effect: videoEffectOverride } : {}),
       highlight_words: highlightWords,
       fallback: false,
     });
@@ -2820,6 +4044,79 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
   if (!nextSlots.length) return false;
 
   directives.slots = nextSlots;
+  directives.edited_by_ui = true;
+  directives.updated_at = new Date().toISOString();
+  writeJson(directivesPath, directives);
+  return true;
+}
+
+/**
+ * フェーズU6(詳細エディタ): シーン個別カスタムスタイルの定義を telop_directives.json の
+ * custom_styles へマージ保存する。step08 が composition の telop_styles へ注入し、
+ * スロットの style=custom_scene_* が directed の sanitize で許可される。
+ * 上書きのみ行い削除はしない(過去シーンが参照している定義を消さないため)。
+ */
+function applyCustomStylesToDirectives(runDir, customStyles) {
+  const sanitized = sanitizeCustomStyles(customStyles);
+  if (!Object.keys(sanitized).length) return false;
+  const directivesPath = path.join(runDir, "telop_directives.json");
+  if (!fs.existsSync(directivesPath)) return false;
+  const directives = readJson(directivesPath);
+  directives.custom_styles = { ...(directives.custom_styles || {}), ...sanitized };
+  directives.edited_by_ui = true;
+  directives.updated_at = new Date().toISOString();
+  writeJson(directivesPath, directives);
+  return true;
+}
+
+/**
+ * U1-5(オーバーレイの文言編集): プレビューでクリック編集したオーバーレイ文言を
+ * telop_directives.json へ書き戻す(スロット編集と同じ「directives書き戻し→step08再実行」経路)。
+ * - chapter_title(id=chapter_XX)は directives.chapters[].title を書き換える
+ * - それ以外(profile_card等)は directives.overlays[] の text / subtitle を書き換える
+ *   (lines を持つ list_stack / cta_banner は text の改行split で lines も更新する)
+ * 戻り値は実際に書き換えを行ったかどうか。
+ */
+function applyOverlayEditsToDirectives(runDir, overlayEdits) {
+  if (!Array.isArray(overlayEdits) || !overlayEdits.length) return false;
+  const directivesPath = path.join(runDir, "telop_directives.json");
+  if (!fs.existsSync(directivesPath)) return false;
+  const directives = readJson(directivesPath);
+  const chapters = Array.isArray(directives.chapters) ? directives.chapters : [];
+  const overlays = Array.isArray(directives.overlays) ? directives.overlays : [];
+  let changed = false;
+
+  for (const edit of overlayEdits) {
+    const overlayId = String(edit?.id || "");
+    if (!overlayId) continue;
+    const chapter = chapters.find((entry) => String(entry?.id || "") === overlayId);
+    if (chapter) {
+      const title = typeof edit.text === "string" ? edit.text.trim() : "";
+      if (title && title !== String(chapter.title || "")) {
+        chapter.title = title;
+        changed = true;
+      }
+      continue;
+    }
+    const overlay = overlays.find((entry) => String(entry?.id || "") === overlayId);
+    if (!overlay) continue;
+    if (typeof edit.text === "string") {
+      const text = edit.text.trim();
+      if (text && text !== String(overlay.text || "")) {
+        overlay.text = text;
+        if (Array.isArray(overlay.lines) && overlay.lines.length) {
+          overlay.lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+        }
+        changed = true;
+      }
+    }
+    if (typeof edit.subtitle === "string" && edit.subtitle.trim() !== String(overlay.subtitle || "")) {
+      overlay.subtitle = edit.subtitle.trim();
+      changed = true;
+    }
+  }
+
+  if (!changed) return false;
   directives.edited_by_ui = true;
   directives.updated_at = new Date().toISOString();
   writeJson(directivesPath, directives);
@@ -2959,8 +4256,13 @@ async function applyTranscriptKeepSegments(input) {
   updateCutProposalKeepSegments(resolved, input?.keepSegments || []);
   // フェーズT2(directedモード): step08はtelop_directives.jsonを読むため、再実行前に
   // UIのスロット編集(文言・スタイル・強調語)をディレクティブへ書き戻しておく。
+  // フェーズU6: シーン個別カスタムスタイル定義を先に保存する(スロットのstyle=custom_scene_*
+  // が定義とセットでstep08に届くようにするため)。
+  applyCustomStylesToDirectives(resolved, input?.customStyles);
   const directedApplied = applyDirectedSlotEditsToDirectives(resolved, input?.directedSlots);
-  await rerunCompositionAndTelop(resolved);
+  // U1-5: オーバーレイのクリック文言編集も同じタイミングでディレクティブへ書き戻す。
+  applyOverlayEditsToDirectives(resolved, input?.overlayEdits);
+  await rerunCompositionAndTelop(resolved, { telopOverrides: input?.telopOverrides });
 
   // directedモードではスロット由来のtelopsが正であり、telop.txt経由の上書き
   // (apply_telop.pyのword再マッピング)を通すと明示タイミング・スタイルが崩れるため通さない。
@@ -3032,6 +4334,144 @@ function resolveRunDir(inputRunDir) {
     throw new Error(`作業フォルダが見つかりません: ${resolved}`);
   }
   return resolved;
+}
+
+// --- フェーズW7: プロジェクト一覧(検品段階からの再編集) ---
+// runs/<run>/ を「プロジェクト」として扱う。検品UIを開くのに必要なファイルが
+// 揃っている(=パイプラインがstep08まで到達した)runだけを一覧に出す。
+
+const PROJECT_META_FILE = "project_meta.json";
+
+function projectMetaPath(runDir) {
+  return path.join(runDir, PROJECT_META_FILE);
+}
+
+function readProjectMeta(runDir) {
+  const metaPath = projectMetaPath(runDir);
+  if (!fs.existsSync(metaPath)) return null;
+  try {
+    return readJson(metaPath);
+  } catch {
+    return null;
+  }
+}
+
+/** runフォルダ名の先頭タイムスタンプ(YYYYMMDD_HHMMSS)から作成日時msを復元する */
+function runCreatedAtMs(runName, runDir) {
+  const match = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(runName);
+  if (match) {
+    const date = new Date(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6]),
+    );
+    if (!Number.isNaN(date.getTime())) return date.getTime();
+  }
+  try {
+    const stat = fs.statSync(runDir);
+    return stat.birthtimeMs || stat.mtimeMs || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** filmstripキャッシュの先頭フレームをサムネイルとして返す(無ければ空文字) */
+function projectThumbnailDataUrl(runDir) {
+  try {
+    const dir = path.join(runDir, "ui_cache", "filmstrip");
+    if (!fs.existsSync(dir)) return "";
+    const first = fs
+      .readdirSync(dir)
+      .filter((name) => /\.(jpe?g|png|webp)$/i.test(name))
+      .sort()[0];
+    if (!first) return "";
+    const buffer = fs.readFileSync(path.join(dir, first));
+    if (buffer.length > 512 * 1024) return "";
+    const ext = path.extname(first).toLowerCase();
+    const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+    return `data:${mime};base64,${buffer.toString("base64")}`;
+  } catch {
+    return "";
+  }
+}
+
+function projectSummaryForRun(runDir) {
+  const runName = path.basename(runDir);
+  const required = [
+    path.join(runDir, "step01_preprocess", "preprocess.json"),
+    path.join(runDir, "step07_cut_proposal", "cut_proposal.json"),
+    path.join(runDir, "step08_composition", "composition.json"),
+  ];
+  if (!required.every((file) => fs.existsSync(file))) return null;
+
+  let preprocess;
+  try {
+    preprocess = readJson(required[0]);
+  } catch {
+    return null;
+  }
+  const meta = readProjectMeta(runDir);
+  const sourceVideoPath = String(preprocess.video_path || "");
+  const finalVideo = readRenderOutputPath(runDir) || defaultRenderOutputPath(runDir);
+  const createdAtMs = runCreatedAtMs(runName, runDir);
+  let updatedAtMs = createdAtMs;
+  try {
+    updatedAtMs = Math.max(createdAtMs, fs.statSync(required[1]).mtimeMs || 0);
+  } catch {
+    // cut_proposal.jsonのstatに失敗しても作成日時で代用できる
+  }
+
+  return {
+    runDir,
+    runName,
+    title: String(meta?.title || extractRunTitle(runDir) || runName),
+    createdAtMs,
+    updatedAtMs,
+    durationMs: Math.round(Number(preprocess.metadata?.duration_ms || 0)),
+    sourceVideoPath,
+    sourceVideoExists: Boolean(sourceVideoPath && fs.existsSync(sourceVideoPath)),
+    exportedVideoPath: fs.existsSync(finalVideo) ? finalVideo : "",
+    saved: Boolean(meta?.saved),
+    thumbnailDataUrl: projectThumbnailDataUrl(runDir),
+  };
+}
+
+function listProjects() {
+  const runsRoot = path.join(repoRoot(), "runs");
+  if (!fs.existsSync(runsRoot)) return { projects: [] };
+  const projects = [];
+  for (const entry of fs.readdirSync(runsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const summary = projectSummaryForRun(path.join(runsRoot, entry.name));
+    if (summary) projects.push(summary);
+  }
+  projects.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+  return { projects };
+}
+
+function saveProjectMeta(input) {
+  const runDir = resolveRunDir(input?.runDir);
+  const existing = readProjectMeta(runDir) || {};
+  const next = {
+    version: 1,
+    saved: true,
+    title: String(input?.title ?? existing.title ?? extractRunTitle(runDir) ?? ""),
+    savedAt: new Date().toISOString(),
+  };
+  writeJson(projectMetaPath(runDir), next);
+  return next;
+}
+
+function deleteProject(input) {
+  const runDir = resolveRunDir(input?.runDir);
+  if (activeJob && activeJob.runDir === runDir) {
+    throw new Error("このプロジェクトはジョブ実行中のため削除できません");
+  }
+  fs.rmSync(runDir, { recursive: true, force: true });
+  return { ok: true };
 }
 
 // --- Phase C (C-1): 波形データ生成 ---
@@ -3154,6 +4594,540 @@ async function generateWaveformForRun(runDir, options = {}) {
   return { binMs, sampleRate: WAVEFORM_SAMPLE_RATE, durationMs, peaks, cached: false };
 }
 
+// --- フェーズU9: フィルムストリップ(サムネイル帯) ---
+
+// 全体ナビ幅に敷き詰める枚数と高さ。48枚あればホバー追従でも「動いて見える」粒度になり、
+// 生成時間(1枚あたりffmpeg高速シーク1回)とのバランスも良い。
+const FILMSTRIP_FRAME_COUNT = 48;
+const FILMSTRIP_FRAME_HEIGHT = 54;
+const FILMSTRIP_CACHE_VERSION = 1;
+
+function filmstripCacheDir(runDir) {
+  // waveform(ui_cache/waveform.json)と同じUIキャッシュ置き場に集約する
+  return path.join(runDir, "ui_cache", "filmstrip");
+}
+
+/** 元動画のパス(preprocess.json優先、無ければcomposition metaへフォールバック)。 */
+function resolveRunSourceVideoPath(runDir) {
+  const preprocessPath = path.join(runDir, "step01_preprocess", "preprocess.json");
+  if (fs.existsSync(preprocessPath)) {
+    try {
+      const preprocess = readJson(preprocessPath);
+      if (preprocess?.video_path && fs.existsSync(preprocess.video_path)) return preprocess.video_path;
+    } catch {
+      // 壊れたpreprocess.jsonはcompositionへフォールバック
+    }
+  }
+  const compositionPath = path.join(runDir, "step08_composition", "composition.json");
+  if (fs.existsSync(compositionPath)) {
+    try {
+      const composition = readJson(compositionPath);
+      const source = composition?.meta?.source_video;
+      if (source && fs.existsSync(source)) return source;
+    } catch {
+      // 読めない場合はnull
+    }
+  }
+  return null;
+}
+
+/** ffprobeでメディアの長さ(ms)を取得する。失敗時はnull。 */
+function probeMediaDurationMs(filePath) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", filePath],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.on("error", () => resolve(null));
+    child.on("close", (code) => {
+      const seconds = parseFloat(stdout.trim());
+      resolve(code === 0 && Number.isFinite(seconds) ? Math.round(seconds * 1000) : null);
+    });
+  });
+}
+
+/** ffmpeg高速シーク(-ss を -i より前)で1フレームだけサムネイルを抽出する。 */
+function extractFilmstripFrame(videoPath, timeMs, outPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "ffmpeg",
+      [
+        "-y",
+        "-ss", String(timeMs / 1000),
+        "-i", videoPath,
+        "-frames:v", "1",
+        "-vf", `scale=-2:${FILMSTRIP_FRAME_HEIGHT}`,
+        "-q:v", "4",
+        "-loglevel", "error",
+        outPath,
+      ],
+      { stdio: ["ignore", "ignore", "pipe"] },
+    );
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => reject(error));
+    child.on("close", (code) => {
+      if (code === 0 && fs.existsSync(outPath)) resolve();
+      else reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
+    });
+  });
+}
+
+/**
+ * 指定runのフィルムストリップ(等間隔サムネイル一式)を生成する(またはキャッシュから返す)。
+ * waveformキャッシュと同方式: runDir/ui_cache/filmstrip/ にjpg+manifestを保存し、
+ * 元動画の更新日時・サイズ・設定が一致する限り再利用する(2回目以降は即時返却)。
+ * 全編を1回デコードするのではなく枚数分の高速シーク抽出(60分素材でも数秒〜十数秒)。
+ */
+async function generateFilmstripForRun(runDir) {
+  const resolved = resolveRunDir(runDir);
+  const videoPath = resolveRunSourceVideoPath(resolved);
+  if (!videoPath) throw new Error("元動画が見つかりません(step01_preprocess/preprocess.json)");
+  const videoStat = fs.statSync(videoPath);
+  const cacheDir = filmstripCacheDir(resolved);
+  const manifestPath = path.join(cacheDir, "filmstrip.json");
+
+  const toResponse = (manifest, cached) => ({
+    count: manifest.frames.length,
+    height: manifest.height,
+    durationMs: manifest.durationMs,
+    frames: manifest.frames
+      .map((frame) => ({
+        ms: frame.ms,
+        url: registerPreviewImage(path.join(cacheDir, frame.file)),
+      }))
+      .filter((frame) => Boolean(frame.url)),
+    cached,
+  });
+
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const cachedManifest = readJson(manifestPath);
+      if (
+        cachedManifest &&
+        cachedManifest.version === FILMSTRIP_CACHE_VERSION &&
+        cachedManifest.videoMtimeMs === videoStat.mtimeMs &&
+        cachedManifest.videoSize === videoStat.size &&
+        Array.isArray(cachedManifest.frames) &&
+        cachedManifest.frames.every((frame) => fs.existsSync(path.join(cacheDir, frame.file)))
+      ) {
+        return toResponse(cachedManifest, true);
+      }
+    } catch {
+      // キャッシュが壊れている場合は再生成する。
+    }
+  }
+
+  const durationMs = await probeMediaDurationMs(videoPath);
+  if (!durationMs || durationMs <= 0) throw new Error("元動画の長さを取得できませんでした");
+
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const frames = [];
+  for (let i = 0; i < FILMSTRIP_FRAME_COUNT; i += 1) {
+    // ビン中央の時刻を代表フレームにする(先頭/末尾の黒フレームを避けやすい)
+    const timeMs = Math.min(durationMs - 1, Math.round(((i + 0.5) / FILMSTRIP_FRAME_COUNT) * durationMs));
+    const fileName = `frame_${String(i).padStart(3, "0")}.jpg`;
+    await extractFilmstripFrame(videoPath, timeMs, path.join(cacheDir, fileName));
+    frames.push({ ms: timeMs, file: fileName });
+  }
+
+  const manifest = {
+    version: FILMSTRIP_CACHE_VERSION,
+    height: FILMSTRIP_FRAME_HEIGHT,
+    durationMs,
+    videoMtimeMs: videoStat.mtimeMs,
+    videoSize: videoStat.size,
+    frames,
+  };
+  writeJson(manifestPath, manifest);
+  return toResponse(manifest, false);
+}
+
+// --- フェーズU9: BGMトラック(runs/<run>/bgm/bgm.json) ---
+
+// 100%を既定とし、ユーザーがタイムラインで下げて微調整する運用(実機FB 2026-09-03)
+const BGM_DEFAULT_VOLUME = 1;
+const BGM_DEFAULT_FADE_MS = 1500;
+const BGM_AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "aac"];
+
+function bgmDir(runDir) {
+  return path.join(runDir, "bgm");
+}
+
+function bgmJsonPath(runDir) {
+  return path.join(bgmDir(runDir), "bgm.json");
+}
+
+/** composition.json のタイムライン総尺(ms)。無ければ0(UI側は音源長のみでクリップを作る)。 */
+function timelineDurationMsForRun(runDir) {
+  const compositionPath = path.join(runDir, "step08_composition", "composition.json");
+  if (!fs.existsSync(compositionPath)) return 0;
+  try {
+    const composition = readJson(compositionPath);
+    return Math.max(0, Math.round(Number(composition?.timeline?.total_duration_ms) || 0));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * bgm.json のクリップ配列をmain側で検証・整形する(python shared/bgm.py と同じ規則)。
+ * レンダラーからの未検証入力(bgm:save)にも使うため、数値クランプ・実在チェックを行う。
+ */
+function sanitizeBgmClipsForRun(runDir, rawClips) {
+  if (!Array.isArray(rawClips)) return [];
+  const dir = bgmDir(runDir);
+  const clips = [];
+  for (let index = 0; index < rawClips.length; index += 1) {
+    const entry = rawClips[index];
+    if (!entry || typeof entry !== "object") continue;
+    const fileName = typeof entry.file === "string" ? entry.file : "";
+    if (!fileName) continue;
+    // パス走査を防ぐためファイル名成分のみ受け付ける(bgm.json正本はbgm/内のファイル名)
+    const baseName = path.basename(fileName);
+    if (!fs.existsSync(path.join(dir, baseName))) continue;
+    const startMs = Math.max(0, Math.round(Number(entry.start_ms)));
+    const endMs = Math.round(Number(entry.end_ms));
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+    const durationMs = endMs - startMs;
+    const volumeRaw = Number(entry.volume);
+    clips.push({
+      id: typeof entry.id === "string" && entry.id ? entry.id : `bgm_${Date.now()}_${index}`,
+      file: baseName,
+      start_ms: startMs,
+      end_ms: endMs,
+      volume: Number.isFinite(volumeRaw) ? Math.max(0, Math.min(1, volumeRaw)) : BGM_DEFAULT_VOLUME,
+      fade_in_ms: Math.max(0, Math.min(durationMs, Math.round(Number(entry.fade_in_ms) || 0))),
+      fade_out_ms: Math.max(0, Math.min(durationMs, Math.round(Number(entry.fade_out_ms) || 0))),
+    });
+  }
+  // V6-5: 配列順=UIのレーン順の正本のため、start_msでのソートはしない(入力順を保つ)
+  return clips;
+}
+
+/** bgm.json を読み、UI表示用の付加情報(配信URL・音源長・表示名)つきで返す。 */
+async function loadBgmStateForRun(runDir) {
+  const resolved = resolveRunDir(runDir);
+  const jsonPath = bgmJsonPath(resolved);
+  let raw = [];
+  if (fs.existsSync(jsonPath)) {
+    try {
+      raw = readJson(jsonPath);
+    } catch {
+      raw = [];
+    }
+  }
+  const clips = sanitizeBgmClipsForRun(resolved, raw);
+  const enriched = [];
+  for (const clip of clips) {
+    const filePath = path.join(bgmDir(resolved), clip.file);
+    enriched.push({
+      ...clip,
+      url: registerPreviewBgmAudio(filePath) || "",
+      audioDurationMs: (await probeMediaDurationMs(filePath)) || 0,
+    });
+  }
+  return {
+    clips: enriched,
+    timelineDurationMs: timelineDurationMsForRun(resolved),
+  };
+}
+
+/** bgm.json へ保存(bgm:save)。保存後の状態(UI付加情報つき)を返す。 */
+async function saveBgmClipsForRun(runDir, rawClips) {
+  const resolved = resolveRunDir(runDir);
+  const clips = sanitizeBgmClipsForRun(resolved, rawClips);
+  fs.mkdirSync(bgmDir(resolved), { recursive: true });
+  writeJson(bgmJsonPath(resolved), clips);
+  return loadBgmStateForRun(resolved);
+}
+
+/** コピー先で同名ファイルがあれば連番を付けて衝突を避ける(既存クリップの素材を上書きしない)。 */
+function uniqueDestFileName(destDir, sourcePath) {
+  const parsed = path.parse(path.basename(sourcePath));
+  let destName = `${parsed.name}${parsed.ext}`;
+  let suffix = 2;
+  while (fs.existsSync(path.join(destDir, destName))) {
+    destName = `${parsed.name}-${suffix}${parsed.ext}`;
+    suffix += 1;
+  }
+  return destName;
+}
+
+/**
+ * V6-4: パス指定のBGM追加(bgm:add-file。ダイアログなし版。D&Dと bgm:add の共通コア)。
+ * 指定startMsから音源長ぶん配置する(音源長不明時は60秒。総尺内に余地があればクランプ)。
+ */
+async function addBgmFileToRun(runDir, sourcePath, startMsRaw) {
+  const resolved = resolveRunDir(runDir);
+  if (typeof sourcePath !== "string" || !fs.existsSync(sourcePath)) return null;
+  // レンダラーは拡張子で振り分け済みだが、未検証入力なのでmain側でも防御する
+  const ext = path.extname(sourcePath).slice(1).toLowerCase();
+  if (!BGM_AUDIO_EXTENSIONS.includes(ext)) {
+    throw new Error(`非対応の音声形式です（対応: ${BGM_AUDIO_EXTENSIONS.join("/")}）`);
+  }
+
+  fs.mkdirSync(bgmDir(resolved), { recursive: true });
+  const destName = uniqueDestFileName(bgmDir(resolved), sourcePath);
+  fs.copyFileSync(sourcePath, path.join(bgmDir(resolved), destName));
+
+  const audioDurationMs = (await probeMediaDurationMs(path.join(bgmDir(resolved), destName))) || 0;
+  const timelineDurationMs = timelineDurationMsForRun(resolved);
+  const startMs = Math.max(0, Math.round(Number(startMsRaw) || 0));
+  // 音源長もタイムライン総尺も不明な場合の最低尺(伸縮ですぐ調整できる)
+  let endMs = startMs + Math.max(1000, audioDurationMs || 60000);
+  // 総尺クランプは1秒以上の余地がある場合のみ(末尾追記=総尺ちょうどからの追加で区間ゼロにしない)
+  if (timelineDurationMs > startMs + 1000) endMs = Math.min(endMs, timelineDurationMs);
+
+  const durationMs = endMs - startMs;
+  const existing = fs.existsSync(bgmJsonPath(resolved)) ? readJson(bgmJsonPath(resolved)) : [];
+  const nextClips = [
+    ...(Array.isArray(existing) ? existing : []),
+    {
+      id: `bgm_${Date.now()}`,
+      file: destName,
+      start_ms: startMs,
+      end_ms: endMs,
+      volume: BGM_DEFAULT_VOLUME,
+      fade_in_ms: Math.min(BGM_DEFAULT_FADE_MS, durationMs),
+      fade_out_ms: Math.min(BGM_DEFAULT_FADE_MS, durationMs),
+    },
+  ];
+  return saveBgmClipsForRun(resolved, nextClips);
+}
+
+/**
+ * BGM追加(bgm:add): ファイル選択ダイアログ → runs/<run>/bgm/ へコピー → 既定値でクリップ追加。
+ * V6-5: 開始位置はレンダラー指定(既存クリップ最後尾の終端。1本目は0)。
+ */
+async function addBgmToRun(runDir, startMsRaw) {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "BGMファイルを選択",
+    properties: ["openFile"],
+    filters: [{ name: "音声ファイル", extensions: BGM_AUDIO_EXTENSIONS }],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return addBgmFileToRun(runDir, result.filePaths[0], startMsRaw);
+}
+
+// --- フェーズV4: 画像挿入トラック(runs/<run>/images/images.json) ---
+// U9のBGM経路と同型: images.json 正本 → step08(shared/images.py)が timeline.images へ転写。
+
+const IMAGE_DEFAULT_X = 0.5;
+const IMAGE_DEFAULT_Y = 0.35;
+const IMAGE_DEFAULT_SCALE = 0.55;
+const IMAGE_DEFAULT_OPACITY = 1;
+/** 追加時の既定表示尺(ms)。再生ヘッド位置から4秒間。 */
+const IMAGE_DEFAULT_DURATION_MS = 4000;
+const IMAGE_MIN_CLIP_MS = 500;
+const IMAGE_FILE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif"];
+
+function imagesDir(runDir) {
+  return path.join(runDir, "images");
+}
+
+function imagesJsonPath(runDir) {
+  return path.join(imagesDir(runDir), "images.json");
+}
+
+/**
+ * images.json のクリップ配列をmain側で検証・整形する(python shared/images.py と同じ規則)。
+ * レンダラーからの未検証入力(images:save)にも使うため、数値クランプ・実在チェックを行う。
+ */
+function sanitizeImageClipsForRun(runDir, rawClips) {
+  if (!Array.isArray(rawClips)) return [];
+  const dir = imagesDir(runDir);
+  const clips = [];
+  for (let index = 0; index < rawClips.length; index += 1) {
+    const entry = rawClips[index];
+    if (!entry || typeof entry !== "object") continue;
+    const fileName = typeof entry.file === "string" ? entry.file : "";
+    if (!fileName) continue;
+    // パス走査を防ぐためファイル名成分のみ受け付ける(images.json正本はimages/内のファイル名)
+    const baseName = path.basename(fileName);
+    if (!fs.existsSync(path.join(dir, baseName))) continue;
+    const startMs = Math.max(0, Math.round(Number(entry.start_ms)));
+    const endMs = Math.round(Number(entry.end_ms));
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+    const xRaw = Number(entry.x);
+    const yRaw = Number(entry.y);
+    const scaleRaw = Number(entry.scale);
+    const opacityRaw = Number(entry.opacity);
+    clips.push({
+      id: typeof entry.id === "string" && entry.id ? entry.id : `image_${Date.now()}_${index}`,
+      file: baseName,
+      start_ms: startMs,
+      end_ms: endMs,
+      x: Number.isFinite(xRaw) ? Math.max(0, Math.min(1, xRaw)) : IMAGE_DEFAULT_X,
+      y: Number.isFinite(yRaw) ? Math.max(0, Math.min(1, yRaw)) : IMAGE_DEFAULT_Y,
+      scale: Number.isFinite(scaleRaw) ? Math.max(0.1, Math.min(1, scaleRaw)) : IMAGE_DEFAULT_SCALE,
+      opacity: Number.isFinite(opacityRaw) ? Math.max(0, Math.min(1, opacityRaw)) : IMAGE_DEFAULT_OPACITY,
+    });
+  }
+  // V6-5: 配列順=前後関係(UIのレーン順・RemotionのzIndex順)の正本のため、ソートしない
+  return clips;
+}
+
+/** images.json を読み、UI表示用の付加情報(配信URL)つきで返す。 */
+function loadImagesStateForRun(runDir) {
+  const resolved = resolveRunDir(runDir);
+  const jsonPath = imagesJsonPath(resolved);
+  let raw = [];
+  if (fs.existsSync(jsonPath)) {
+    try {
+      raw = readJson(jsonPath);
+    } catch {
+      raw = [];
+    }
+  }
+  const clips = sanitizeImageClipsForRun(resolved, raw).map((clip) => ({
+    ...clip,
+    url: registerPreviewOverlayImage(path.join(imagesDir(resolved), clip.file)) || "",
+  }));
+  return {
+    clips,
+    timelineDurationMs: timelineDurationMsForRun(resolved),
+  };
+}
+
+/** images.json へ保存(images:save)。保存後の状態(UI付加情報つき)を返す。 */
+function saveImageClipsForRun(runDir, rawClips) {
+  const resolved = resolveRunDir(runDir);
+  const clips = sanitizeImageClipsForRun(resolved, rawClips);
+  fs.mkdirSync(imagesDir(resolved), { recursive: true });
+  writeJson(imagesJsonPath(resolved), clips);
+  return loadImagesStateForRun(resolved);
+}
+
+// =============================================================================
+// フェーズW9: 映像フレーミング(変形・クロップ)。run正本は runs/<run>/video_framing.json
+// (images.json と同パターン: 保存はjsonのみでstep08再実行はしない。書き出し・適用時に
+// step08 が読んで timeline.video_framing へ転写する)。
+// =============================================================================
+
+const FRAMING_CROP_MAX = 0.45;
+const FRAMING_SCALE_MIN = 0.2;
+const FRAMING_SCALE_MAX = 4.0;
+const FRAMING_OFFSET_MAX = 1.0;
+
+function videoFramingJsonPath(runDir) {
+  return path.join(runDir, "video_framing.json");
+}
+
+function framingClampedNumber(container, key, low, high, fallback) {
+  const value = Number(container && typeof container === "object" ? container[key] : undefined);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(low, Math.min(high, value));
+}
+
+/**
+ * video_framing の未検証入力をクランプ・不正キー除去して完全形にする
+ * (python shared/video_framing.py / remotion videoFraming.ts と同じ正規化規則)。
+ */
+function sanitizeVideoFraming(raw) {
+  const entry = raw && typeof raw === "object" ? raw : {};
+  const transform = entry.transform;
+  const crop = entry.crop;
+  return {
+    transform: {
+      scale: framingClampedNumber(transform, "scale", FRAMING_SCALE_MIN, FRAMING_SCALE_MAX, 1),
+      x: framingClampedNumber(transform, "x", -FRAMING_OFFSET_MAX, FRAMING_OFFSET_MAX, 0),
+      y: framingClampedNumber(transform, "y", -FRAMING_OFFSET_MAX, FRAMING_OFFSET_MAX, 0),
+    },
+    crop: {
+      left: framingClampedNumber(crop, "left", 0, FRAMING_CROP_MAX, 0),
+      top: framingClampedNumber(crop, "top", 0, FRAMING_CROP_MAX, 0),
+      right: framingClampedNumber(crop, "right", 0, FRAMING_CROP_MAX, 0),
+      bottom: framingClampedNumber(crop, "bottom", 0, FRAMING_CROP_MAX, 0),
+    },
+  };
+}
+
+/** video_framing.json を読み、正規化済みフレーミングを返す(ファイルなし・壊れたJSONはidentity)。 */
+function loadVideoFramingForRun(runDir) {
+  const resolved = resolveRunDir(runDir);
+  const jsonPath = videoFramingJsonPath(resolved);
+  let raw = null;
+  if (fs.existsSync(jsonPath)) {
+    try {
+      raw = readJson(jsonPath);
+    } catch {
+      raw = null;
+    }
+  }
+  return sanitizeVideoFraming(raw);
+}
+
+/** video_framing.json へ保存(video-framing:save)。保存後の正規化済みフレーミングを返す。 */
+function saveVideoFramingForRun(runDir, rawFraming) {
+  const resolved = resolveRunDir(runDir);
+  const framing = sanitizeVideoFraming(rawFraming);
+  writeJson(videoFramingJsonPath(resolved), { version: 1, ...framing });
+  return framing;
+}
+
+/**
+ * V6-4: パス指定の画像追加(images:add-file。ダイアログなし版。D&Dと images:add の共通コア)。
+ * 既定: start=指定msから4秒間(総尺クランプ)、中央上寄り(x=0.5,y=0.35)、scale=0.55、opacity=1。
+ */
+function addImageFileToRun(runDir, sourcePath, startMsRaw) {
+  const resolved = resolveRunDir(runDir);
+  if (typeof sourcePath !== "string" || !fs.existsSync(sourcePath)) return null;
+  // レンダラーは拡張子で振り分け済みだが、未検証入力なのでmain側でも防御する
+  const ext = path.extname(sourcePath).slice(1).toLowerCase();
+  if (!IMAGE_FILE_EXTENSIONS.includes(ext)) {
+    throw new Error(`非対応の画像形式です（対応: ${IMAGE_FILE_EXTENSIONS.join("/")}）`);
+  }
+
+  fs.mkdirSync(imagesDir(resolved), { recursive: true });
+  const destName = uniqueDestFileName(imagesDir(resolved), sourcePath);
+  fs.copyFileSync(sourcePath, path.join(imagesDir(resolved), destName));
+
+  const timelineDurationMs = timelineDurationMsForRun(resolved);
+  let startMs = Math.max(0, Math.round(Number(startMsRaw) || 0));
+  let endMs = startMs + IMAGE_DEFAULT_DURATION_MS;
+  if (timelineDurationMs > 0) {
+    // 総尺クランプ。末尾付近の追加でも最小尺は確保する(その分startを手前へ寄せる)
+    endMs = Math.min(endMs, timelineDurationMs);
+    startMs = Math.min(startMs, Math.max(0, endMs - IMAGE_MIN_CLIP_MS));
+    if (endMs <= startMs) endMs = startMs + IMAGE_DEFAULT_DURATION_MS;
+  }
+
+  const existing = fs.existsSync(imagesJsonPath(resolved)) ? readJson(imagesJsonPath(resolved)) : [];
+  const nextClips = [
+    ...(Array.isArray(existing) ? existing : []),
+    {
+      id: `image_${Date.now()}`,
+      file: destName,
+      start_ms: startMs,
+      end_ms: endMs,
+      x: IMAGE_DEFAULT_X,
+      y: IMAGE_DEFAULT_Y,
+      scale: IMAGE_DEFAULT_SCALE,
+      opacity: IMAGE_DEFAULT_OPACITY,
+    },
+  ];
+  return saveImageClipsForRun(resolved, nextClips);
+}
+
+/** 画像追加(images:add): ファイル選択ダイアログ → パス指定版(addImageFileToRun)へ委譲。 */
+async function addImageToRun(runDir, startMsRaw) {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "挿入する画像を選択",
+    properties: ["openFile"],
+    filters: [{ name: "画像ファイル", extensions: IMAGE_FILE_EXTENSIONS }],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return addImageFileToRun(runDir, result.filePaths[0], startMsRaw);
+}
+
 async function applyFontDirectivesForRun(runDir, { useJobEvents = false } = {}) {
   const root = repoRoot();
   const python = path.join(root, ".venv", "bin", "python");
@@ -3222,35 +5196,85 @@ async function applyTelopAndExport(options) {
     cwd: root,
     env,
     stepId: "apply_telop",
+    // W19-C4: 書き出し中もUI応答性を優先する(優先度を下げる)
+    lowPriority: true,
   });
 
   await applyFontDirectivesForRun(runDir, { useJobEvents: true });
 
   if (renderFinal) {
     const preprocess = readJson(path.join(runDir, "step01_preprocess", "preprocess.json"));
-    const outputPath = resolveRenderOutputPath(runDir, options);
-    writeRenderOutputPath(runDir, outputPath);
+    let outputPath = resolveRenderOutputPath(runDir, options);
+    // W25: 書き出し先が元動画と同じファイルを指す場合(macOSは大文字小文字を区別しないため
+    // 「.MP4」の元動画に「.mp4」で書き出すと衝突する)、元動画の上書きを防いで別名へ退避する。
+    outputPath = avoidSourceOverwrite(outputPath, preprocess?.video_path);
+    // フェーズW7(書き出し設定モーダル): 解像度は「短辺の上限」で指定する
+    // (横動画1080p=1920x1080 / 縦動画1080p=1080x1920 のどちらも同じ指定で済むため)。
+    // フェーズW8: 縦横選択でキャンバスがソースと異なり得るため、composition の
+    // meta.display_*(キャンバス寸法)を最優先し、無い旧runは従来どおり preprocess 由来。
+    let width = Number(preprocess.display_width || 1280);
+    let height = Number(preprocess.display_height || 720);
+    const compositionPath = path.join(runDir, "step08_composition", "composition.json");
+    if (fs.existsSync(compositionPath)) {
+      try {
+        const compositionMeta = readJson(compositionPath)?.meta || {};
+        if (Number(compositionMeta.display_width) > 0 && Number(compositionMeta.display_height) > 0) {
+          width = Number(compositionMeta.display_width);
+          height = Number(compositionMeta.display_height);
+        }
+      } catch {
+        // composition が読めない場合は preprocess 由来のまま(従来動作)
+      }
+    }
+    const targetShortSide = Number(options.targetShortSide) || 0;
+    const shortSide = Math.min(width, height);
+    if (targetShortSide > 0 && targetShortSide < shortSide) {
+      const scale = targetShortSide / shortSide;
+      width = Math.max(2, Math.round((width * scale) / 2) * 2);
+      height = Math.max(2, Math.round((height * scale) / 2) * 2);
+    }
+    const renderArgs = [
+      "run",
+      "render:cli",
+      "--",
+      "--composition",
+      path.join("..", relRunDir, "step08_composition", "composition.json"),
+      "--output",
+      outputPath,
+      "--width",
+      String(width),
+      "--height",
+      String(height),
+      "--concurrency",
+      String(Math.max(1, Number(options.renderConcurrency) || 4)),
+    ];
+    // W11-1b: ハードウェアエンコード(VideoToolbox)。HW時は crf を渡してはいけない
+    // (Remotionの制約)ため、videoBitrate と crf は排他で配線する
+    const hardwareAcceleration = options.hardwareAcceleration === "if-possible" ? "if-possible" : "";
+    const videoBitrate = String(options.videoBitrate || "").trim();
+    if (hardwareAcceleration) {
+      renderArgs.push("--hardware-acceleration", hardwareAcceleration);
+    }
+    if (videoBitrate) {
+      renderArgs.push("--video-bitrate", videoBitrate);
+    }
+    const crf = Number(options.crf) || 0;
+    if (!hardwareAcceleration && !videoBitrate && crf >= 1 && crf <= 51) {
+      renderArgs.push("--crf", String(crf));
+    }
     await spawnCommand({
       command: "npm",
-      args: [
-        "run",
-        "render:cli",
-        "--",
-        "--composition",
-        path.join("..", relRunDir, "step08_composition", "composition.json"),
-        "--output",
-        outputPath,
-        "--width",
-        String(preprocess.display_width || 1280),
-        "--height",
-        String(preprocess.display_height || 720),
-        "--concurrency",
-        "4",
-      ],
+      args: renderArgs,
       cwd: path.join(root, "remotion"),
       env: nodeEnv,
       stepId: "render",
+      // W19-C4: レンダリング(最重量プロセス)中もUI応答性を優先する(優先度を下げる)
+      lowPriority: true,
     });
+    // W25: 書き出し先の記録はレンダリング成功後に行う。以前はレンダリング前に書いていたため、
+    // 失敗しても render_output.json にパスが残り、そのパスに既存ファイル(元動画等)があると
+    // UIが「書き出し済み」と誤表示する事故があった(2026-08-21 実害あり)。
+    writeRenderOutputPath(runDir, outputPath);
   } else {
     sendJobEvent({ type: "step:done", stepId: "render" });
   }
@@ -3258,6 +5282,63 @@ async function applyTelopAndExport(options) {
   const outputs = buildOutputs(runDir);
   sendJobEvent({ type: "job:done", outputs });
   return outputs;
+}
+
+/**
+ * W19-B2: AI最終チェック(step06d)自動実行用の入力シーン列を組み立てる。
+ * レンダラーのシーンIDはセッション依存の採番で main からは分からないため、
+ * composition のテロップページ本文(=レンダラーの初期シーン本文と同一)を auto_0001.. の
+ * 仮IDで送り、レンダラーがロード時に本文一致で現在のシーンIDへ再マップする
+ * (src/lib/finalCheck.ts remapFinalCheckIssues)。
+ */
+function buildAutoFinalCheckScenes(runDir) {
+  const source = loadTranscriptSource(runDir);
+  const scenes = [];
+  for (const page of buildTelopPageBoundaries(source)) {
+    const text = String(page.text || "").trim();
+    if (!text) continue;
+    scenes.push({ scene_id: `auto_${String(scenes.length + 1).padStart(4, "0")}`, text });
+  }
+  return scenes;
+}
+
+/**
+ * W19-B2: 解析パイプライン最終段(検品準備完了の直前)のAI最終チェック。
+ * キー無しはPython側がenabled:falseで正常終了し、プロセス失敗もnon-fatal
+ * (ログを出して続行=検品画面は従来どおり開く)。
+ */
+async function runAutoFinalCheck({ runDir, python, env, root }) {
+  const stepId = "step06d_final_check";
+  try {
+    const scenes = buildAutoFinalCheckScenes(runDir);
+    if (!scenes.length) {
+      sendJobEvent({ type: "step:done", stepId });
+      return;
+    }
+    const outDir = path.join(runDir, "step06d_final_check");
+    fs.mkdirSync(outDir, { recursive: true });
+    const inputPath = path.join(outDir, "scenes_input.json");
+    const outputPath = path.join(outDir, "issues.json");
+    fs.writeFileSync(inputPath, `${JSON.stringify({ scenes }, null, 2)}\n`, "utf-8");
+    const args = [
+      "python/step06d_final_text_review.py",
+      "--input",
+      path.relative(root, inputPath),
+      "--output",
+      path.relative(root, outputPath),
+    ];
+    const historyPath = effectiveCorrectionHistoryPath();
+    if (fs.existsSync(historyPath)) {
+      args.push("--correction-history", historyPath);
+    }
+    await spawnCommand({ command: python, args, cwd: root, env, stepId });
+  } catch (error) {
+    if (!activeJob || activeJob.cancelled) throw error;
+    sendJobEvent({
+      type: "log",
+      message: `\n[FINAL CHECK]\nAI最終チェックをスキップしました (${error.message || error})\n`,
+    });
+  }
 }
 
 async function runPipeline(options) {
@@ -3287,6 +5368,28 @@ async function runPipeline(options) {
   fs.mkdirSync(runDir, { recursive: true });
   activeJob.runDir = runDir;
 
+  // フェーズW8: 素材選択時のユーザー縦横選択。run正本として orientation.json へ永続化し、
+  // テンプレート選択・step08の--orientation・再実行(rerunCompositionAndTelop)・
+  // プロジェクト再オープン(projectPathForRun)まで一貫してこの値を最優先する。
+  // options.orientation なし(旧UI・自動)の場合はファイルを書かず完全従来動作。
+  const userOrientation = sanitizeOrientation(options.orientation);
+  if (userOrientation) {
+    writeJson(path.join(runDir, "orientation.json"), {
+      version: 1,
+      orientation: userOrientation,
+      source: "user",
+    });
+  }
+
+  // フェーズW23(改善1): UIのOP有無チェックが指定されていれば、step08実行前に
+  // run正本 op_config.json を明示生成する(writeRunOpConfig が sanitizeRunOpConfig で正規化)。
+  // opEnabled 未指定(旧UI・後方互換)は何も書かず、従来どおり step08 時の
+  // ensureRunOpConfig(テーマ設定から生成)に任せる。
+  const startOpConfig = resolveStartOpConfig(resolveDesignExtras().op, options.opEnabled);
+  if (startOpConfig) {
+    writeRunOpConfig(runDir, startOpConfig);
+  }
+
   sendJobEvent({
     type: "job:start",
     runName,
@@ -3309,8 +5412,16 @@ async function runPipeline(options) {
   });
 
   const preprocess = readJson(path.join(runDir, "step01_preprocess", "preprocess.json"));
-  const orientation = preprocess.orientation === "vertical" ? "vertical" : "horizontal";
-  const project = path.join("templates", `${orientation}.yaml`);
+  // フェーズW8: ユーザー選択(orientation.json)があれば自動判定より優先する
+  const orientation =
+    userOrientation || (preprocess.orientation === "vertical" ? "vertical" : "horizontal");
+  const templateProject = path.join("templates", `${orientation}.yaml`);
+  const project = projectPathForSilenceTightness(
+    root,
+    runDir,
+    templateProject,
+    options.silenceTightness,
+  );
 
   const sttArgs = [
     "python/step02_stt.py",
@@ -3406,11 +5517,48 @@ async function runPipeline(options) {
       path.join(relRunDir, "step05_retake_detect", "retakes.json"),
       "--review-output",
       path.join(relRunDir, "step05_ai_retake", "ai_review.json"),
+      // W14-2: ユーザーが過去に確定した修正例(誤→正)をプロンプトへ注入する(無ければ従来動作)
+      "--correction-history",
+      effectiveCorrectionHistoryPath(),
     ],
     cwd: root,
     env,
     stepId: "step05_ai_retake",
   });
+
+  // W19-B1: 弱い区間の再文字起こし(step05b)。ai_review.json の needs_review /
+  // suggestion無しsuspect_wordsを再STT+LLM裁定し、置換候補を retranscribe.json へ出す。
+  // キー無し・0件はPython側がenabled:falseで正常終了する。プロセス失敗もnon-fatal
+  // (ステップはエラー表示になるがパイプラインは続行する)。
+  try {
+    await spawnCommand({
+      command: python,
+      args: [
+        "python/step05b_retranscribe.py",
+        relRunDir,
+        "--review",
+        path.join(relRunDir, "step05_ai_retake", "ai_review.json"),
+        "--stt",
+        correctedStt,
+        "--audio",
+        path.join(relRunDir, "step01_preprocess", "audio.wav"),
+        "--output",
+        path.join(relRunDir, "step05b_retranscribe", "retranscribe.json"),
+        "--stt-provider",
+        provider,
+        ...(provider === "local-whisper" ? ["--whisper-model", options.whisperModel || "small"] : []),
+      ],
+      cwd: root,
+      env,
+      stepId: "step05b_retranscribe",
+    });
+  } catch (error) {
+    if (!activeJob || activeJob.cancelled) throw error;
+    sendJobEvent({
+      type: "log",
+      message: `\n[RETRANSCRIBE]\n再文字起こしをスキップしました (${error.message || error})\n`,
+    });
+  }
 
   await spawnCommand({
     command: python,
@@ -3436,6 +5584,39 @@ async function runPipeline(options) {
     stepId: "step07_cut_proposal",
   });
 
+  const directedMode = resolveTelopMode(options, project) === "directed";
+  sendJobEvent({
+    type: "log",
+    message: directedMode
+      ? "\n[DIRECTED]\n演出モード: step06c でテロップ演出を決定します\n"
+      : "\n[FULL]\n通常テロップモード\n",
+  });
+
+  if (directedMode) {
+    await spawnCommand({
+      command: python,
+      args: [
+        "python/step06c_direction.py",
+        relRunDir,
+        "--proposal",
+        path.join(relRunDir, "step07_cut_proposal", "cut_proposal.json"),
+        "--stt",
+        correctedStt,
+        "--title",
+        extractRunTitle(runDir),
+        "--project",
+        project,
+        "--edit-examples",
+        editExamplesPath(),
+      ],
+      cwd: root,
+      env,
+      stepId: "step06c_direction",
+    });
+  } else {
+    sendJobEvent({ type: "step:done", stepId: "step06c_direction" });
+  }
+
   await spawnCommand({
     command: python,
     args: [
@@ -3453,7 +5634,12 @@ async function runPipeline(options) {
       "--review",
       path.join(relRunDir, "step06_review", "review.json"),
       // フェーズT2.5-4: ユーザーのtype→presetマッピング(directedモードのrunでのみ効く)
-      ...(fs.existsSync(telopTypeMappingPath()) ? ["--type-mapping", telopTypeMappingPath()] : []),
+      // フェーズU2: アクティブなデザインテーマがあればテーマの type_styles を優先する
+      ...effectiveTypeMappingArgs(),
+      // フェーズV2: run開始時にテーマ設定からrun単位 op_config.json を生成し正本にする
+      ...opConfigArgs(runDir),
+      // フェーズW8: ユーザーの縦横選択(orientation.json)をキャンバスへ反映する
+      ...orientationArgsForRun(runDir),
     ],
     cwd: root,
     env,
@@ -3481,29 +5667,42 @@ async function runPipeline(options) {
     stepId: "review_telop",
   });
 
-  // 改善11: AI校正(step06b)。ANTHROPIC_API_KEY未設定時はPython側が安全にスキップする
-  await spawnCommand({
-    command: python,
-    args: [
-      "python/step06b_ai_refine.py",
-      relRunDir,
-      "--stt",
-      correctedStt,
-      "--project",
-      project,
-      "--output",
-      path.join(relRunDir, "step06b_ai_refine", "refine.json"),
-      "--review",
-      path.join(relRunDir, "telop_review.json"),
-      "--dictionary",
-      "templates/domain_dictionary.yaml",
-      "--title",
-      extractRunTitle(runDir),
-    ],
-    cwd: root,
-    env,
-    stepId: "step06b_ai_refine",
-  });
+  // 改善11: AI校正(step06b)。ANTHROPIC_API_KEY未設定時はPython側が安全にスキップする。
+  // フェーズT2(directed): step06bのページ再分割はスロット単位のタイミング・スタイルを
+  // 破壊するため、演出モードではスキップする(文言整形はstep06cが担う)。
+  if (!directedMode) {
+    await spawnCommand({
+      command: python,
+      args: [
+        "python/step06b_ai_refine.py",
+        relRunDir,
+        "--stt",
+        correctedStt,
+        "--project",
+        project,
+        "--output",
+        path.join(relRunDir, "step06b_ai_refine", "refine.json"),
+        "--review",
+        path.join(relRunDir, "telop_review.json"),
+        "--dictionary",
+        "templates/domain_dictionary.yaml",
+        "--title",
+        extractRunTitle(runDir),
+        // W14-2: ユーザーが過去に確定した修正例(誤→正)をプロンプトへ注入する(無ければ従来動作)
+        "--correction-history",
+        effectiveCorrectionHistoryPath(),
+      ],
+      cwd: root,
+      env,
+      stepId: "step06b_ai_refine",
+    });
+  } else {
+    sendJobEvent({
+      type: "log",
+      message: "\n[DIRECTED]\nAI校正(step06b)をスキップします\n",
+    });
+    sendJobEvent({ type: "step:done", stepId: "step06b_ai_refine" });
+  }
 
   if (options.groundTruthPath && ENABLE_GROUND_TRUTH_LEARNING) {
     const report = evaluateAndLearnGroundTruth(runDir, options.groundTruthPath);
@@ -3543,6 +5742,9 @@ async function runPipeline(options) {
   await applyFontDirectivesForRun(runDir, { useJobEvents: true });
 
   if (options.reviewBeforeExport !== false) {
+    // W19-B2: 検品準備完了の直前にAI最終チェック(step06d)を自動実行する(non-fatal)。
+    // 結果(issues.json)は review:ready 後のtranscriptロード時にレンダラーが読み込む。
+    await runAutoFinalCheck({ runDir, python, env, root });
     sendJobEvent({
       type: "review:ready",
       runDir,
@@ -3552,6 +5754,8 @@ async function runPipeline(options) {
     return buildOutputs(runDir);
   }
 
+  // 検品なしの直接書き出しではAI最終チェックを行わない(人が確認する画面が無いため)
+  sendJobEvent({ type: "step:done", stepId: "step06d_final_check" });
   return applyTelopAndExport({ runDir, renderFinal, outputPath: options.outputPath });
 }
 
@@ -3579,6 +5783,9 @@ ipcMain.handle("api-keys:test", async (_event, input) => {
   }
   return apiKeys.testApiKeyConnection(provider, input?.apiKey);
 });
+// W12-2: ライセンスIPC(license:get/activate/deactivate/refresh/checkout)。
+// FEATURES.billing(App.tsx)がOFFの間はUIから呼ばれないが、常時登録しておく。
+registerLicenseIpc(ipcMain, createLicenseModule({ userDataPath }));
 ipcMain.handle("shell:openExternal", (_event, url) => {
   const target = String(url || "").trim();
   if (!target) return;
@@ -3587,8 +5794,21 @@ ipcMain.handle("shell:openExternal", (_event, url) => {
 ipcMain.handle("font-profiles:list", () => readFontProfiles());
 ipcMain.handle("telop-presets:list", () => loadTelopPresetCatalog());
 // フェーズT2.5-4: シーン種類→プリセットのユーザーマッピング(userData永続化)
-ipcMain.handle("telop-type-mapping:get", () => loadTelopTypeMapping());
-ipcMain.handle("telop-type-mapping:save", (_event, input) => saveTelopTypeMapping(input || {}));
+// フェーズU2: アクティブなデザインテーマがあればテーマ優先の解決結果を返す
+ipcMain.handle("telop-type-mapping:get", () => loadEffectiveTelopTypeMapping());
+ipcMain.handle("telop-type-mapping:save", (_event, input, extras) => saveTelopTypeMapping(input || {}, extras));
+// フェーズU7/U8: 現在の選択(テーマ or スタンダード)のシーンタイトル・OP設定
+ipcMain.handle("design-extras:get", () => resolveDesignExtras());
+// フェーズV2: run単位のOP設定(runs/<run>/op_config.json)。get時に無ければテーマ設定から生成する
+ipcMain.handle("op-config:get", (_event, runDir) => ensureRunOpConfig(String(runDir || "")));
+ipcMain.handle("op-config:save", (_event, input) =>
+  writeRunOpConfig(String(input?.runDir || ""), input?.config),
+);
+// フェーズU2: 使用シーンバンドル(テンプレート)と保存済みデザインテーマ
+ipcMain.handle("design-scenes:list", () => loadDesignScenes());
+ipcMain.handle("design-themes:list", () => loadDesignThemes());
+ipcMain.handle("design-themes:save", (_event, input) => saveDesignTheme(input || {}));
+ipcMain.handle("design-themes:delete", (_event, themeId) => deleteDesignTheme(String(themeId || "")));
 ipcMain.handle("font-profiles:save", (_event, input) => saveFontProfile(input || {}));
 ipcMain.handle("font-profiles:delete", (_event, profileId) => deleteFontProfile(profileId));
 ipcMain.handle("user-rules:get", () => readUserRules());
@@ -3598,6 +5818,125 @@ ipcMain.handle("user-rules:recordDecision", (_event, input) => recordLearningDec
 ipcMain.handle("user-dictionary:get", () => readUserDictionary());
 ipcMain.handle("user-dictionary:save", (_event, input) => saveUserDictionaryEntry(input || {}));
 ipcMain.handle("user-dictionary:delete", (_event, from) => deleteUserDictionaryEntry(from));
+// W14-2: 編集前→編集後の修正ペア学習(蓄積は自動・無操作。削除は学習済み修正モーダルから)
+ipcMain.handle("edit-learning:record", (_event, input) => recordTelopEditLearning(input || {}));
+ipcMain.handle("edit-history:load", (_event, runDir) =>
+  editLearning.loadEditHistory(editHistoryPath(String(runDir || ""))),
+);
+ipcMain.handle("correction-history:get", () =>
+  editLearning.loadCorrectionHistory(correctionHistoryPath()),
+);
+ipcMain.handle("correction-history:delete", (_event, input) =>
+  editLearning.deleteCorrectionPair(correctionHistoryPath(), input || {}),
+);
+// W15: 学習データ(全runのedit_history + correction_history)を1ファイルへ書き出す。
+// Nextcloud同期フォルダがあれば <Nextcloud>/CatCut-learning/exports/ へ保存し
+// 同期で自動的に開発機へ届く(送付不要)。ファイル名にPC名+日時を含めるため
+// 複数PCが同時に書き出しても衝突しない。Nextcloudが無いPCは従来どおりデスクトップへ。
+ipcMain.handle("edit-learning:export", () => {
+  const exportData = editLearning.buildLearningExport({
+    runsRoot: path.join(repoRoot(), "runs"),
+    correctionHistoryPath: correctionHistoryPath(),
+    machineLabel: require("os").hostname(),
+  });
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13).replace("T", "-");
+  const host = require("os").hostname().replace(/\.local$/i, "").replace(/[^A-Za-z0-9_-]+/g, "-");
+  const learningDir = nextcloudLearningDir();
+  let outputPath;
+  let shared = false;
+  if (learningDir) {
+    try {
+      const exportsDir = path.join(learningDir, "exports");
+      fs.mkdirSync(exportsDir, { recursive: true });
+      outputPath = path.join(exportsDir, `catcut-learning-${host}-${stamp}.json`);
+      shared = true;
+    } catch {
+      outputPath = null;
+    }
+  }
+  if (!outputPath) {
+    outputPath = path.join(app.getPath("desktop"), `catcut-learning-${stamp}.json`);
+    shared = false;
+  }
+  fs.writeFileSync(outputPath, `${JSON.stringify(exportData, null, 2)}\n`, "utf-8");
+  shell.showItemInFolder(outputPath);
+  return { path: outputPath, stats: exportData.stats, shared };
+});
+
+// W16-7: AI最終チェック。現在の表示テキスト全シーンをpython(step06d)でLLM再チェックする。
+// 入出力は runs/<run>/step06d_final_check/ に残す(検品可能にする)。失敗はrenderer側でnon-fatal扱い。
+ipcMain.handle("final-check:run", async (_event, input) => {
+  const runDir = resolveRunDir(String(input?.runDir || ""));
+  const scenes = Array.isArray(input?.scenes) ? input.scenes : [];
+  const root = repoRoot();
+  const python = path.join(root, ".venv", "bin", "python");
+  if (!fs.existsSync(python)) throw new Error(`Python venv not found: ${python}`);
+
+  const outDir = path.join(runDir, "step06d_final_check");
+  fs.mkdirSync(outDir, { recursive: true });
+  const inputPath = path.join(outDir, "scenes_input.json");
+  const outputPath = path.join(outDir, "issues.json");
+  fs.writeFileSync(
+    inputPath,
+    `${JSON.stringify({ scenes: scenes.map((scene) => ({ scene_id: String(scene?.sceneId || ""), text: String(scene?.text || "") })) }, null, 2)}\n`,
+    "utf-8",
+  );
+
+  const args = [
+    "python/step06d_final_text_review.py",
+    "--input",
+    path.relative(root, inputPath),
+    "--output",
+    path.relative(root, outputPath),
+  ];
+  const historyPath = effectiveCorrectionHistoryPath();
+  if (fs.existsSync(historyPath)) {
+    args.push("--correction-history", historyPath);
+  }
+  await spawnUtility({
+    command: python,
+    args,
+    cwd: root,
+    env: apiKeys.buildPipelineEnv(),
+  });
+  return readJson(outputPath);
+});
+
+// W19-B2: 保存済みのAI最終チェック結果(issues.json)のロード。review:ready後の
+// transcriptロード・プロジェクト再オープン時にレンダラーが呼ぶ。issues.json が無い
+// 旧runは exists: false(完全従来動作)。inputScenes は自動実行(auto_XXXX仮ID)の指摘を
+// 現在のシーンIDへ本文一致で再マップするために返す(remapFinalCheckIssues)。
+ipcMain.handle("final-check:load", (_event, runDir) => {
+  const resolved = resolveRunDir(String(runDir || ""));
+  const outDir = path.join(resolved, "step06d_final_check");
+  const issuesPath = path.join(outDir, "issues.json");
+  if (!fs.existsSync(issuesPath)) {
+    return { exists: false, enabled: false, issues: [], inputScenes: [] };
+  }
+  let issuesRaw = null;
+  let inputRaw = null;
+  try {
+    issuesRaw = readJson(issuesPath);
+    const inputPath = path.join(outDir, "scenes_input.json");
+    inputRaw = fs.existsSync(inputPath) ? readJson(inputPath) : null;
+  } catch {
+    return { exists: false, enabled: false, issues: [], inputScenes: [] };
+  }
+  const inputScenes = Array.isArray(inputRaw?.scenes)
+    ? inputRaw.scenes
+        .map((scene) => ({
+          sceneId: String(scene?.scene_id || ""),
+          text: String(scene?.text || ""),
+        }))
+        .filter((scene) => scene.sceneId && scene.text)
+    : [];
+  return {
+    exists: true,
+    enabled: Boolean(issuesRaw?.enabled),
+    issues: Array.isArray(issuesRaw?.issues) ? issuesRaw.issues : [],
+    inputScenes,
+  };
+});
 
 ipcMain.handle("dialog:chooseVideo", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -3611,6 +5950,40 @@ ipcMain.handle("dialog:chooseVideo", async () => {
   if (result.canceled) return null;
   return result.filePaths[0] || null;
 });
+
+/**
+ * フェーズW8: 素材選択直後の縦横自動判定(ffprobe)。
+ * rotation ±90/270 の表示寸法入替を含む判定規則は python 側
+ * (shared/ffmpeg_tools.get_video_metadata)と同一(orientation.cjs parseProbeOutput)。
+ * 失敗時は { ok: false } を返し、UIは横型を既定にする。
+ */
+function probeVideoOrientation(videoPath) {
+  return new Promise((resolve) => {
+    if (!videoPath || !fs.existsSync(videoPath)) {
+      resolve({ ok: false });
+      return;
+    }
+    const child = spawn(
+      "ffprobe",
+      ["-v", "error", "-print_format", "json", "-show_streams", "-show_format", videoPath],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.on("error", () => resolve({ ok: false }));
+    child.on("close", (code) => {
+      if (code !== 0) {
+        resolve({ ok: false });
+        return;
+      }
+      resolve(parseProbeOutput(stdout));
+    });
+  });
+}
+
+ipcMain.handle("video:probe", (_event, videoPath) => probeVideoOrientation(String(videoPath || "")));
 
 ipcMain.handle("ground-truth:choose", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -3656,6 +6029,45 @@ ipcMain.handle("dialog:saveOutputFile", async (_event, input) => {
   if (result.canceled || !result.filePath) return null;
   return ensureMp4OutputPath(result.filePath);
 });
+
+// フェーズW7: プロジェクト一覧(runs/を「プロジェクト」として一覧・保存・削除)
+ipcMain.handle("projects:list", () => listProjects());
+ipcMain.handle("projects:save-meta", (_event, input) => saveProjectMeta(input || {}));
+ipcMain.handle("projects:delete", (_event, input) => deleteProject(input || {}));
+
+// --- W13-1: キャッシュ管理(派生キャッシュの統計・削除。runフォルダ自体は消さない) ---
+
+ipcMain.handle("cache:stats", () => collectCacheStats(path.join(repoRoot(), "runs")));
+ipcMain.handle("cache:clean", (_event, input) =>
+  cleanCaches(path.join(repoRoot(), "runs"), {
+    mode: input?.mode === "all" ? "all" : "old",
+    // 実行中ジョブのrunは常にスキップする(書き出し中のsegments等を消さない)
+    activeRunDir: activeJob?.runDir || null,
+  }),
+);
+
+/**
+ * W13-1: 起動時の自動キャッシュクリーン。最終利用が7日超のrunの派生キャッシュを削除する。
+ * 起動をブロックしないよう、ウィンドウ生成後に遅延してから実行する(削除はサイズ次第で
+ * 数秒かかり得るため)。実行中ジョブのrunはスキップ。失敗しても起動には影響させない。
+ */
+function scheduleStartupCacheClean() {
+  setTimeout(() => {
+    try {
+      const result = cleanCaches(path.join(repoRoot(), "runs"), {
+        mode: "old",
+        activeRunDir: activeJob?.runDir || null,
+      });
+      if (result.cleanedRuns > 0) {
+        console.log(
+          `[cache] startup clean: ${result.cleanedRuns} runs, ${Math.round(result.freedBytes / 1024 / 1024)}MB freed`,
+        );
+      }
+    } catch (error) {
+      console.error("[cache] startup clean failed:", error);
+    }
+  }, 5000);
+}
 
 ipcMain.handle("path:reveal", (_event, targetPath) => {
   if (!targetPath) return;
@@ -3727,10 +6139,39 @@ ipcMain.handle("telop:load", (_event, runDir) => {
 });
 
 ipcMain.handle("transcript:load", (_event, runDir) => loadTranscriptEditorState(runDir));
+ipcMain.handle("scene-edits:save-draft", async (_event, input) => {
+  const runDir = String(input?.runDir || "");
+  if (!runDir) throw new Error("runDir is required");
+  return saveSceneEditsDraft(runDir, input);
+});
+ipcMain.handle("scene-edits:load-draft", (_event, runDir) => loadSceneEditsDraft(String(runDir || "")));
 ipcMain.handle("transcript:apply", async (_event, input) => applyTranscriptKeepSegments(input || {}));
 ipcMain.handle("transcript:run-command", async (_event, input) => runTranscriptCommand(input || {}));
 ipcMain.handle("transcript:waveform", async (_event, input) =>
   generateWaveformForRun(input?.runDir, { binMs: input?.binMs }),
+);
+
+// フェーズU9: フィルムストリップ(サムネイル帯)とBGMトラック
+ipcMain.handle("transcript:filmstrip", async (_event, input) => generateFilmstripForRun(input?.runDir));
+ipcMain.handle("bgm:list", async (_event, input) => loadBgmStateForRun(input?.runDir));
+ipcMain.handle("bgm:add", async (_event, input) => addBgmToRun(input?.runDir, input?.startMs));
+// V6-4: ダイアログなし版(D&D)。OSからドラッグしたファイルのパス+開始msを直接受ける
+ipcMain.handle("bgm:add-file", async (_event, input) =>
+  addBgmFileToRun(input?.runDir, input?.filePath, input?.startMs),
+);
+ipcMain.handle("bgm:save", async (_event, input) => saveBgmClipsForRun(input?.runDir, input?.clips));
+// フェーズV4: 画像挿入トラック
+ipcMain.handle("images:list", async (_event, input) => loadImagesStateForRun(input?.runDir));
+ipcMain.handle("images:add", async (_event, input) => addImageToRun(input?.runDir, input?.startMs));
+// V6-4: ダイアログなし版(D&D)。OSからドラッグしたファイルのパス+開始msを直接受ける
+ipcMain.handle("images:add-file", async (_event, input) =>
+  addImageFileToRun(input?.runDir, input?.filePath, input?.startMs),
+);
+ipcMain.handle("images:save", async (_event, input) => saveImageClipsForRun(input?.runDir, input?.clips));
+// フェーズW9: 映像フレーミング(変形・クロップ)。保存はrun正本jsonのみ(step08再実行なし=imagesと同方針)
+ipcMain.handle("video-framing:get", async (_event, input) => loadVideoFramingForRun(input?.runDir));
+ipcMain.handle("video-framing:save", async (_event, input) =>
+  saveVideoFramingForRun(input?.runDir, input?.framing),
 );
 
 ipcMain.handle("telop:save", (_event, input) => {
@@ -3811,6 +6252,12 @@ ipcMain.handle("export:start", async (_event, options) => {
       runDir,
       renderFinal: options?.renderFinal !== false,
       outputPath: options?.outputPath || "",
+      targetShortSide: options?.targetShortSide || 0,
+      crf: options?.crf || 0,
+      renderConcurrency: options?.renderConcurrency || 0,
+      // W11-1b: HWエンコード(VideoToolbox)と画質→ビットレートのマッピング値
+      hardwareAcceleration: options?.hardwareAcceleration || "",
+      videoBitrate: options?.videoBitrate || "",
     })
       .catch((error) => {
         const message = error.message || String(error);
@@ -3842,6 +6289,17 @@ ipcMain.handle("job:cancel", () => {
 app.whenReady().then(async () => {
   await ensurePreviewServer();
   createWindow();
+  // W13-1: 古い派生キャッシュの自動クリーン(非ブロック・遅延実行)
+  scheduleStartupCacheClean();
+  // W16-6(スリープ中のCPU消費対策): スリープ・画面ロックでレンダラーへ通知し、
+  // プレビュー再生(rAF/仮想再生ループの駆動源)を止めさせる。
+  const notifyPowerSuspend = () => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send("power:suspend");
+    }
+  };
+  powerMonitor.on("suspend", notifyPowerSuspend);
+  powerMonitor.on("lock-screen", notifyPowerSuspend);
 });
 
 app.on("window-all-closed", () => {
@@ -3858,4 +6316,9 @@ module.exports = {
   computeWaveformPeaks,
   resolveRunAudioPath,
   waveformCachePath,
+  // フェーズU9: BGM・フィルムストリップ(検証スクリプト・テスト用)
+  sanitizeBgmClipsForRun,
+  generateFilmstripForRun,
+  // フェーズV4: 画像挿入トラック(検証スクリプト・テスト用)
+  sanitizeImageClipsForRun,
 };

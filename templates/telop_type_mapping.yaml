@@ -18,3 +18,44 @@ type_styles:
   punchline: box_yellow     # 要点・オチ
   hype: special_purple      # 煽り
   cta: cta_yellow           # 行動喚起
+
+# フェーズW26: 縦型ショート(広告)専用の既定マッピング。orientation=vertical のとき
+# type_styles の上へ重ねる(ユーザー上書きJSONはさらにその上=ユーザー選択が最優先)。
+#
+# デザインは4スタイルへ集約する(2026-08-21 Fable手動編集v5で確定した
+# 「1画面1スタイル」原則。typeごとに10色バラバラだと画面がチグハグになる):
+# - 標準(説明・意外性・質問・返し): ad_gothic_impact = 太ゴシック白+黄強調+黒縁+ハード影
+# - 決めゼリフ(強調・オチ・煽り・名言): ad_mincho_impact = 明朝大文字+slam
+# - CTA(行動喚起): ad_highlight_band = 黄帯ボタン風
+# - 緊急(締切・限定訴求): ad_urgent_band = 赤帯(自動割当なし。シーン検品から手動選択)
+# アニメはFable検証で効果の高かった強い動き(slam/バウンド系)+控えめな効果音。
+# フェーズW31: 標準テロップ(default/reply)の既定はシンプルなslide_upにする
+# (bounce_leftの震えスライドが全テロップに付くと目が疲れる。2026-08-22フィードバック)。
+# default/reply は step08 の assign_vertical_animation_variety がシンプル系プールから
+# 出現順にローテーション割当するため、ここの値は初期値の意味しか持たない。
+# 強調系(surprise/harsh/quote等)は要所の演出として強いアニメを維持する。
+vertical_type_styles:
+  default: { style: ad_gothic_impact, animation_in: slide_up, sfx: none }
+  surprise: { style: ad_gothic_impact, animation_in: slam, sfx: don }
+  harsh: { style: ad_gothic_impact, animation_in: bounce_right, sfx: hyu }
+  quote: { style: ad_mincho_impact, animation_in: slam, sfx: shakin }
+  emphasis: { style: ad_mincho_impact, animation_in: slam, sfx: don }
+  question: { style: ad_gothic_impact, animation_in: rise_bounce, sfx: pon }
+  reply: { style: ad_gothic_impact, animation_in: slide_up, sfx: none }
+  punchline: { style: ad_mincho_impact, animation_in: slam, sfx: don }
+  hype: { style: ad_mincho_impact, animation_in: slam, sfx: don }
+  cta: { style: ad_highlight_band, animation_in: rise_bounce, sfx: jan }
+
+# フェーズW1: 話者別テロップ色の既定設定。
+# 「基本」タイプ(apply_types)のテロップだけ話者ごとに色を変える(semantic typeの
+# 色分け=harsh赤系・question青系等は演出上の意味を持つため維持する)。
+# 動画全体で発話シェア10%以上の話者が2人未満のときは発動しない(1人喋りガード)。
+# speaker_0 はマッピング無し=既定スタイルのまま。
+# ユーザー上書きは desktop の userData(telop_type_mapping.json / テーマ)の
+# speaker_colors セクションに保存され、本ファイルの既定値の上に重ねられる。
+speaker_colors:
+  enabled: true
+  apply_types: [default, reply]
+  styles:
+    speaker_1: fact_cyan
+    speaker_2: fact_green

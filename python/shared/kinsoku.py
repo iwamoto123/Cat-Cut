@@ -52,7 +52,12 @@ def kinsoku_penalty(prev_last: str, next_first: str, sets: Dict[str, Set[str]] |
 
 
 def break_quality(prev_last: str, next_first: str, sets: Dict[str, Set[str]] | None = None) -> float:
-    """Return a cost (0-1) expressing how unnatural the break point is."""
+    """Return a cost (0-1) expressing how unnatural the break point is.
+
+    テロップの改行は文節末（助詞・助動詞の直後）が最も自然なため、
+    助詞・連用形で終わる行はコストを低くする（書籍組版の「助詞で行を終えない」
+    慣習とは逆向き。「模試を / 受けられる」を「模試 / を受けられる」より優先する）。
+    """
 
     table = sets or build_kinsoku_sets(None)
     if not prev_last:
@@ -61,11 +66,11 @@ def break_quality(prev_last: str, next_first: str, sets: Dict[str, Set[str]] | N
         return 0.0
     if prev_last in set("、，,;；：:"):
         return 0.15
-    # Avoid breaking after particles or connective endings
+    # 文節の切れ目（助詞・接続の直後）＝テロップでは自然な改行位置
     if prev_last in table["line_suffix"]:
-        return 0.8
+        return 0.2
     if prev_last in table["connective_suffix"]:
-        return 0.7
+        return 0.25
     if next_first and (next_first in table["close"] or next_first in set("、，,;；：:")):
         return 0.2
     if prev_last in table["open"]:
@@ -81,9 +86,9 @@ def page_end_quality(last_char: str, next_first_char: str | None, sets: Dict[str
         return 0.4
     if last_char in set("。？！?.!…‥"):
         return 0.0
-    # Strongly penalize page ending with particles/connectives
+    # 文節末（助詞・連用形）で終わるページはテロップでは自然（break_quality と同方針）
     if last_char in table["line_suffix"] or last_char in table["connective_suffix"]:
-        return 0.9
+        return 0.25
     if last_char in table["close"]:
         return 0.1
     if last_char in table["open"]:

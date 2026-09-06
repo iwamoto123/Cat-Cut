@@ -33,6 +33,49 @@ def _two_cluster_stt():
     return {"words": words, "sentences": sentences}
 
 
+class RetakeWordIdResolutionTests(unittest.TestCase):
+    """フェーズW29: step05_ai_retake が書く word ID ベースの retakes を step07 が適用できる。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_word_id_retakes_are_removed(self):
+        stt_path = _write(self.tmp_path / "stt.json", _two_cluster_stt())
+        fillers_path = _write(self.tmp_path / "fillers.json", {"fillers": []})
+        # original_sentence_ids に word ID を書く(step05_ai_retake の出力形式)
+        retakes_path = _write(self.tmp_path / "retakes.json", {"retakes": [
+            {"keep": "retry", "original_sentence_ids": ["w-0002", "w-0003"],
+             "retry_sentence_ids": [], "reason": "文中の言い直し"},
+        ]})
+        scenes_path = _write(self.tmp_path / "scenes.json", {"scenes": []})
+        output_dir = str(self.tmp_path / "out")
+        cfg = {"min_segment_duration_ms": 0, "min_segment_chars": 0, "word_split_merge_max_gap_ms": 0}
+        result = run_step(stt_path, fillers_path, retakes_path, scenes_path, output_dir, config=cfg)
+        # w-0002/w-0003 (1050-1350ms) が除去され、keep区間が後半クラスタを含まない
+        self.assertTrue(result["keep_segments"])
+        for seg in result["keep_segments"]:
+            self.assertLessEqual(seg["end_ms"], 1050)
+
+    def test_sentence_id_retakes_still_work(self):
+        stt_path = _write(self.tmp_path / "stt.json", _two_cluster_stt())
+        fillers_path = _write(self.tmp_path / "fillers.json", {"fillers": []})
+        retakes_path = _write(self.tmp_path / "retakes.json", {"retakes": [
+            {"keep": "retry", "original_sentence_ids": ["sent_1"],
+             "retry_sentence_ids": [], "reason": "言い直し"},
+        ]})
+        scenes_path = _write(self.tmp_path / "scenes.json", {"scenes": []})
+        output_dir = str(self.tmp_path / "out")
+        cfg = {"min_segment_duration_ms": 0, "min_segment_chars": 0, "word_split_merge_max_gap_ms": 0}
+        result = run_step(stt_path, fillers_path, retakes_path, scenes_path, output_dir, config=cfg)
+        self.assertTrue(result["keep_segments"])
+        for seg in result["keep_segments"]:
+            self.assertLessEqual(seg["end_ms"], 1050)
+
+
 class CutProposalPaddingTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

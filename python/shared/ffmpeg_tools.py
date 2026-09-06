@@ -7,6 +7,14 @@ import subprocess
 from typing import List
 
 
+def _require_readable_media(path: str, label: str = "メディアファイル") -> None:
+    """ffprobe/ffmpeg 実行前にパスを検証する(存在しない場合 stderr が空になり原因が分かりにくいため)。"""
+    if not path:
+        raise FileNotFoundError(f"{label}のパスが空です")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"{label}が見つかりません: {path}")
+
+
 def extract_audio(
     video_path: str,
     output_path: str,
@@ -103,6 +111,7 @@ def get_audio_duration_ms(audio_path: str) -> int:
 
 def get_video_metadata(video_path: str) -> dict:
     """動画のメタデータを取得。"""
+    _require_readable_media(video_path, "動画ファイル")
     cmd = [
         "ffprobe",
         "-v", "quiet",

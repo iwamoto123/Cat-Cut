@@ -37,3 +37,28 @@ test("Telop.tsx: オフセット影(shadow_offset)レイヤーを縁レイヤー
   assert.ok(shadowIndex >= 0 && outerIndex >= 0, "影レイヤーと縁レイヤーが存在する");
   assert.ok(shadowIndex < outerIndex, "影レイヤーは縁レイヤーより先(下)に描画される");
 });
+
+test("Telop.tsx: 第3縁(outer_stroke2)は outer_stroke より先(最背面)に描画される", () => {
+  const stroke2Index = TELOP_SOURCE.indexOf("{style.outer_stroke2 && (");
+  const outerIndex = TELOP_SOURCE.indexOf("{style.outer_stroke && (");
+  const innerIndex = TELOP_SOURCE.indexOf("{style.inner_stroke && (");
+  assert.ok(stroke2Index >= 0, "第3縁レイヤーが存在する");
+  assert.ok(stroke2Index < outerIndex, "第3縁は第2縁(outer)より先(下)に描画される");
+  assert.ok(outerIndex < innerIndex, "第2縁は第1縁(inner)より先(下)に描画される");
+});
+
+test("Telop.tsx: 第3縁もオフセット影のシルエット幅(shadowStrokeWidth)に含まれる", () => {
+  assert.ok(
+    TELOP_SOURCE.includes("Math.max(outerStroke2Width, outerStrokeWidth, innerStrokeWidth)"),
+    "影のstroke幅は3縁の最大値",
+  );
+});
+
+test("Telop.tsx: 光彩(glow)はbuildGlowFilterでdrop_shadowとfilter結合される", () => {
+  assert.ok(TELOP_SOURCE.includes("buildGlowFilter"), "光彩の生成関数を使う");
+  assert.ok(TELOP_SOURCE.includes("combineTelopFilters"), "drop_shadowとの結合関数を使う");
+  // W24 Phase B-1: 登場アニメのfilter(blur_in)はblockFilter(グロウ・影)の前段に結合して
+  // ブロックのfilterへ適用する(アニメなしのときは従来どおりblockFilterのみ)
+  assert.ok(TELOP_SOURCE.includes("filter: combinedFilter"), "ブロックのfilterに結合結果を使う");
+  assert.ok(TELOP_SOURCE.includes("(animFilter ?? blockFilter)"), "アニメfilterとglow/影filterを結合する");
+});

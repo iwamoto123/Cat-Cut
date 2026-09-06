@@ -16,6 +16,15 @@ def transcribe_audio(
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
+        import platform
+        import sys
+
+        if sys.platform == "darwin" and platform.machine() == "x86_64":
+            raise ImportError(
+                "ローカルWhisper STT は Intel Mac では利用できません"
+                "（依存ライブラリ onnxruntime の Intel Mac 向け提供が終了しているため）。"
+                "STTプロバイダを ElevenLabs に切り替えてください。"
+            ) from exc
         raise ImportError(
             "faster-whisper is required for --provider local-whisper. "
             "Install it with: .venv/bin/pip install faster-whisper"

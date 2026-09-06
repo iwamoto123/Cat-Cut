@@ -66,7 +66,11 @@ from shared.llm_client import (  # noqa: E402
 from shared.project_config import load_project_config  # noqa: E402
 from shared.telop_builder import _PROPER_NOUN_MAP  # noqa: E402
 from shared.text_cleaning import apply_deterministic_text_cleaning, clean_telop_line  # noqa: E402
-from shared.transcript_correction import load_correction_dictionary  # noqa: E402
+from shared.transcript_correction import (  # noqa: E402
+    load_correction_dictionary,
+    load_correction_history,
+    top_correction_examples,
+)
 
 REPO_ROOT = ROOT.parent
 
@@ -187,6 +191,8 @@ def merge_refine_responses(responses: list[dict[str, Any]]) -> dict[str, Any]:
 # カタカナ語 (3文字以上) と英数字語 (2文字以上)
 _KATAKANA_WORD_RE = re.compile(r"[ァ-ヶー]{3,}")
 _ALNUM_WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9&+.\-]{1,}")
+# 漢字語 (3文字以上。夏期講習/夏季講習 のような同音異字の揺れ検出用。2026-07-06)
+_KANJI_WORD_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF々]{3,}")
 
 
 def _notation_key(word: str) -> str:
@@ -237,6 +243,27 @@ def extract_notation_variants(full_text: str, min_count: int = 2) -> list[dict[s
         ordered = sorted(variants.items(), key=lambda kv: (-kv[1], kv[0]))
         candidates.append({"canonical": ordered[0][0], "variants": ordered})
         seen_words.update(variants)
+
+    # 近似漢字語ペア (例: 夏期講習/夏季講習 のような同音異字の揺れ。2026-07-06)。
+    # 過剰検出を避けるため「同じ長さ・先頭と末尾の文字が一致・置換1文字だけ違う・
+    # 両方 min_count 回以上出現」に限定する (最終判断はプロンプト側のAIが行う)
+    kanji_counts = {
+        w: c for w, c in Counter(_KANJI_WORD_RE.findall(full_text)).items()
+        if c >= min_count
+    }
+    kanji_words = sorted(kanji_counts)
+    for i, w1 in enumerate(kanji_words):
+        for w2 in kanji_words[i + 1:]:
+            if len(w1) != len(w2) or w1[0] != w2[0] or w1[-1] != w2[-1]:
+                continue
+            if sum(c1 != c2 for c1, c2 in zip(w1, w2)) != 1:
+                continue
+            pair = sorted(
+                [(w1, kanji_counts[w1]), (w2, kanji_counts[w2])],
+                key=lambda kv: (-kv[1], kv[0]),
+            )
+            candidates.append({"canonical": pair[0][0], "variants": pair})
+            seen_words.update((w1, w2))
 
     # 近似カタカナ語ペア (例: フォーメイ業/フォーム営業 のカナ部分)。過剰検出を避けるため
     # 両方とも min_count 回以上出現する語に限定する
@@ -297,6 +324,37 @@ def build_dictionary_hint(dictionary_path: Optional[str]) -> str:
     return json.dumps(unique[:80], ensure_ascii=False)
 
 
+# W14-2: プロンプトへ注入する「ユーザーが過去に確定した修正例」の既定件数(頻度上位)。
+CORRECTION_EXAMPLES_LIMIT = 30
+
+
+def build_correction_examples_section(correction_examples: Optional[list[dict[str, Any]]]) -> str:
+    """W14-2: correction_history 由来の修正例をプロンプト節に整形する(空なら空文字=従来動作)。
+
+    決定的な一括置換ではなくAIの文脈判断に委ねるため、「同音異義語など文脈上正しい場合は
+    修正しない」という注意書きを添える(notation_variants 注入と同じ流儀)。
+    """
+    if not correction_examples:
+        return ""
+    lines = []
+    for example in correction_examples:
+        before = str(example.get("before") or "")
+        after = str(example.get("after") or "")
+        if not before or not after:
+            continue
+        count = int(example.get("count") or 1)
+        lines.append(f"- 「{before}」→「{after}」（{count}回修正）")
+    if not lines:
+        return ""
+    examples_list = "\n".join(lines)
+    return f"""
+# ユーザーが過去に確定した修正例（過去の動画で編集者が実際に直した「誤→正」）。
+# 左側の表記を見つけたら同じ誤りの可能性が高いので同様に修正してください。
+# ただし機械的に置換せず文脈で判断し、別の意味で正しく使われている場合は修正しないでください:
+{examples_list}
+"""
+
+
 def build_review_findings_payload(review_path: Optional[str]) -> list[dict[str, Any]]:
     if not review_path:
         return []
@@ -331,6 +389,7 @@ def build_prompt(
     review_findings: Optional[list[dict[str, Any]]] = None,
     video_title: str = "",
     notation_variants: Optional[list[dict[str, Any]]] = None,
+    correction_examples: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     cuts_json = json.dumps(cuts, ensure_ascii=False, indent=2)
     title_section = ""
@@ -363,6 +422,8 @@ def build_prompt(
 # 別の語である場合 (単なる類似語) は統一しないでください:
 {notation_list}
 """
+    # W14-2: ユーザーが過去に確定した修正例(全run横断の correction_history 由来)
+    correction_examples_section = build_correction_examples_section(correction_examples)
     review_section = ""
     if review_findings:
         findings_json = json.dumps(review_findings, ensure_ascii=False, indent=2)
@@ -420,7 +481,7 @@ def build_prompt(
 - 話していない内容を創作しない。確信が持てない誤字は直さずそのまま残す
 - 各カットの発話内容の意味を変えない(要約・省略はしない。誤字修正と改行位置調整のみ)
 - 変更が不要なカットは "cuts" 配列に含めなくてよい
-{dictionary_section}{notation_section}{review_section}
+{dictionary_section}{notation_section}{correction_examples_section}{review_section}
 出力は次のJSON形式のみを返してください。説明文やコードフェンスは不要です:
 {{
   "corrections": {{"誤字表記": "正しい表記"}},
@@ -439,6 +500,152 @@ def build_prompt(
 # 現在のページ分割案 (cut_id ごとの現在のページ本文)
 {cuts_json}
 """
+
+
+def build_final_pass_prompt(
+    transcript: str,
+    cuts: list[dict[str, Any]],
+    video_title: str = "",
+    notation_variants: Optional[list[dict[str, Any]]] = None,
+) -> str:
+    """最終検品パス(2周目)のプロンプト。
+
+    1周目(build_prompt)適用後の確定テロップを対象に、残存ミスだけを安全な
+    文字列置換(corrections)として拾う。ページ構造・改行位置は変更しない
+    (再分割はタイミング・レイアウトを壊しうるため2周目では行わない)。
+    """
+    cuts_json = json.dumps(cuts, ensure_ascii=False, indent=2)
+    title_section = f"\n# 動画タイトル（文脈ヒント）\n{video_title.strip()}\n" if video_title.strip() else ""
+    notation_section = ""
+    if notation_variants:
+        notation_lines = []
+        for group in notation_variants:
+            variants_str = " / ".join(v for v, _ in group["variants"])
+            counts_str = " vs ".join(f"{c}回" for _, c in group["variants"])
+            notation_lines.append(f"- {variants_str} → {group['canonical']}（出現: {counts_str}）")
+        notation_section = (
+            "\n# この動画内で表記が揺れている語 (機械抽出)。同一の語なら多数派(→の右側)に統一:\n"
+            + "\n".join(notation_lines) + "\n"
+        )
+    return f"""あなたは日本語トーク動画のテロップの最終検品者です。以下は校正済みの確定テロップです。
+公開前の最終チェックとして、残存しているミスだけを報告してください。
+
+チェック項目:
+1. 誤字脱字・音声認識ミスの残り (例: 音の類似する固有名詞、同音異義語の誤変換)
+2. 表記揺れの統一漏れ: 同一の語・固有名詞が動画内で複数表記になっている場合、
+   最も多い表記に統一する (例: 「夏期講習」と「夏季講習」が混在→多い方に統一)
+3. 漢数字の算用化漏れ: 数量・点数・割合などの漢数字は算用数字にする
+   (例: 五割→5割、四周→4周。慣用句・熟語「一番」「一緒」等は変えない)
+4. 語の断片・重複: 前ページの語尾が次ページ先頭に重複しているもの
+   (例: 「説明してくれる」の次が「るのと」→「るのと」の「る」は重複) は重複部分を削る修正案を、
+   単独では意味をなさない断片ページ (例: 「て」「と」だけのページ) は needs_review に報告
+5. ローマ字混入 (そうdesu→そうです)・不自然な文字重複 (そのの→その)
+
+ルール(厳守):
+- 修正は「誤→正」の文字列置換 (corrections) のみ。文言の創作・要約・言い換えは禁止
+- ページの分割・結合・移動は禁止 (改行位置の提案はしない)
+- 置換文字列は誤爆しないよう前後の文脈を含めて一意になる長さにする
+- 確信が持てないものは corrections に入れず needs_review に報告する
+- 問題がなければ両方とも空でよい
+{title_section}{notation_section}
+出力は次のJSON形式のみを返してください。説明文やコードフェンスは不要です:
+{{
+  "corrections": {{"誤りを含む文字列": "修正後の文字列"}},
+  "needs_review": [
+    {{"page_id": "cut_003_p00", "reason": "...", "suggestion": "..."}}
+  ]
+}}
+
+# STT文字起こし全文(文脈)
+{transcript}
+
+# 確定テロップ (cut_id ごとのページ本文)
+{cuts_json}
+"""
+
+
+def apply_final_pass_corrections(
+    pages: list[TelopPage],
+    corrections: dict[str, str],
+) -> tuple[list[TelopPage], int]:
+    """最終検品パスの corrections をページ行に適用する(構造は不変)。"""
+    if not corrections:
+        return pages, 0
+    new_pages: list[TelopPage] = []
+    pages_changed = 0
+    for page in pages:
+        new_body: list[str] = []
+        changed = False
+        for line in page.body:
+            if line.strip() == "" or line.lstrip().startswith("#"):
+                new_body.append(line)
+                continue
+            fixed = clean_telop_line(_apply_corrections(line, corrections))
+            if fixed != line:
+                changed = True
+            new_body.append(fixed)
+        if changed:
+            pages_changed += 1
+        new_pages.append(TelopPage(page_id=page.page_id, header=page.header, body=new_body))
+    return new_pages, pages_changed
+
+
+def run_final_pass(
+    pages: list[TelopPage],
+    transcript: str,
+    provider: ProviderName,
+    api_key: str,
+    model: str,
+    caller: Callable[[ProviderName, str, str, str], dict[str, Any]],
+    video_title: str = "",
+    notation_variants: Optional[list[dict[str, Any]]] = None,
+) -> tuple[list[TelopPage], dict[str, Any]]:
+    """最終検品パス(2周目)。失敗しても1周目の結果を壊さない(non-fatal)。
+
+    Returns:
+        (適用後ページ, 統計dict {"corrections", "pages_changed", "needs_review", "failed_chunks"})
+    """
+    cuts_payload = build_cuts_payload(pages)
+    chunks = chunk_cuts_payload(cuts_payload)
+    merged_corrections: dict[str, str] = {}
+    needs_review: list[dict[str, Any]] = []
+    failed_chunks = 0
+
+    for chunk_index, chunk_cuts in enumerate(chunks):
+        prompt = build_final_pass_prompt(
+            transcript, chunk_cuts,
+            video_title=video_title, notation_variants=notation_variants,
+        )
+        try:
+            response = call_llm_json(provider, api_key, model, prompt, caller=caller)
+        except Exception as exc:  # noqa: BLE001
+            failed_chunks += 1
+            error_kind = classify_llm_error(exc)
+            print(
+                f"  final pass chunk {chunk_index + 1}/{len(chunks)} failed "
+                f"[error_kind={error_kind}] ({type(exc).__name__}: {exc})"
+            )
+            if error_kind in FATAL_LLM_ERROR_KINDS:
+                failed_chunks += len(chunks) - chunk_index - 1
+                break
+            continue
+        raw_corrections = response.get("corrections")
+        if isinstance(raw_corrections, dict):
+            for key, value in raw_corrections.items():
+                if isinstance(key, str) and key and value is not None and str(value) != key:
+                    merged_corrections[key] = str(value)
+        chunk_needs, _ = parse_refine_metadata(response)
+        needs_review.extend(chunk_needs)
+        print(f"  final pass chunk {chunk_index + 1}/{len(chunks)}: ok")
+
+    new_pages, pages_changed = apply_final_pass_corrections(pages, merged_corrections)
+    stats = {
+        "corrections": len(merged_corrections),
+        "pages_changed": pages_changed,
+        "needs_review": needs_review,
+        "failed_chunks": failed_chunks,
+    }
+    return new_pages, stats
 
 
 def parse_refine_metadata(response: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -607,10 +814,16 @@ def run_step(
     review_path: Optional[str] = None,
     dictionary_path: Optional[str] = None,
     title: Optional[str] = None,
+    final_pass: bool = True,
+    correction_history_path: Optional[str] = None,
     call_refine_fn: Optional[Callable[[ProviderName, str, str, str], dict[str, Any]]] = None,
     call_claude_fn: Optional[Callable[[str, str, str], dict[str, Any]]] = None,
 ) -> dict[str, Any]:
-    """AI refineステップ本体。APIキーが無い/エラー時は安全にスキップする。"""
+    """AI refineステップ本体。APIキーが無い/エラー時は安全にスキップする。
+
+    final_pass=True (既定) なら、1周目の適用後に「最終検品パス」(2周目)を実行する。
+    2周目は安全な文字列置換のみ(ページ構造不変)で、1周目をすり抜けた表記揺れ・
+    漢数字・語の断片などの残存ミスを拾う (ユーザーFB 2026-07-06)。"""
     run_dir_path = Path(run_dir)
     telop_file = Path(telop_path) if telop_path else run_dir_path / "telop.txt"
     output_file = Path(output_path)
@@ -689,6 +902,12 @@ def run_step(
     notation_variants = extract_notation_variants(full_transcript)
     if notation_variants:
         print(f"  notation variants: {len(notation_variants)} groups")
+    # W14-2: ユーザーが過去に確定した修正例(頻度上位)。履歴が無ければ空=従来動作。
+    correction_examples = top_correction_examples(
+        load_correction_history(correction_history_path), CORRECTION_EXAMPLES_LIMIT,
+    )
+    if correction_examples:
+        print(f"  correction examples: {len(correction_examples)} pairs")
     cut_chunks = chunk_cuts_payload(cuts_payload)
     print(f"  cuts: {len(cuts_payload)}, chunks: {len(cut_chunks)}")
 
@@ -707,6 +926,7 @@ def run_step(
             review_findings=review_findings or None if chunk_index == 0 else None,
             video_title=video_title,
             notation_variants=notation_variants or None,
+            correction_examples=correction_examples or None,
         )
         try:
             response = call_llm_json(
@@ -774,6 +994,30 @@ def run_step(
 
     needs_review, dismissed_finding_ids = parse_refine_metadata(response)
 
+    # 最終検品パス(2周目): 1周目適用後の確定テロップから残存ミスを拾う。
+    # 表記揺れ候補は「修正適用後のテロップ本文+タイトル」から取り直す(現状を反映するため)
+    final_pass_stats: Optional[dict[str, Any]] = None
+    if final_pass:
+        print("  final proofread pass (2/2)...")
+        final_notation = extract_notation_variants(
+            video_title + "\n" + "\n".join(_page_text(p) for p in new_pages)
+        )
+        final_pages, final_pass_stats = run_final_pass(
+            new_pages, transcript,
+            resolved_provider, resolved_key, resolved_model, caller,
+            video_title=video_title,
+            notation_variants=final_notation or None,
+        )
+        if final_pass_stats["pages_changed"]:
+            telop_file.write_text(render_telop(preamble, final_pages), encoding="utf-8")
+            new_pages = final_pages
+        needs_review.extend(final_pass_stats["needs_review"])
+        print(
+            f"  final pass: {final_pass_stats['corrections']} corrections, "
+            f"{final_pass_stats['pages_changed']} pages changed, "
+            f"{len(final_pass_stats['needs_review'])} needs_review"
+        )
+
     result: dict[str, Any] = {
         "enabled": True,
         "provider": resolved_provider,
@@ -786,6 +1030,12 @@ def run_step(
         "needs_review": needs_review,
         "dismissed_finding_ids": dismissed_finding_ids,
     }
+    if final_pass_stats is not None:
+        result["final_pass"] = {
+            "corrections": final_pass_stats["corrections"],
+            "pages_changed": final_pass_stats["pages_changed"],
+            "failed_chunks": final_pass_stats["failed_chunks"],
+        }
     if failed_chunks > 0:
         result["failed_chunks"] = failed_chunks
         result["error_kind"] = summarize_error_kinds(error_kinds)
@@ -821,6 +1071,16 @@ def main() -> None:
     parser.add_argument("--review", default=None, help="telop_review.json パス (省略可)")
     parser.add_argument("--dictionary", default=None, help="domain_dictionary.yaml パス (省略可)")
     parser.add_argument("--title", default=None, help="動画タイトル(文脈ヒント)。省略時はrun名から復元")
+    parser.add_argument(
+        "--no-final-pass",
+        action="store_true",
+        help="最終検品パス(2周目)を無効化する (既定は有効)",
+    )
+    parser.add_argument(
+        "--correction-history",
+        default=None,
+        help="W14-2: correction_history.json パス (Electron userData。省略時は注入なし)",
+    )
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).resolve()
@@ -842,6 +1102,8 @@ def main() -> None:
         review_path=args.review,
         dictionary_path=args.dictionary,
         title=args.title,
+        final_pass=not args.no_final_pass,
+        correction_history_path=args.correction_history,
     )
 
 

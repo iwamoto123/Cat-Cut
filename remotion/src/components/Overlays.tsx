@@ -12,102 +12,63 @@
  *   cta_banner    : 下部の黄ベタ帯+黒文字1〜2行 (参考画像12)
  *   caption       : 下部の白フチ黒字キャプション (B-roll用・T5で使用)
  *
+ * フェーズU1-5(プレビュー忠実化): 見た目の数値・配色・フォントは lib/overlayStyles.ts に
+ * 集約し、デスクトップのプレビュー(PreviewOverlays.tsx)と共有する(ファイル一致テストで同期)。
  * サイズは動画高さ1080px基準のデザイン値を height/1080 でスケールする。
  */
 import React from "react";
 import { AbsoluteFill, Sequence, useVideoConfig } from "remotion";
 
+import { normalizeOverlays, overlayLines, type OverlayItem } from "../lib/overlayItems";
 import {
-  normalizeOverlays,
-  overlayLines,
-  type OverlayItem,
-  type OverlayPosition,
-} from "../lib/overlayItems";
+  CAPTION_DEFAULTS,
+  CAPTION_FILTER,
+  captionTextSpec,
+  CHAPTER_TITLE_DEFAULTS,
+  chapterTitleRenderSpec,
+  ctaBannerBoxStyle,
+  ctaBannerLineStyle,
+  listStackContainerStyle,
+  listStackLineStyle,
+  overlayPositionStyle,
+  profileCardBoxStyle,
+  profileCardNameStyle,
+  profileCardSubtitleStyle,
+  resolveChapterTitlePattern,
+  resolveOverlayTextStyle,
+  strokeTextBaseStyle,
+  type OverlayStrokeTextSpec,
+} from "../lib/overlayStyles";
 import type { TelopStyle } from "./Telop";
 
 // =============================================================================
 // 共通部品
 // =============================================================================
 
-const GOTHIC_FONT_FAMILY =
-  '"Zen Kaku Gothic Antique", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Meiryo", sans-serif';
-// 章見出しは参考動画に合わせてセリフ系太字(op_brushと同じ暫定代替)
-const MINCHO_FONT_FAMILY = '"Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", serif';
-
 /** 縁取り付きテキスト(Telop.tsx と同じ多層 WebkitTextStroke 方式の簡易版)。 */
-const StrokeText = ({
-  text,
-  fontSize,
-  fontFamily,
-  fontWeight,
-  fillColor,
-  strokeColor,
-  strokeWidth,
-}: {
-  text: string;
-  fontSize: number;
-  fontFamily: string;
-  fontWeight: number;
-  fillColor: string;
-  strokeColor: string;
-  strokeWidth: number;
-}) => {
-  const base: React.CSSProperties = {
-    fontFamily,
-    fontSize,
-    fontWeight: fontWeight as React.CSSProperties["fontWeight"],
-    letterSpacing: "0.02em",
-    lineHeight: 1.3,
-    whiteSpace: "pre-wrap",
-    wordBreak: "keep-all",
-  };
+const StrokeText = ({ text, spec }: { text: string; spec: OverlayStrokeTextSpec }) => {
+  const base = strokeTextBaseStyle(spec) as React.CSSProperties;
   return (
     <div style={{ position: "relative", display: "inline-block" }}>
-      {strokeWidth > 0 && (
-        <div style={{ ...base, color: "transparent", WebkitTextStroke: `${strokeWidth}px ${strokeColor}` }}>
+      {spec.strokeWidth > 0 && (
+        <div
+          style={{ ...base, color: "transparent", WebkitTextStroke: `${spec.strokeWidth}px ${spec.strokeColor}` }}
+        >
           {text}
         </div>
       )}
-      <div style={{ ...base, color: fillColor, position: strokeWidth > 0 ? "absolute" : "relative", inset: 0 }}>
+      <div
+        style={{ ...base, color: spec.fillColor, position: spec.strokeWidth > 0 ? "absolute" : "relative", inset: 0 }}
+      >
         {text}
       </div>
     </div>
   );
 };
 
-/** position ごとの配置ラッパースタイル(Sequence の AbsoluteFill 内に絶対配置する)。 */
-const positionStyle = (position: OverlayPosition, scale: number): React.CSSProperties => {
-  const base: React.CSSProperties = { position: "absolute", display: "flex" };
-  switch (position) {
-    case "top_left":
-      return { ...base, top: 28 * scale, left: 36 * scale };
-    case "bottom_left":
-      return { ...base, bottom: 44 * scale, left: 44 * scale };
-    case "center":
-      return { ...base, inset: 0, justifyContent: "center", alignItems: "center" };
-    case "bottom":
-      return { ...base, bottom: 52 * scale, left: 0, right: 0, justifyContent: "center" };
-  }
-};
-
 // =============================================================================
 // type別の描画
 // =============================================================================
-
-/** style指定(overlay用preset参照)からテキスト系オーバーレイの色・フォントを上書きする。 */
-const resolveOverlayTextStyle = (
-  item: OverlayItem,
-  styles: Record<string, TelopStyle> | undefined,
-  defaults: { fontFamily: string; fillColor: string; strokeColor: string },
-): { fontFamily: string; fillColor: string; strokeColor: string } => {
-  const preset = item.style ? styles?.[item.style] : undefined;
-  if (!preset) return defaults;
-  return {
-    fontFamily: preset.font_family ?? defaults.fontFamily,
-    fillColor: preset.fill.type === "solid" ? (preset.fill.color ?? defaults.fillColor) : defaults.fillColor,
-    strokeColor: preset.outer_stroke?.color ?? preset.inner_stroke?.color ?? defaults.strokeColor,
-  };
-};
 
 const ChapterTitle = ({
   item,
@@ -118,22 +79,19 @@ const ChapterTitle = ({
   scale: number;
   styles?: Record<string, TelopStyle>;
 }) => {
-  const { fontFamily, fillColor, strokeColor } = resolveOverlayTextStyle(item, styles, {
-    fontFamily: MINCHO_FONT_FAMILY,
-    fillColor: "#111111",
-    strokeColor: "#FFFFFF",
-  });
+  // フェーズU7: style はパターンID(box_accent等)。パターン外の値(旧preset参照)や欠落は
+  // box_accent=現行デザインとして描き、preset参照の色上書きも従来通り効かせる
+  const resolved = resolveOverlayTextStyle(item, styles, CHAPTER_TITLE_DEFAULTS);
+  const spec = chapterTitleRenderSpec(resolveChapterTitlePattern(item.style), scale, resolved);
+  const inner = (
+    <>
+      <StrokeText text={item.text ?? ""} spec={spec.text} />
+      {spec.underline && <div style={spec.underline as React.CSSProperties} />}
+    </>
+  );
   return (
-    <div style={{ filter: "drop-shadow(0px 3px 5px rgba(0,0,0,0.5))" }}>
-      <StrokeText
-        text={item.text ?? ""}
-        fontSize={46 * scale}
-        fontFamily={fontFamily}
-        fontWeight={800}
-        fillColor={fillColor}
-        strokeColor={strokeColor}
-        strokeWidth={9 * scale}
-      />
+    <div style={spec.container as React.CSSProperties}>
+      {spec.plate ? <div style={spec.plate as React.CSSProperties}>{inner}</div> : inner}
     </div>
   );
 };
@@ -141,48 +99,10 @@ const ChapterTitle = ({
 const ProfileCard = ({ item, scale }: { item: OverlayItem; scale: number }) => {
   const subtitleLines = (item.subtitle ?? "").split("\n").filter((line) => line.length > 0);
   return (
-    <div
-      style={{
-        backgroundColor: "#FFFFFF",
-        border: `${Math.max(1, 2 * scale)}px solid #3A3A3A`,
-        borderRadius: 18 * scale,
-        padding: `${20 * scale}px ${44 * scale}px`,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 8 * scale,
-        boxShadow: `0px ${5 * scale}px ${14 * scale}px rgba(0,0,0,0.35)`,
-        // 幅は内容に合わせる(親が絶対配置のため%指定は幅崩壊する。nowrapで一行維持)
-        width: "max-content",
-      }}
-    >
-      <div
-        style={{
-          fontFamily: GOTHIC_FONT_FAMILY,
-          fontSize: 44 * scale,
-          fontWeight: 800,
-          color: "#111111",
-          letterSpacing: "0.06em",
-          lineHeight: 1.2,
-          textAlign: "center",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {item.text ?? ""}
-      </div>
+    <div style={profileCardBoxStyle(scale) as React.CSSProperties}>
+      <div style={profileCardNameStyle(scale) as React.CSSProperties}>{item.text ?? ""}</div>
       {subtitleLines.map((line, idx) => (
-        <div
-          key={idx}
-          style={{
-            fontFamily: GOTHIC_FONT_FAMILY,
-            fontSize: 21 * scale,
-            fontWeight: 700,
-            color: "#222222",
-            lineHeight: 1.25,
-            textAlign: "center",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <div key={idx} style={profileCardSubtitleStyle(scale) as React.CSSProperties}>
           {line}
         </div>
       ))}
@@ -191,30 +111,9 @@ const ProfileCard = ({ item, scale }: { item: OverlayItem; scale: number }) => {
 };
 
 const ListStack = ({ item, scale }: { item: OverlayItem; scale: number }) => (
-  <div
-    style={{
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: 52 * scale,
-      filter: "drop-shadow(0px 4px 8px rgba(0,0,0,0.4))",
-    }}
-  >
+  <div style={listStackContainerStyle(scale) as React.CSSProperties}>
     {overlayLines(item).map((line, idx) => (
-      <div
-        key={idx}
-        style={{
-          backgroundColor: "#000000",
-          color: "#FFE600",
-          fontFamily: GOTHIC_FONT_FAMILY,
-          fontSize: 56 * scale,
-          fontWeight: 900,
-          letterSpacing: "0.04em",
-          lineHeight: 1.2,
-          padding: `${8 * scale}px ${34 * scale}px`,
-          whiteSpace: "pre-wrap",
-        }}
-      >
+      <div key={idx} style={listStackLineStyle(scale) as React.CSSProperties}>
         {line}
       </div>
     ))}
@@ -222,30 +121,9 @@ const ListStack = ({ item, scale }: { item: OverlayItem; scale: number }) => (
 );
 
 const CtaBanner = ({ item, scale }: { item: OverlayItem; scale: number }) => (
-  <div
-    style={{
-      backgroundColor: "#FFE600",
-      padding: `${16 * scale}px ${52 * scale}px`,
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      filter: "drop-shadow(0px 4px 10px rgba(0,0,0,0.4))",
-    }}
-  >
+  <div style={ctaBannerBoxStyle(scale) as React.CSSProperties}>
     {overlayLines(item).map((line, idx) => (
-      <div
-        key={idx}
-        style={{
-          color: "#000000",
-          fontFamily: GOTHIC_FONT_FAMILY,
-          fontSize: 58 * scale,
-          fontWeight: 900,
-          letterSpacing: "0.02em",
-          lineHeight: 1.25,
-          textAlign: "center",
-          whiteSpace: "pre-wrap",
-        }}
-      >
+      <div key={idx} style={ctaBannerLineStyle(scale) as React.CSSProperties}>
         {line}
       </div>
     ))}
@@ -261,22 +139,10 @@ const Caption = ({
   scale: number;
   styles?: Record<string, TelopStyle>;
 }) => {
-  const { fontFamily, fillColor, strokeColor } = resolveOverlayTextStyle(item, styles, {
-    fontFamily: GOTHIC_FONT_FAMILY,
-    fillColor: "#111111",
-    strokeColor: "#FFFFFF",
-  });
+  const resolved = resolveOverlayTextStyle(item, styles, CAPTION_DEFAULTS);
   return (
-    <div style={{ filter: "drop-shadow(0px 3px 6px rgba(0,0,0,0.45))" }}>
-      <StrokeText
-        text={item.text ?? ""}
-        fontSize={58 * scale}
-        fontFamily={fontFamily}
-        fontWeight={900}
-        fillColor={fillColor}
-        strokeColor={strokeColor}
-        strokeWidth={10 * scale}
-      />
+    <div style={{ filter: CAPTION_FILTER }}>
+      <StrokeText text={item.text ?? ""} spec={captionTextSpec(scale, resolved)} />
     </div>
   );
 };
@@ -333,7 +199,7 @@ export const Overlays = ({
         );
         return (
           <Sequence key={item.id} from={from} durationInFrames={durationInFrames}>
-            <div style={positionStyle(item.position, scale)}>
+            <div style={overlayPositionStyle(item.position, scale, item.type) as React.CSSProperties}>
               <OverlayContent item={item} scale={scale} styles={styles} />
             </div>
           </Sequence>

@@ -4,11 +4,15 @@ export type TranscriptWord = {
   startMs: number;
   endMs: number;
   confidence?: number | null;
+  /** フェーズW1: diarize時の話者ID("speaker_0"等)。旧runでは undefined。 */
+  speaker?: string;
 };
 
 export type KeepSegment = {
   startMs: number;
   endMs: number;
+  /** 素材再生速度。省略時は等速。 */
+  speed?: number;
 };
 
 export type RecomputeOptions = {
@@ -34,7 +38,7 @@ function mergeOverlapping(segments: KeepSegment[]) {
   const merged: KeepSegment[] = [sorted[0]];
   for (const segment of sorted.slice(1)) {
     const last = merged[merged.length - 1];
-    if (segment.startMs <= last.endMs) {
+    if (segment.startMs <= last.endMs && (segment.speed || 1) === (last.speed || 1)) {
       last.endMs = Math.max(last.endMs, segment.endMs);
       continue;
     }
@@ -48,6 +52,7 @@ export function normalizeKeepSegments(segments: KeepSegment[], originalDurationM
     .map((segment) => ({
       startMs: clampMs(segment.startMs, 0, Math.max(0, originalDurationMs)),
       endMs: clampMs(segment.endMs, 0, Math.max(0, originalDurationMs)),
+      ...([1.25, 1.5, 2].includes(Number(segment.speed)) ? { speed: Number(segment.speed) } : {}),
     }))
     .filter((segment) => segment.endMs > segment.startMs);
   return mergeOverlapping(normalized);

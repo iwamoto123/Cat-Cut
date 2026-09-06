@@ -121,8 +121,9 @@ export function snapEdgeTargetMs(
  * シーンの[sourceStartMs, sourceEndMs)を更新し、範囲外に出た単語を自動deleted化(戻れば復活)する。
  * telopTextは未編集の場合のみ自動再生成する(手動編集済みテキストは維持する、既存関数群と同じ方針)。
  * cutMarksは新しい範囲外のものを取り除く(splitSceneAtMs等と同じ後始末)。
+ * W20-1: 範囲選択カット(rangeCut.ts)も同じ規則で両端をトリムするため公開する。
  */
-function withUpdatedBounds(scene: Scene, sourceStartMs: number, sourceEndMs: number): Scene {
+export function withUpdatedBounds(scene: Scene, sourceStartMs: number, sourceEndMs: number): Scene {
   let wordsChanged = false;
   const words = scene.words.map((word) => {
     const inRange = wordOverlapsRange(word, sourceStartMs, sourceEndMs);

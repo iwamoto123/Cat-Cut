@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 from budoux import load_default_japanese_parser
 
 from shared.kinsoku import break_quality, build_kinsoku_sets, kinsoku_penalty, page_end_quality
+from shared.line_break_rules import is_bad_break
 from shared.textwidth import glyph_length, score_balance
 
 
@@ -68,6 +69,8 @@ def split_pages(
         "page_qty": 0.5,
         "page_lone": dp_overrides.get("page_lone", 3.0),
         "page_end": dp_overrides.get("page_end", 1.5),
+        # 行頭が付属語（助詞・助動詞・補助動詞）になる改行のペナルティ
+        "dependent_head": dp_overrides.get("dependent_head", 12.0),
     }
     limits = {
         "line_max_ratio": dp_overrides.get("line_max_ratio", 1.4),
@@ -108,6 +111,7 @@ def split_pages(
     # Step 2: 行分割（DP）
     lines = _layout_lines(
         tokens=tokens,
+        full_text=text,
         layout_cfg=layout_cfg,
         strong_anchors=strong_anchors,
         weak_anchors=weak_anchors,
@@ -215,20 +219,23 @@ def _split_cost_at(text: str, idx: int, kinsoku_sets: Dict[str, Set[str]]) -> Op
     if _is_ascii_alnum(prev_ch) and _is_ascii_alnum(next_ch):
         return None
 
+    # 付属語（助詞・助動詞・補助動詞）が行頭に来る位置は避ける
+    dependent_cost = 4.0 if is_bad_break(text[:idx], text[idx:]) else 0.0
+
     # 助詞の直後（かな→次語）が最も自然。ただし次の文字も助詞になり得る文字なら
     # 助詞連続（「なのか」等）の途中の可能性が高いので通常境界として扱う。
     if prev_ch in _SPLIT_AFTER_PARTICLES and next_ch not in _SPLIT_AFTER_PARTICLES:
-        return 0.2
+        return 0.2 + dependent_cost
     # 英数字連の切れ目（かな↔英数字）
     prev_class = _char_class(prev_ch)
     next_class = _char_class(next_ch)
     if prev_class == "alnum" or next_class == "alnum":
-        return 0.3
+        return 0.3 + dependent_cost
     # その他の文字種境界（かな↔漢字等）
     if prev_class != next_class:
-        return 0.6
+        return 0.6 + dependent_cost
     # 同一文字種の途中（最後の手段）
-    return 2.0
+    return 2.0 + dependent_cost
 
 
 def _split_oversized_tokens(
@@ -329,6 +336,7 @@ def _is_in_forbidden_span(idx: int, forbidden_spans: List[Tuple[int, int]]) -> b
 
 def _layout_lines(
     tokens: Sequence[Token],
+    full_text: str,
     layout_cfg: Dict,
     strong_anchors: Set[int],
     weak_anchors: Set[int],
@@ -340,6 +348,7 @@ def _layout_lines(
 
     Args:
         tokens: トークンリスト
+        full_text: 元テキスト（行頭の付属語判定に使う）
         layout_cfg: レイアウト設定
         strong_anchors: 「。！？」位置（ほぼ強制改行）
         weak_anchors: 「、」位置（優先改行）
@@ -367,6 +376,8 @@ def _layout_lines(
     w_protected = penalties.get("protected_break", 0.0)
     # 改善20-A: 行幅上限を超える単一トークンを1行として許容する際の超過ペナルティ
     w_overflow = penalties.get("overflow", 8.0)
+    # 行頭が付属語になる改行（「模試 / を受ける」「担当 / していまして」）のペナルティ
+    w_dependent = penalties.get("dependent_head", 12.0)
     max_ratio = limits["line_max_ratio"]
 
     n = len(tokens)
@@ -408,6 +419,11 @@ def _layout_lines(
                 next_first = tok.text[0] if tok.text else ""
                 penalty += w_kinsoku * kinsoku_penalty(prev_last, next_first, kinsoku_sets)
                 penalty += w_break * break_quality(prev_last, next_first, kinsoku_sets)
+
+            # 行末（tokens[j-1] の直後）で改行したときに次行が付属語で始まるか
+            break_pos = tok.end
+            if j < n and is_bad_break(full_text[:break_pos], full_text[break_pos:]):
+                penalty += w_dependent
 
             if width < target_width * 0.35:
                 penalty += w_widow

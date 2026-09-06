@@ -6,6 +6,7 @@ import {
   SEMANTIC_TYPES,
   SEMANTIC_TYPE_INFO,
   isSemanticType,
+  resolveAnimationForType,
   resolveStyleForType,
   sanitizeSemanticType,
   sanitizeTypeMapping,
@@ -41,7 +42,8 @@ test("SEMANTIC_TYPES: 10種で、全typeに日本語名・説明・既定マッ�
   for (const type of SEMANTIC_TYPES) {
     assert.ok(SEMANTIC_TYPE_INFO[type].label, `${type} にラベルがある`);
     assert.ok(SEMANTIC_TYPE_INFO[type].description, `${type} に説明がある`);
-    assert.ok(styleIds.has(DEFAULT_TYPE_MAPPING[type]), `${type} の既定プリセットが選択肢に存在する`);
+    // フェーズT3: 既定マッピングは { style, animation_in?, sfx? } エントリ
+    assert.ok(styleIds.has(DEFAULT_TYPE_MAPPING[type].style), `${type} の既定プリセットが選択肢に存在する`);
   }
 });
 
@@ -64,13 +66,27 @@ test("isSemanticType / semanticTypeLabel: 型ガードと日本語ラベル", ()
 
 // --- マッピングの正規化と解決 ---
 
-test("sanitizeTypeMapping: 欠落・不正値は既定マッピングで補完する", () => {
+test("sanitizeTypeMapping: 欠落・不正値は既定マッピングで補完する(旧形式=文字列も読める)", () => {
   const mapping = sanitizeTypeMapping({ harsh: "box_red", quote: "", surprise: 42 });
-  assert.equal(mapping.harsh, "box_red", "有効なユーザー設定は反映される");
-  assert.equal(mapping.quote, DEFAULT_TYPE_MAPPING.quote, "空文字は既定へフォールバック");
-  assert.equal(mapping.surprise, DEFAULT_TYPE_MAPPING.surprise, "文字列以外は既定へフォールバック");
-  assert.equal(mapping.default, DEFAULT_TYPE_MAPPING.default);
+  assert.deepEqual(mapping.harsh, { style: "box_red" }, "旧形式(文字列)は{style}エントリへ包む");
+  assert.deepEqual(mapping.quote, DEFAULT_TYPE_MAPPING.quote, "空文字は既定へフォールバック");
+  assert.deepEqual(mapping.surprise, DEFAULT_TYPE_MAPPING.surprise, "文字列以外は既定へフォールバック");
+  assert.deepEqual(mapping.default, DEFAULT_TYPE_MAPPING.default);
   assert.equal(Object.keys(mapping).length, SEMANTIC_TYPES.length, "常に全typeのエントリを持つ");
+});
+
+test("sanitizeTypeMapping: 新形式エントリのanimation_in/sfxを保持し、不正フィールドは落とす", () => {
+  const mapping = sanitizeTypeMapping({
+    emphasis: { style: "box_red", animation_in: "stamp", sfx: "hyu" },
+    quote: { animation_in: "fade" },
+    reply: { sfx: "none" },
+    punchline: { style: "", animation_in: 42, sfx: {} },
+  });
+  assert.deepEqual(mapping.emphasis, { style: "box_red", animation_in: "stamp", sfx: "hyu" });
+  // styleを指定しないエントリは既定styleを維持したままアニメ/SFXだけ上書きする
+  assert.deepEqual(mapping.quote, { style: DEFAULT_TYPE_MAPPING.quote.style, animation_in: "fade" });
+  assert.deepEqual(mapping.reply, { style: DEFAULT_TYPE_MAPPING.reply.style, sfx: "none" });
+  assert.deepEqual(mapping.punchline, DEFAULT_TYPE_MAPPING.punchline, "全フィールド不正は既定のまま");
 });
 
 test("sanitizeTypeMapping: null/undefined/非オブジェクトでも既定マッピングを返す", () => {
@@ -79,11 +95,23 @@ test("sanitizeTypeMapping: null/undefined/非オブジェクトでも既定マ�
   assert.deepEqual(sanitizeTypeMapping("broken"), DEFAULT_TYPE_MAPPING);
 });
 
-test("resolveStyleForType: ユーザーマッピング優先・未指定は既定マッピング", () => {
+test("resolveStyleForType: ユーザーマッピング優先・未指定は既定マッピング(新旧両形式)", () => {
   assert.equal(resolveStyleForType("harsh"), "serif_harsh");
-  assert.equal(resolveStyleForType("harsh", { harsh: "box_red" }), "box_red");
+  assert.equal(resolveStyleForType("harsh", { harsh: "box_red" }), "box_red", "旧形式(文字列)");
+  assert.equal(resolveStyleForType("harsh", { harsh: { style: "box_red" } }), "box_red", "新形式(エントリ)");
   assert.equal(resolveStyleForType("unknown", { default: "neutral_white" }), "neutral_white");
-  assert.equal(resolveStyleForType(null), DEFAULT_TYPE_MAPPING.default);
+  assert.equal(resolveStyleForType(null), DEFAULT_TYPE_MAPPING.default.style);
+});
+
+test("resolveAnimationForType: マッピングのanimation_inを解決する(未指定はnull=プリセット既定)", () => {
+  assert.equal(resolveAnimationForType("emphasis", { emphasis: { style: "emotion_red", animation_in: "stamp" } }), "stamp");
+  assert.equal(resolveAnimationForType("emphasis", { emphasis: "emotion_red" }), null, "旧形式はアニメ指定なし");
+  assert.equal(resolveAnimationForType("emphasis"), null, "既定マッピングにアニメ指定は無い");
+  assert.equal(
+    resolveAnimationForType("unknown", { default: { style: "fact_yellow", animation_in: "fade" } }),
+    "fade",
+    "未知typeはdefault扱い",
+  );
 });
 
 // --- 有効スタイルの優先順位(python effective_slot_style と同期) ---

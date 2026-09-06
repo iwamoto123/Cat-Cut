@@ -1,0 +1,5 @@
+[
+  { "id": "monthly", "label": "月額", "kind": "subscription", "priceIdEnv": "PRICE_ID_MONTHLY", "univapayAmountEnv": "UNIVAPAY_AMOUNT_MONTHLY", "period": "monthly" },
+  { "id": "yearly", "label": "年額", "kind": "subscription", "priceIdEnv": "PRICE_ID_YEARLY", "univapayAmountEnv": "UNIVAPAY_AMOUNT_YEARLY", "period": "annually" },
+  { "id": "lifetime", "label": "買い切り", "kind": "one_time", "priceIdEnv": "PRICE_ID_LIFETIME", "univapayAmountEnv": "UNIVAPAY_AMOUNT_LIFETIME" }
+]
