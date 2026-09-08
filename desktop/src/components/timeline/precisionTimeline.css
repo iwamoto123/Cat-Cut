@@ -1,0 +1,121 @@
+.selectionInspector {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #d7dee7;
+  border-radius: 8px;
+  background: #fff;
+  color: #253247;
+  font-size: 12px;
+}
+.selectionInspectorHeader { display: flex; align-items: center; gap: 9px; flex-shrink: 0; min-height: 55px; padding: 10px 14px; box-sizing: border-box; border-bottom: 1px solid #e7ebf0; }
+.selectionInspectorIcon { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 6px; background: #eef3f9; color: #526985; }
+.selectionInspector-bgm .selectionInspectorIcon { background: #faf0dd; color: #966929; }
+.selectionInspector-image .selectionInspectorIcon { background: #eaf3ef; color: #3b7a63; }
+.selectionInspectorHeader > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.selectionInspectorType { color: #708096; font-size: 10px; font-weight: 600; }
+.selectionInspectorHeader strong { font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selectionInspectorDelete { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #7b8796; cursor: pointer; }
+.selectionInspectorDelete:hover:not(:disabled) { color: #b64242; border-color: #ebc8c8; background: #fdf2f2; }
+.selectionInspectorBody { overflow-y: auto; min-height: 0; padding: 0 14px 12px; scrollbar-gutter: stable; }
+.selectionInspectorEmpty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; padding: 24px 12px; color: #8995a5; text-align: center; }
+.selectionInspectorEmpty p { margin: 0; color: #53657c; line-height: 1.8; font-size: 12px; }
+.selectionInspectorEmpty > span { font-size: 10px; }
+.precisionSection { padding: 12px 0; border-bottom: 1px solid #e9edf2; }
+.precisionSectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-bottom: 10px; font-size: 11px; font-weight: 650; }
+.precisionSectionTitle > span + span { font-size: 10px; color: #8190a3; font-weight: 400; }
+.precisionFields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 9px 10px; }
+.precisionField { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.precisionFieldLabel { font-size: 10px; color: #68788d; }
+.precisionFieldInput { display: flex; align-items: center; min-width: 0; height: 31px; background: #f8fafc; border: 1px solid #d8e0e9; border-radius: 5px; overflow: hidden; }
+.precisionFieldInput:focus-within { border-color: #4c7cb9; box-shadow: 0 0 0 2px #4c7cb919; background: #fff; }
+.precisionFieldInput.invalid { border-color: #cf6a64; }
+.precisionFieldInput input { appearance: none; min-width: 0; width: 100%; height: 100%; padding: 5px 7px; border: 0 !important; outline: 0 !important; box-shadow: none !important; background: transparent !important; color: #253247; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+.precisionFieldInput > span { padding-right: 7px; color: #8a96a6; font-size: 10px; }
+.precisionFieldNote { align-self: end; line-height: 31px; color: #8a96a6; font-size: 9px; white-space: nowrap; }
+.precisionSeekButtons { display: flex; gap: 5px; align-self: end; height: 31px; }
+.precisionSeekButtons button, .precisionTextButton, .precisionSpeedButtons button { min-width: 0; padding: 4px 8px; border: 1px solid #d8e0e9; border-radius: 5px; background: #fff; color: #536981; font: inherit; font-size: 10px; white-space: nowrap; cursor: pointer; }
+.precisionSeekButtons button { flex: 1; padding-inline: 3px; }
+.precisionSeekButtons button:hover:not(:disabled), .precisionTextButton:hover:not(:disabled), .precisionSpeedButtons button:hover:not(:disabled) { border-color: #7295be; background: #f4f8fd; }
+.precisionHelp { color: #8995a5; font-size: 9px; line-height: 1.5; margin: 8px 0 0; }
+.precisionKeyboardHelp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: #8a96a6; font-size: 9px; margin: 12px 0 0; }
+.precisionKeyboardHelp kbd, .precisionTimelineHint kbd { border: 1px solid #dde4ec; border-radius: 3px; background: #f7f9fc; padding: 1px 3px; color: #68798f; font: inherit; }
+.precisionReadout { display: flex; flex-wrap: wrap; gap: 7px; justify-content: space-between; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: #576a80; font-variant-numeric: tabular-nums; }
+.precisionSpeedButtons { display: flex; gap: 5px; flex-wrap: wrap; }
+.precisionSpeedButtons button.active { border-color: #7c9fc5; background: #ebf2fb; color: #315e95; }
+.precisionSceneText { max-height: 75px; overflow: auto; font-size: 12px; line-height: 1.7; color: #5e6d80; margin: 12px 0; }
+.selectionInspector button:disabled, .selectionInspector input:disabled { opacity: .45; cursor: default; }
+
+.timelineView.precisionTimeline { border-radius: 8px; border-color: #d7dee7; background: #fff; }
+.precisionTimeline .timelineToolbar { min-height: 46px; padding: 8px 12px; gap: 12px; background: #fff; border-bottom: 1px solid #e3e8ef; }
+.precisionTimeline .timelineToolbarTitle { font-size: 12px; color: #34445a; }
+.precisionTimeline .timelineToolbarDuration { color: #8190a3; font-size: 10px; font-variant-numeric: tabular-nums; }
+.precisionTimeline .timelineZoomControl { margin-left: auto; gap: 6px; }
+.precisionTimeline .timelineZoomControl input[type="range"] { width: 100px; }
+.precisionTimelineButton { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; padding: 3px 8px; border: 1px solid #d7e0ea; border-radius: 5px; background: #fff; color: #5b6f86; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.precisionTimelineButton:hover:not(:disabled) { background: #f2f6fb; border-color: #92abc8; }
+.precisionTimelineButton.active { background: #edf3fb; border-color: #9bb5d3; color: #38659b; }
+.precisionTimelineButton:disabled { opacity: .4; cursor: default; }
+.precisionZoomValue { min-width: 37px; text-align: center; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; color: #6e7e92; }
+.precisionTimelineHint { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 5px 12px; border-top: 1px solid #e6ebf1; background: #fbfcfe; color: #8390a1; font-size: 10px; }
+.precisionTimelineHint .precisionSnapHint { margin-left: auto; }
+.precisionTimeline .timelineLabels { background: #f6f8fb; border-right: 1px solid #dce3ec; }
+.precisionTimeline .timelineLabelCell { color: #68798e; font-size: 11px; padding-left: 12px; gap: 7px; border-bottom-color: #e4e9f0; }
+.precisionTimeline .timelineBgmAddButton { border: 0; border-radius: 4px; background: #eaf0f7; color: #5c7290; font-size: 10px; padding: 3px 5px; }
+.precisionTimeline .tlLane { border-bottom-color: #e9edf3; }
+.precisionTimeline .tlLanePlaceholder { color: #9aa6b4; font-size: 11px; }
+.precisionTimeline .tlBgmClip { border: 1px solid #cbb486; border-radius: 4px; background: #f3ead8; }
+.precisionTimeline .tlBgmClip.selected { border-color: #a77c35; background: #eee0c5; box-shadow: 0 0 0 1px #a77c35; }
+.precisionTimeline .tlBgmClipLabel { top: 7px; left: 29px; right: 11px; font-weight: 550; color: #80673e; }
+.precisionTimeline .tlBgmEnvelope { opacity: .7; }
+.precisionTimeline .tlBgmVolumeLabel { right: 11px; left: auto; top: 8px; transform: none; font-size: 9px; color: #957a51; }
+.precisionTimeline .tlBgmClipLabel { padding-right: 37px; }
+.precisionTimeline .tlBgmFadeKnob { width: 12px; height: 12px; margin: 0; border: 2px solid #fff9ed; border-radius: 3px; background: #a98141; box-sizing: border-box; z-index: 5; }
+.precisionTimeline .tlBgmFadeKnob::before { content: ""; position: absolute; inset: -4px; }
+.precisionTimeline .tlBgmResizeHandle, .precisionTimeline .tlImageResizeHandle { top: 4px; bottom: 4px; width: 9px; z-index: 7; border-radius: 2px; }
+.precisionTimeline .tlBgmResizeHandleStart, .precisionTimeline .tlImageResizeHandleStart { left: 0; }
+.precisionTimeline .tlBgmResizeHandleEnd, .precisionTimeline .tlImageResizeHandleEnd { right: 0; }
+.precisionTimeline .selected > .tlBgmResizeHandle::after, .precisionTimeline .selected > .tlImageResizeHandle::after { content: ""; position: absolute; top: 50%; left: 3px; width: 2px; height: 13px; transform: translateY(-50%); border-radius: 2px; background: currentColor; opacity: .55; }
+.precisionTimeline .tlBgmResizeHandle { color: #a07531; }
+.precisionTimeline .tlImageResizeHandle { color: #4e8a72; }
+.precisionTimeline .tlLaneReorderHandle { left: 11px; top: 7px; bottom: auto; width: 13px; height: 16px; opacity: .35; }
+.precisionTimeline .selected > .tlLaneReorderHandle, .precisionTimeline .tlLaneReorderHandle:hover { opacity: .8; }
+.precisionTimeline .tlImageClip { border-radius: 4px; border-color: #a5c9ba; background: #e4f0eb; }
+.precisionTimeline .tlImageClip.selected { border-color: #53866f; background: #d8e9e1; box-shadow: 0 0 0 1px #53866f; }
+.precisionTimeline .tlImageClipLabel { left: 29px; font-weight: 550; }
+.precisionTimeline .tlTelopBlock, .precisionTimeline .tlVideoBlock { border-radius: 4px; }
+.precisionTimeline .tlVideoBlock.selected, .precisionTimeline .tlTelopBlock.selected { box-shadow: 0 0 0 1px #4c7eaf; border-color: #4c7eaf; }
+.precisionTimeline .timelinePlayhead { background: #4279b8; }
+.precisionTimeline .timelinePlayheadHandle { background: #4279b8; }
+
+.selectionInspector { container-type: inline-size; }
+.precisionTimelineClock { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: #354c66; font-variant-numeric: tabular-nums; }
+.precisionButtonKey { font-size: 9px; opacity: .5; padding-left: 3px; }
+@container (min-width: 470px) {
+  .selectionInspectorBody { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-content: start; column-gap: 24px; }
+  .precisionSection { min-width: 0; border-bottom: 0; }
+  .precisionKeyboardHelp { grid-column: 1 / -1; border-top: 1px solid #e9edf2; padding-top: 9px; margin-top: 0; }
+}
+
+.precisionTimeline .tlLaneReorderHandle { transform: none; }
+.precisionTimeline .tlImageClipLabel { padding-left: 29px; }
+.precisionApplySpeed { margin-top: 8px; }
+
+.precisionTimeline .timelineEndPadding { position: absolute; top: 30px; bottom: 0; border-left: 1px dashed #c5cfdd; background: #f5f7fa88; pointer-events: none; }
+
+@container (min-width: 470px) {
+  .selectionInspectorHeader { min-height: 44px; padding: 6px 12px; }
+  .selectionInspectorIcon { width: 28px; height: 28px; }
+  .selectionInspectorHeader > div { gap: 1px; }
+  .selectionInspectorType { font-size: 9px; }
+  .selectionInspectorBody { padding: 0 12px 8px; column-gap: 20px; }
+  .precisionSection { padding: 8px 0; }
+  .precisionSectionTitle { margin-bottom: 7px; }
+  .precisionFields { gap: 7px 8px; }
+  .precisionField { gap: 4px; }
+  .precisionFieldInput, .precisionSeekButtons { height: 29px; }
+  .precisionFieldNote { line-height: 29px; }
+  .precisionHelp { margin-top: 6px; }
+}

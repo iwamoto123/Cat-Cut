@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { bgmVolumeAtTimelineMs, type BgmClipData } from "../lib/bgmAudio";
 
 /** プレビュー同期の許容ズレ(秒)。これを超えたらHTMLAudioをシークし直す。 */
@@ -48,6 +48,11 @@ type Options = {
 export function useBgmPreviewAudio({ clips, muted, getPlayback }: Options) {
   const audioMapRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const lastActiveAtRef = useRef<Map<string, number>>(new Map());
+  const pauseImmediately = useCallback(() => {
+    // Explicit user pause bypasses the clip-transition grace period.
+    lastActiveAtRef.current.clear();
+    for (const audio of audioMapRef.current.values()) audio.pause();
+  }, []);
   // rAFループは張りっぱなしのため、最新のclips/muted/getPlaybackはrefで読む
   const stateRef = useRef({ clips, muted, getPlayback });
   stateRef.current = { clips, muted, getPlayback };
@@ -158,4 +163,6 @@ export function useBgmPreviewAudio({ clips, muted, getPlayback }: Options) {
       map.clear();
     };
   }, []);
+
+  return pauseImmediately;
 }

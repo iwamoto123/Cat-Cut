@@ -82,6 +82,16 @@ export function sourceMsToTimelineMs(ranges: TimelineCutRange[], sourceMs: numbe
   return null;
 }
 
+/** 停止中の編集カーソルはカットのOUT点も指せる。隣接境界は通常の写像を優先する。 */
+export function sourceMsToTimelineEditMs(ranges: TimelineCutRange[], sourceMs: number): number | null {
+  const exact = sourceMsToTimelineMs(ranges, sourceMs);
+  if (exact !== null) return exact;
+  for (const range of ranges) {
+    if (Math.abs(sourceMs - range.sourceEndMs) < 0.001) return range.timelineEndMs;
+  }
+  return null;
+}
+
 /**
  * タイムラインms → 元動画ms(逆写像)。オーバーレイ編集時のシーク位置算出などに使う。
  */

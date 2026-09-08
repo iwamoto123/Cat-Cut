@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld("catcut", {
   getCorrectionHistory: () => ipcRenderer.invoke("correction-history:get"),
   deleteCorrectionHistoryPair: (input) => ipcRenderer.invoke("correction-history:delete", input),
   exportLearningData: () => ipcRenderer.invoke("edit-learning:export"),
+  initializeEditingLearning: (input) => ipcRenderer.invoke("editing-learning:initialize", input),
+  getEditingLearningSummary: () => ipcRenderer.invoke("editing-learning:summary"),
+  excludeEditingLearningExample: (input) => ipcRenderer.invoke("editing-learning:exclude", input),
   recordLearningDecision: (input) => ipcRenderer.invoke("user-rules:recordDecision", input),
   chooseVideo: () => ipcRenderer.invoke("dialog:chooseVideo"),
   // フェーズW8: 素材選択直後の縦横自動判定(ffprobe)
@@ -53,6 +56,7 @@ contextBridge.exposeInMainWorld("catcut", {
   // フェーズU9: フィルムストリップ(サムネイル帯)とBGMトラック
   generateFilmstrip: (input) => ipcRenderer.invoke("transcript:filmstrip", input),
   listBgm: (input) => ipcRenderer.invoke("bgm:list", input),
+  getBgmWaveform: (input) => ipcRenderer.invoke("bgm:waveform", input),
   addBgm: (input) => ipcRenderer.invoke("bgm:add", input),
   saveBgm: (input) => ipcRenderer.invoke("bgm:save", input),
   // フェーズV4: 画像挿入トラック

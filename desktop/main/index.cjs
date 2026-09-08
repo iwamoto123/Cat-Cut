@@ -18,8 +18,21 @@ const {
 } = require("./orientation.cjs");
 // W13-1: 派生キャッシュ(segments/・preview_cut_sequence等)の統計・クリーンアップ
 const { collectCacheStats, cleanCaches } = require("./cache.cjs");
+const { computeWaveformPeaks, createInFlightTaskRunner } = require("./waveformPcm.cjs");
+const { createBgmWaveformService, createWaveformDecodeQueue } = require("./bgmWaveform.cjs");
+const runQueuedFfmpegWaveform = createWaveformDecodeQueue();
+const { buildPreviewPagesFromComposition } = require("./previewPages.cjs");
+const { pipePreviewFile } = require("./previewStream.cjs");
 // W14-2: 編集前→編集後の修正ペア学習(edit_history.json / correction_history.json)
 const editLearning = require("./editLearning.cjs");
+const editingLearning = require("./editingLearning.cjs");
+const { mediaLearningIdentity, combineEditingCorpora, summarizeEditingCorpus } = require("./learningIntegration.cjs");
+const { normalizeTelopPosition, normalizeSceneTelopPositions, projectSceneTelopPositions, telopPositionForTime } = require("./sceneTelopPositions.cjs");
+const { createAtomicJsonWriter } = require("./atomicJsonWriter.cjs");
+const writeDraftJson = createAtomicJsonWriter();
+const writeMediaJson = createAtomicJsonWriter();
+const { createMediaDurationCache } = require("./mediaDurationCache.cjs");
+const { createMediaTrackStore } = require("./mediaTrackStore.cjs");
 // W19-C2: 差分なしなら step08 を完全スキップするための入力合成ハッシュ
 const {
   computeStep08InputHash,
@@ -788,6 +801,66 @@ function correctionHistoryPath() {
   return userDataPath("correction_history.json");
 }
 
+function editingCorpusPath() { return userDataPath("editing_learning_corpus.json"); }
+function combinedEditingCorpus() {
+  const local = editingLearning.loadCorpus(editingCorpusPath());
+  const sharedDir = nextcloudLearningDir();
+  const sharedPath = sharedDir ? path.join(sharedDir, "shared_editing_learning_corpus.json") : "";
+  if (!sharedPath || !fs.existsSync(sharedPath)) return combineEditingCorpora(local);
+  try { return combineEditingCorpora(local, editingLearning.loadCorpus(sharedPath)); }
+  catch { return combineEditingCorpora(local); }
+}
+function editingLearningSummary() { return summarizeEditingCorpus(combinedEditingCorpus()); }
+function editingPipelineEnv() {
+  const env = apiKeys.buildPipelineEnv();
+  try {
+    const corpus = combinedEditingCorpus();
+    const effectivePath = userDataPath("editing_learning_corpus.effective.json");
+    // Derive from immutable local/shared snapshots; never write merged observations back locally.
+    const serialized = JSON.stringify(corpus);
+    if (!fs.existsSync(effectivePath) || fs.readFileSync(effectivePath, "utf8") !== serialized) {
+      const temporary = `${effectivePath}.tmp-${crypto.randomUUID()}`;
+      try { fs.writeFileSync(temporary, serialized, "utf8"); fs.renameSync(temporary, effectivePath); }
+      finally { fs.rmSync(temporary, { force: true }); }
+    }
+    env.CATCUT_EDITING_LEARNING_PATH = effectivePath;
+  } catch (error) {
+    // Optional examples must not prevent processing; a damaged corpus stays intact for repair.
+    console.warn(`編集学習の参照をスキップしました: ${error.message || error}`);
+    env.CATCUT_EDITING_LEARNING_PATH = userDataPath("editing_learning_unavailable.json");
+  }
+  return env;
+}
+
+function initializeEditingLearning({ runDir, scenes } = {}) {
+  const resolved = resolveRunDir(runDir);
+  const existing = editingLearning.loadState(resolved);
+  if (existing) return existing;
+  const transcript = loadTranscriptEditorState(resolved);
+  const rawPath = path.join(resolved, "step02_stt", "stt_result.json");
+  const directivesPath = path.join(resolved, "telop_directives.json");
+  const raw = fs.existsSync(rawPath) ? readJson(rawPath) : {};
+  const priorEdits = fs.existsSync(sceneEditsDraftPath(resolved)) ||
+    fs.existsSync(editHistoryPath(resolved)) ||
+    (fs.existsSync(directivesPath) && readJson(directivesPath)?.edited_by_ui);
+  return editingLearning.ensureBaseline({
+    runDir: resolved,
+    transcript: { ...transcript, ...(Array.isArray(scenes) ? { initialScenes: scenes } : {}) },
+    rawWords: Array.isArray(raw.words) ? raw.words : [],
+    sourceIdentity: mediaLearningIdentity(transcript.sourceVideoPath),
+    provenance: priorEdits || !Array.isArray(scenes) ? "legacy_observed" : "ai_original",
+  });
+}
+
+function prepareEditingLearningExport(runDir, snapshot) {
+  // Use exactly the revision applied by the renderer, never a newer autosaved draft.
+  // Legacy text-only export paths have no scene snapshot and cannot safely teach scene edits.
+  if (!snapshot || !Array.isArray(snapshot.scenes) || !Array.isArray(snapshot.keepSegments)) return null;
+  initializeEditingLearning({ runDir });
+  editingLearning.recordCurrent({ runDir, scenes: snapshot.scenes, keepSegments: snapshot.keepSegments });
+  return editingLearning.captureForExport(runDir);
+}
+
 /**
  * 学習データ共有用のNextcloudフォルダ(<Nextcloud>/CatCut-learning)。
  * Nextcloud同期フォルダが見つからないPCでは null(完全従来動作)。
@@ -825,6 +898,7 @@ function effectiveCorrectionHistoryPath() {
     const combined = editLearning.combineCorrectionHistories(
       editLearning.loadCorrectionHistory(localPath),
       editLearning.loadCorrectionHistory(sharedPath),
+      { machineLabel: os.hostname() },
     );
     const effectivePath = userDataPath("correction_history.effective.json");
     fs.writeFileSync(effectivePath, `${JSON.stringify(combined, null, 2)}\n`, "utf-8");
@@ -952,35 +1026,15 @@ function editHistoryPath(runDir) {
   return path.join(resolveRunDir(runDir), "edit_history.json");
 }
 
-/**
- * W14-2: テロップ編集確定(blur)の記録。run正本 edit_history.json(シーン単位・初期テキスト保持)と
- * userData/correction_history.json(全run横断の語レベルペア・頻度カウント・LRU上限)を同時に更新する。
- * ペアの抽出(語レベルdiff・ノイズ除外)はrenderer側(correctionPairs.ts)で済んでいる。
- */
+/** Compatibility read for former blur recording; successful exports now establish learning evidence. */
 function recordTelopEditLearning(input) {
   const runDir = String(input?.runDir || "");
-  const editHistory = runDir
-    ? editLearning.recordSceneEdit(editHistoryPath(runDir), {
-        sceneId: String(input?.sceneId || ""),
-        source: String(input?.source ?? ""),
-        before: String(input?.before ?? ""),
-        after: String(input?.after ?? ""),
-      })
-    : null;
-  const pairs = Array.isArray(input?.pairs) ? input.pairs : [];
-  const correctionHistory = pairs.length
-    ? editLearning.recordCorrectionPairs(correctionHistoryPath(), pairs)
-    : editLearning.loadCorrectionHistory(correctionHistoryPath());
-  if (runDir) {
-    editLearning.recordEditExample(editExamplesPath(), {
-      run: path.basename(runDir),
-      sceneId: String(input?.sceneId || ""),
-      source: String(input?.source ?? ""),
-      before: String(input?.before ?? ""),
-      after: String(input?.after ?? ""),
-    });
-  }
-  return { editHistory, correctionHistory };
+  // Old renderers may still send blur events. They are not verified learning evidence:
+  // Undo and AI-only changes cannot be resolved from this event payload.
+  return {
+    editHistory: runDir ? editLearning.loadEditHistory(editHistoryPath(runDir)) : null,
+    correctionHistory: editLearning.loadCorrectionHistory(correctionHistoryPath()),
+  };
 }
 
 /** W11-2: ドラフトのオブジェクト辞書フィールド(overlayEdits/customStyles)の正規化。 */
@@ -1035,16 +1089,9 @@ async function saveSceneEditsDraft(runDir, input) {
   const resolved = resolveRunDir(runDir);
   const draft = sanitizeSceneEditsDraft(input);
   const filePath = sceneEditsDraftPath(resolved);
-  const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-  try {
-    await fs.promises.writeFile(tmpPath, `${JSON.stringify(draft)}\n`, "utf-8");
-    await fs.promises.rename(tmpPath, filePath);
-  } catch (error) {
-    await fs.promises.rm(tmpPath, { force: true }).catch(() => {});
-    throw error;
-  }
-  return draft;
+  await writeDraftJson(filePath, draft);
+  // The renderer already owns the scenes; avoid cloning megabytes back over IPC.
+  return { version: draft.version, updatedAt: draft.updatedAt };
 }
 
 function defaultUserRules() {
@@ -2500,7 +2547,7 @@ function servePreviewVideo(request, response) {
       "Content-Range": `bytes ${start}-${end}/${stat.size}`,
       "Content-Length": end - start + 1,
     });
-    fs.createReadStream(filePath, { start, end }).pipe(response);
+    pipePreviewFile(filePath, response, { start, end });
     return;
   }
 
@@ -2508,7 +2555,7 @@ function servePreviewVideo(request, response) {
     ...commonHeaders,
     "Content-Length": stat.size,
   });
-  fs.createReadStream(filePath).pipe(response);
+  pipePreviewFile(filePath, response);
 }
 
 /**
@@ -2561,77 +2608,6 @@ function buildPreviewSfxUrls() {
     if (url) urls[sfxId] = url;
   }
   return urls;
-}
-
-function quoteConcatPath(filePath) {
-  return `'${filePath.replace(/'/g, "'\\''")}'`;
-}
-
-function ensureCutPreviewVideo(outputs, cuts) {
-  const segmentPaths = cuts
-    .map((cut) => {
-      const rawVideoPath = cut?.video?.file_path;
-      if (!rawVideoPath) return "";
-      return path.isAbsolute(rawVideoPath)
-        ? rawVideoPath
-        : path.resolve(path.dirname(outputs.composition), rawVideoPath);
-    })
-    .filter(Boolean);
-
-  if (!segmentPaths.length || segmentPaths.some((segmentPath) => !fs.existsSync(segmentPath))) {
-    return "";
-  }
-  if (segmentPaths.length === 1) return segmentPaths[0];
-
-  const previewPath = path.join(path.dirname(outputs.composition), "preview_cut_sequence.mp4");
-  const listPath = path.join(path.dirname(outputs.composition), "preview_cut_sequence.txt");
-  const listContent = `${segmentPaths.map((segmentPath) => `file ${quoteConcatPath(segmentPath)}`).join("\n")}\n`;
-  const previewExists = fs.existsSync(previewPath);
-  const previewMtime = previewExists ? fs.statSync(previewPath).mtimeMs : 0;
-  const sourceMtime = Math.max(...segmentPaths.map((segmentPath) => fs.statSync(segmentPath).mtimeMs));
-  // W11-1a(差分キャッシュ追従): セグメントは編集後もmtimeが古いまま再利用されるため、
-  // mtime比較だけでは編集(セグメント構成の変化)を検出できない。前回の結合リストと
-  // パス列が同一であることも合わせて確認する
-  const previousList = fs.existsSync(listPath) ? fs.readFileSync(listPath, "utf-8") : "";
-  if (previewExists && previewMtime >= sourceMtime && previousList === listContent) return previewPath;
-
-  fs.writeFileSync(listPath, listContent, "utf-8");
-
-  fs.mkdirSync(path.dirname(previewPath), { recursive: true });
-  let result = spawnSync("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", previewPath], {
-    encoding: "utf-8",
-  });
-
-  if (result.status !== 0) {
-    result = spawnSync(
-      "ffmpeg",
-      [
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        listPath,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        "18",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        previewPath,
-      ],
-      { encoding: "utf-8" },
-    );
-  }
-
-  return result.status === 0 && fs.existsSync(previewPath) ? previewPath : "";
 }
 
 function loadProjectTelopMode(projectRelativePath) {
@@ -3114,80 +3090,7 @@ function avoidSourceOverwrite(outputPath, sourceVideoPath) {
 
 function buildPreviewPages(outputs) {
   if (!fs.existsSync(outputs.composition)) return [];
-
-  const composition = readJson(outputs.composition);
-  const cuts = composition?.timeline?.cuts || [];
-  const voiceCuts = new Map((composition?.voice_data?.cuts || []).map((cut) => [cut.id, cut]));
-  const displayWidth = Number(composition?.meta?.display_width || 1280);
-  const displayHeight = Number(composition?.meta?.display_height || 720);
-  const result = [];
-  const cutPreviewVideo = ensureCutPreviewVideo(outputs, cuts);
-  const cutPreviewUrl = cutPreviewVideo ? registerPreviewVideo(cutPreviewVideo) : "";
-  let sequenceStartMs = 0;
-
-  for (const cut of cuts) {
-    const pages = cut?.telop?.pages || [];
-    if (!pages.length) continue;
-
-    const rawVideoPath = cut?.video?.file_path;
-    if (!rawVideoPath) continue;
-
-    const videoPath = path.isAbsolute(rawVideoPath)
-      ? rawVideoPath
-      : path.resolve(path.dirname(outputs.composition), rawVideoPath);
-    const videoUrl = cutPreviewUrl || registerPreviewVideo(videoPath);
-    if (!videoUrl) continue;
-
-    const cutDurationMs =
-      Number(cut?.video?.end_ms || 0) - Number(cut?.video?.start_ms || 0) ||
-      Number(cut?.timeline?.end_ms || 0) - Number(cut?.timeline?.start_ms || 0);
-    const sourceStartMs = cutPreviewUrl ? sequenceStartMs : Number(cut?.video?.start_ms || 0);
-    const voiceCut = voiceCuts.get(cut.cut_id);
-    const voiceWords = voiceCut?.voice?.words || [];
-    const voiceTelops = voiceCut?.telops || [];
-
-    const telopRange = (index) => {
-      const telop = voiceTelops[index];
-      if (typeof telop?.start === "number" && typeof telop?.end === "number" && telop.end > telop.start) {
-        return {
-          pageStartMs: Math.max(0, Math.floor(telop.start * 1000)),
-          pageEndMs: Math.max(0, Math.floor(telop.end * 1000)),
-        };
-      }
-      const indices = telop?.word_indices || [];
-      if (!indices.length || !voiceWords.length) {
-        const pageStartMs = Math.max(0, Math.floor((cutDurationMs * index) / pages.length));
-        const pageEndMs = Math.max(0, Math.floor((cutDurationMs * (index + 1)) / pages.length));
-        return { pageStartMs, pageEndMs };
-      }
-      const firstWord = voiceWords[Math.min(...indices)];
-      const lastWord = voiceWords[Math.max(...indices)];
-      const nextIndices = voiceTelops[index + 1]?.word_indices || [];
-      const nextWord = nextIndices.length ? voiceWords[Math.min(...nextIndices)] : null;
-      const pageStartMs = Math.max(0, Math.floor(Number(firstWord?.start || 0) * 1000));
-      const pageEndMs = Math.max(
-        pageStartMs + 100,
-        Math.floor(Number((nextWord || lastWord)?.[nextWord ? "start" : "end"] || 0) * 1000),
-      );
-      return { pageStartMs, pageEndMs };
-    };
-
-    pages.forEach((page, index) => {
-      const { pageStartMs, pageEndMs } = telopRange(index);
-      result.push({
-        pageId: page.id,
-        cutId: cut.cut_id,
-        videoUrl,
-        startMs: sourceStartMs + pageStartMs,
-        endMs: sourceStartMs + pageEndMs,
-        displayWidth,
-        displayHeight,
-      });
-    });
-    sequenceStartMs += cutDurationMs;
-  }
-
-  return result;
+  return buildPreviewPagesFromComposition(readJson(outputs.composition), outputs.composition, registerPreviewVideo);
 }
 
 function loadTelopReviewState(runDir) {
@@ -3516,6 +3419,7 @@ async function rerunCompositionAndTelop(runDir, options = {}) {
   if (canSkipStep08(runDir, inputHash.hash)) {
     console.log(`step08 skipped (no changes): ${runDir}`);
     sendJobEvent({ type: "log", message: "step08 skipped (no changes)\n" });
+    applyStoredSceneTelopPositions(runDir);
     return;
   }
 
@@ -3550,6 +3454,7 @@ async function rerunCompositionAndTelop(runDir, options = {}) {
 
   // 成功時のみ保存する(途中失敗した実行を「変更なし」と誤判定しないため)
   writeStep08InputHash(runDir, inputHash);
+  applyStoredSceneTelopPositions(runDir);
 }
 
 async function rerunCutProposalWithGap(runDir, maxGapMs) {
@@ -3669,9 +3574,11 @@ function buildTelopPageBoundaries(source) {
         : [];
       // フェーズW1: スロットの話者ID(composition telops[].speaker 由来。旧runはなし)
       const speaker = directed && typeof telop?.speaker === "string" && telop.speaker ? telop.speaker : "";
+      const pagePosition = telopPositionForTime(cut.telop_position_ranges, ((startMs + endMs) / 2 - segStartMs) / (1000 * segmentSpeed), telop?.telop_position);
       boundaries.push({
         startMs,
         endMs,
+        ...(pagePosition ? { telopPosition: pagePosition } : {}),
         ...(text ? { text } : {}),
         ...(styleId ? { styleId } : {}),
         ...(typeId ? { typeId } : {}),
@@ -4006,7 +3913,7 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
       return;
     }
     const highlightWords = Array.isArray(edit?.highlightWords)
-      ? edit.highlightWords.map(String).filter((word) => word && text.includes(word))
+      ? edit.highlightWords.map(String).filter((word) => word.replace(/[\r\n]/g, "") && text.replace(/[\r\n]/g, "").includes(word.replace(/[\r\n]/g, "")))
       : [];
     // フェーズT2.5-4: typeを保存し、個別上書きでないスロットはstep08実行時に
     // type×最新マッピングで再解決される(styleはtypeを読めない旧経路向けのスナップショット)。
@@ -4038,6 +3945,7 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
       ...(animationIn ? { animation_in: animationIn } : {}),
       ...(videoEffectOverride ? { video_effect: videoEffectOverride } : {}),
       highlight_words: highlightWords,
+      ...(normalizeTelopPosition(edit?.telopPosition) ? { telop_position: normalizeTelopPosition(edit.telopPosition) } : {}),
       fallback: false,
     });
   });
@@ -4250,8 +4158,25 @@ async function applyTelopFileToComposition(runDir) {
   });
 }
 
+function applyStoredSceneTelopPositions(runDir) {
+  const positionsPath = path.join(runDir, "scene_telop_positions.json");
+  if (!fs.existsSync(positionsPath)) return;
+  const compositionPath = path.join(runDir, "step08_composition", "composition.json");
+  if (!fs.existsSync(compositionPath)) return;
+  const composition = readJson(compositionPath);
+  const proposal = readJson(path.join(runDir, "step07_cut_proposal", "cut_proposal.json"));
+  const positions = readJson(positionsPath)?.positions;
+  if (projectSceneTelopPositions(composition, proposal.keep_segments, positions)) writeJson(compositionPath, composition);
+}
+
 async function applyTranscriptKeepSegments(input) {
   const resolved = resolveRunDir(input?.runDir);
+  // Compatibility fallback for older renderers. Capture before apply overwrites AI artifacts.
+  try { initializeEditingLearning({ runDir: resolved }); }
+  catch (error) { console.warn(`編集学習の基準保存に失敗しました: ${error.message || error}`); }
+  if (Array.isArray(input?.sceneTelopPositions)) {
+    await writeDraftJson(path.join(resolved, "scene_telop_positions.json"), { version: "1.0.0", positions: normalizeSceneTelopPositions(input.sceneTelopPositions) });
+  }
   applyWordCorrections(resolved, input?.corrections || []);
   updateCutProposalKeepSegments(resolved, input?.keepSegments || []);
   // フェーズT2(directedモード): step08はtelop_directives.jsonを読むため、再実行前に
@@ -4478,6 +4403,7 @@ function deleteProject(input) {
 
 const WAVEFORM_SAMPLE_RATE = 8000;
 const WAVEFORM_DEFAULT_BIN_MS = 20;
+const shareWaveformGeneration = createInFlightTaskRunner();
 
 function waveformCacheDir(runDir) {
   return path.join(runDir, "ui_cache");
@@ -4492,54 +4418,6 @@ function resolveRunAudioPath(runDir) {
   return fs.existsSync(candidate) ? candidate : null;
 }
 
-/** ffmpegでPCM(16bit signed LE, mono)を抽出し、標準出力からBufferとして受け取る。 */
-function runFfmpegPcm(audioPath, sampleRate) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      "ffmpeg",
-      ["-y", "-i", audioPath, "-ac", "1", "-ar", String(sampleRate), "-f", "s16le", "-loglevel", "error", "pipe:1"],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    const chunks = [];
-    let stderr = "";
-    child.stdout.on("data", (chunk) => chunks.push(chunk));
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error) => reject(error));
-    child.on("close", (code) => {
-      if (code === 0) resolve(Buffer.concat(chunks));
-      else reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
-    });
-  });
-}
-
-/**
- * PCM(16bit signed LE, mono)バッファから binMs ごとの正規化済み(0-1)ピーク配列を計算する。
- * ビン計算アルゴリズムは src/lib/waveform.ts の computePeaksFromPcm16 と同一。
- * main(CJS)とsrc/lib(ESM/TS。レンダラーへViteでバンドルされ、テストはNodeで直接実行される)は
- * 実行時のモジュール形式が異なり直接共有できないため、ロジックを複製している。
- * アルゴリズムを変更する場合は両方を同期すること。
- */
-function computeWaveformPeaks(pcmBuffer, sampleRate, binMs) {
-  const totalSamples = Math.floor(pcmBuffer.length / 2);
-  if (totalSamples === 0) return [];
-  const samplesPerBin = Math.max(1, Math.round((sampleRate * binMs) / 1000));
-  const binCount = Math.max(1, Math.ceil(totalSamples / samplesPerBin));
-  const peaks = new Array(binCount).fill(0);
-  for (let bin = 0; bin < binCount; bin += 1) {
-    const start = bin * samplesPerBin;
-    const end = Math.min(totalSamples, start + samplesPerBin);
-    let peak = 0;
-    for (let i = start; i < end; i += 1) {
-      const sample = Math.abs(pcmBuffer.readInt16LE(i * 2));
-      if (sample > peak) peak = sample;
-    }
-    peaks[bin] = peak;
-  }
-  return peaks.map((value) => Math.round((value / 32768) * 1000) / 1000);
-}
-
 /**
  * 指定runの波形ピーク配列を生成する(またはキャッシュから返す)。
  * キャッシュは runDir/ui_cache/waveform.json に保存し、音声ファイルの更新日時・サイズが
@@ -4552,7 +4430,11 @@ async function generateWaveformForRun(runDir, options = {}) {
   if (!audioPath) throw new Error("音声ファイル(step01_preprocess/audio.wav)が見つかりません");
   const audioStat = fs.statSync(audioPath);
   const cachePath = waveformCachePath(resolved);
+  const generationKey = JSON.stringify([resolved, binMs, audioStat.mtimeMs, audioStat.size]);
+  return shareWaveformGeneration(generationKey, () => loadOrGenerateWaveform(resolved, binMs, audioPath, audioStat, cachePath));
+}
 
+async function loadOrGenerateWaveform(resolved, binMs, audioPath, audioStat, cachePath) {
   if (fs.existsSync(cachePath)) {
     try {
       const cached = readJson(cachePath);
@@ -4576,9 +4458,7 @@ async function generateWaveformForRun(runDir, options = {}) {
     }
   }
 
-  const pcm = await runFfmpegPcm(audioPath, WAVEFORM_SAMPLE_RATE);
-  const peaks = computeWaveformPeaks(pcm, WAVEFORM_SAMPLE_RATE, binMs);
-  const durationMs = Math.round((pcm.length / 2 / WAVEFORM_SAMPLE_RATE) * 1000);
+  const { peaks, durationMs } = await runQueuedFfmpegWaveform(audioPath, WAVEFORM_SAMPLE_RATE, binMs);
   const payload = {
     version: 1,
     binMs,
@@ -4588,9 +4468,16 @@ async function generateWaveformForRun(runDir, options = {}) {
     audioSize: audioStat.size,
     peaks,
   };
-  fs.mkdirSync(waveformCacheDir(resolved), { recursive: true });
+  await fs.promises.mkdir(waveformCacheDir(resolved), { recursive: true });
   // ピーク配列が大きくなる(60分素材で約18万要素)ため、writeJsonの整形出力(pretty print)は使わずコンパクトに書き出す。
-  fs.writeFileSync(cachePath, JSON.stringify(payload), "utf-8");
+  // binMs等が異なる要求が並行しても、読者には完成したキャッシュだけを見せる。
+  const temporaryPath = `${cachePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.promises.writeFile(temporaryPath, JSON.stringify(payload), "utf-8");
+    await fs.promises.rename(temporaryPath, cachePath);
+  } finally {
+    await fs.promises.rm(temporaryPath, { force: true }).catch(() => {});
+  }
   return { binMs, sampleRate: WAVEFORM_SAMPLE_RATE, durationMs, peaks, cached: false };
 }
 
@@ -4632,12 +4519,12 @@ function resolveRunSourceVideoPath(runDir) {
 }
 
 /** ffprobeでメディアの長さ(ms)を取得する。失敗時はnull。 */
-function probeMediaDurationMs(filePath) {
+function probeMediaDurationMsUncached(filePath) {
   return new Promise((resolve) => {
     const child = spawn(
       "ffprobe",
       ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", filePath],
-      { stdio: ["ignore", "pipe", "pipe"] },
+      { stdio: ["ignore", "pipe", "ignore"] },
     );
     let stdout = "";
     child.stdout.on("data", (chunk) => {
@@ -4650,6 +4537,12 @@ function probeMediaDurationMs(filePath) {
     });
   });
 }
+
+// BGMの音量・尺だけを編集するたびにffprobeを再起動しない。同一素材の同時要求も共有。
+const probeMediaDurationMs = createMediaDurationCache({ probe: probeMediaDurationMsUncached });
+const getBgmWaveform = createBgmWaveformService({
+  resolveRunDir, probeDurationMs: probeMediaDurationMs, generate: runQueuedFfmpegWaveform,
+});
 
 /** ffmpeg高速シーク(-ss を -i より前)で1フレームだけサムネイルを抽出する。 */
 function extractFilmstripFrame(videoPath, timeMs, outPath) {
@@ -4812,19 +4705,18 @@ function sanitizeBgmClipsForRun(runDir, rawClips) {
   return clips;
 }
 
-/** bgm.json を読み、UI表示用の付加情報(配信URL・音源長・表示名)つきで返す。 */
-async function loadBgmStateForRun(runDir) {
-  const resolved = resolveRunDir(runDir);
-  const jsonPath = bgmJsonPath(resolved);
-  let raw = [];
+function readMediaClips(jsonPath) {
   if (fs.existsSync(jsonPath)) {
     try {
-      raw = readJson(jsonPath);
+      return readJson(jsonPath);
     } catch {
-      raw = [];
+      // 旧runの欠落・壊れたJSONは、従来どおり空トラックへフォールバック。
     }
   }
-  const clips = sanitizeBgmClipsForRun(resolved, raw);
+  return [];
+}
+
+async function enrichBgmClipsForRun(resolved, clips) {
   const enriched = [];
   for (const clip of clips) {
     const filePath = path.join(bgmDir(resolved), clip.file);
@@ -4834,19 +4726,27 @@ async function loadBgmStateForRun(runDir) {
       audioDurationMs: (await probeMediaDurationMs(filePath)) || 0,
     });
   }
-  return {
-    clips: enriched,
-    timelineDurationMs: timelineDurationMsForRun(resolved),
-  };
+  return enriched;
+}
+
+const bgmTrackStore = createMediaTrackStore({
+  resolveRunDir,
+  jsonPathForRun: bgmJsonPath,
+  readClips: (resolved) => readMediaClips(bgmJsonPath(resolved)),
+  sanitizeClips: sanitizeBgmClipsForRun,
+  writeJson: writeMediaJson,
+  enrichClips: enrichBgmClipsForRun,
+  timelineDurationMsForRun,
+});
+
+/** bgm.json を読み、UI表示用の付加情報(配信URL・音源長)つきで返す。 */
+async function loadBgmStateForRun(runDir) {
+  return bgmTrackStore.load(runDir);
 }
 
 /** bgm.json へ保存(bgm:save)。保存後の状態(UI付加情報つき)を返す。 */
 async function saveBgmClipsForRun(runDir, rawClips) {
-  const resolved = resolveRunDir(runDir);
-  const clips = sanitizeBgmClipsForRun(resolved, rawClips);
-  fs.mkdirSync(bgmDir(resolved), { recursive: true });
-  writeJson(bgmJsonPath(resolved), clips);
-  return loadBgmStateForRun(resolved);
+  return bgmTrackStore.save(runDir, rawClips);
 }
 
 /** コピー先で同名ファイルがあれば連番を付けて衝突を避ける(既存クリップの素材を上書きしない)。 */
@@ -4878,29 +4778,25 @@ async function addBgmFileToRun(runDir, sourcePath, startMsRaw) {
   const destName = uniqueDestFileName(bgmDir(resolved), sourcePath);
   fs.copyFileSync(sourcePath, path.join(bgmDir(resolved), destName));
 
-  const audioDurationMs = (await probeMediaDurationMs(path.join(bgmDir(resolved), destName))) || 0;
-  const timelineDurationMs = timelineDurationMsForRun(resolved);
-  const startMs = Math.max(0, Math.round(Number(startMsRaw) || 0));
-  // 音源長もタイムライン総尺も不明な場合の最低尺(伸縮ですぐ調整できる)
-  let endMs = startMs + Math.max(1000, audioDurationMs || 60000);
-  // 総尺クランプは1秒以上の余地がある場合のみ(末尾追記=総尺ちょうどからの追加で区間ゼロにしない)
-  if (timelineDurationMs > startMs + 1000) endMs = Math.min(endMs, timelineDurationMs);
-
-  const durationMs = endMs - startMs;
-  const existing = fs.existsSync(bgmJsonPath(resolved)) ? readJson(bgmJsonPath(resolved)) : [];
-  const nextClips = [
-    ...(Array.isArray(existing) ? existing : []),
-    {
-      id: `bgm_${Date.now()}`,
+  return bgmTrackStore.append(resolved, async () => {
+    const audioDurationMs = (await probeMediaDurationMs(path.join(bgmDir(resolved), destName))) || 0;
+    const timelineDurationMs = timelineDurationMsForRun(resolved);
+    const startMs = Math.max(0, Math.round(Number(startMsRaw) || 0));
+    // 音源長もタイムライン総尺も不明な場合の最低尺(伸縮ですぐ調整できる)
+    let endMs = startMs + Math.max(1000, audioDurationMs || 60000);
+    // 総尺クランプは1秒以上の余地がある場合のみ(末尾追記=総尺ちょうどからの追加で区間ゼロにしない)
+    if (timelineDurationMs > startMs + 1000) endMs = Math.min(endMs, timelineDurationMs);
+    const durationMs = endMs - startMs;
+    return {
+      id: `bgm_${Date.now()}_${crypto.randomUUID()}`,
       file: destName,
       start_ms: startMs,
       end_ms: endMs,
       volume: BGM_DEFAULT_VOLUME,
       fade_in_ms: Math.min(BGM_DEFAULT_FADE_MS, durationMs),
       fade_out_ms: Math.min(BGM_DEFAULT_FADE_MS, durationMs),
-    },
-  ];
-  return saveBgmClipsForRun(resolved, nextClips);
+    };
+  });
 }
 
 /**
@@ -4975,35 +4871,27 @@ function sanitizeImageClipsForRun(runDir, rawClips) {
   return clips;
 }
 
-/** images.json を読み、UI表示用の付加情報(配信URL)つきで返す。 */
-function loadImagesStateForRun(runDir) {
-  const resolved = resolveRunDir(runDir);
-  const jsonPath = imagesJsonPath(resolved);
-  let raw = [];
-  if (fs.existsSync(jsonPath)) {
-    try {
-      raw = readJson(jsonPath);
-    } catch {
-      raw = [];
-    }
-  }
-  const clips = sanitizeImageClipsForRun(resolved, raw).map((clip) => ({
+const imagesTrackStore = createMediaTrackStore({
+  resolveRunDir,
+  jsonPathForRun: imagesJsonPath,
+  readClips: (resolved) => readMediaClips(imagesJsonPath(resolved)),
+  sanitizeClips: sanitizeImageClipsForRun,
+  writeJson: writeMediaJson,
+  enrichClips: (resolved, clips) => clips.map((clip) => ({
     ...clip,
     url: registerPreviewOverlayImage(path.join(imagesDir(resolved), clip.file)) || "",
-  }));
-  return {
-    clips,
-    timelineDurationMs: timelineDurationMsForRun(resolved),
-  };
+  })),
+  timelineDurationMsForRun,
+});
+
+/** images.json を読み、UI表示用の付加情報(配信URL)つきで返す。 */
+async function loadImagesStateForRun(runDir) {
+  return imagesTrackStore.load(runDir);
 }
 
 /** images.json へ保存(images:save)。保存後の状態(UI付加情報つき)を返す。 */
-function saveImageClipsForRun(runDir, rawClips) {
-  const resolved = resolveRunDir(runDir);
-  const clips = sanitizeImageClipsForRun(resolved, rawClips);
-  fs.mkdirSync(imagesDir(resolved), { recursive: true });
-  writeJson(imagesJsonPath(resolved), clips);
-  return loadImagesStateForRun(resolved);
+async function saveImageClipsForRun(runDir, rawClips) {
+  return imagesTrackStore.save(runDir, rawClips);
 }
 
 // =============================================================================
@@ -5077,7 +4965,7 @@ function saveVideoFramingForRun(runDir, rawFraming) {
  * V6-4: パス指定の画像追加(images:add-file。ダイアログなし版。D&Dと images:add の共通コア)。
  * 既定: start=指定msから4秒間(総尺クランプ)、中央上寄り(x=0.5,y=0.35)、scale=0.55、opacity=1。
  */
-function addImageFileToRun(runDir, sourcePath, startMsRaw) {
+async function addImageFileToRun(runDir, sourcePath, startMsRaw) {
   const resolved = resolveRunDir(runDir);
   if (typeof sourcePath !== "string" || !fs.existsSync(sourcePath)) return null;
   // レンダラーは拡張子で振り分け済みだが、未検証入力なのでmain側でも防御する
@@ -5100,21 +4988,16 @@ function addImageFileToRun(runDir, sourcePath, startMsRaw) {
     if (endMs <= startMs) endMs = startMs + IMAGE_DEFAULT_DURATION_MS;
   }
 
-  const existing = fs.existsSync(imagesJsonPath(resolved)) ? readJson(imagesJsonPath(resolved)) : [];
-  const nextClips = [
-    ...(Array.isArray(existing) ? existing : []),
-    {
-      id: `image_${Date.now()}`,
-      file: destName,
-      start_ms: startMs,
-      end_ms: endMs,
-      x: IMAGE_DEFAULT_X,
-      y: IMAGE_DEFAULT_Y,
-      scale: IMAGE_DEFAULT_SCALE,
-      opacity: IMAGE_DEFAULT_OPACITY,
-    },
-  ];
-  return saveImageClipsForRun(resolved, nextClips);
+  return imagesTrackStore.append(resolved, () => ({
+    id: `image_${Date.now()}_${crypto.randomUUID()}`,
+    file: destName,
+    start_ms: startMs,
+    end_ms: endMs,
+    x: IMAGE_DEFAULT_X,
+    y: IMAGE_DEFAULT_Y,
+    scale: IMAGE_DEFAULT_SCALE,
+    opacity: IMAGE_DEFAULT_OPACITY,
+  }));
 }
 
 /** 画像追加(images:add): ファイル選択ダイアログ → パス指定版(addImageFileToRun)へ委譲。 */
@@ -5183,6 +5066,12 @@ async function applyTelopAndExport(options) {
   const renderFinal = options.renderFinal !== false;
   const env = apiKeys.buildPipelineEnv();
   const nodeEnv = apiKeys.buildPipelineEnv();
+  let learningCapture = null;
+  let learningResult;
+  if (renderFinal) {
+    try { learningCapture = prepareEditingLearningExport(runDir, options.learningSnapshot); }
+    catch (error) { learningResult = { examples: 0, changed: false, warning: `学習データを準備できませんでした: ${error.message || error}` }; }
+  }
 
   if (!fs.existsSync(python)) {
     throw new Error(`Python venv not found: ${python}`);
@@ -5201,6 +5090,7 @@ async function applyTelopAndExport(options) {
   });
 
   await applyFontDirectivesForRun(runDir, { useJobEvents: true });
+  applyStoredSceneTelopPositions(runDir);
 
   if (renderFinal) {
     const preprocess = readJson(path.join(runDir, "step01_preprocess", "preprocess.json"));
@@ -5275,11 +5165,20 @@ async function applyTelopAndExport(options) {
     // 失敗しても render_output.json にパスが残り、そのパスに既存ファイル(元動画等)があると
     // UIが「書き出し済み」と誤表示する事故があった(2026-08-21 実害あり)。
     writeRenderOutputPath(runDir, outputPath);
+    if (learningCapture) {
+      try {
+        const confirmed = editingLearning.confirmExport({ runDir, captured: learningCapture, corpusPath: editingCorpusPath() });
+        learningResult = { examples: confirmed.project.examples.length, changed: confirmed.changed };
+      } catch (error) {
+        learningResult = { examples: 0, changed: false, warning: `動画は書き出せましたが、学習データの保存に失敗しました: ${error.message || error}` };
+      }
+    }
   } else {
     sendJobEvent({ type: "step:done", stepId: "render" });
   }
 
   const outputs = buildOutputs(runDir);
+  if (learningResult) outputs.learning = learningResult;
   sendJobEvent({ type: "job:done", outputs });
   return outputs;
 }
@@ -5344,7 +5243,7 @@ async function runAutoFinalCheck({ runDir, python, env, root }) {
 async function runPipeline(options) {
   const root = repoRoot();
   const python = path.join(root, ".venv", "bin", "python");
-  const env = apiKeys.buildPipelineEnv();
+  const env = editingPipelineEnv();
 
   if (!fs.existsSync(python)) {
     throw new Error(`Python venv not found: ${python}`);
@@ -5833,13 +5732,24 @@ ipcMain.handle("correction-history:delete", (_event, input) =>
 // Nextcloud同期フォルダがあれば <Nextcloud>/CatCut-learning/exports/ へ保存し
 // 同期で自動的に開発機へ届く(送付不要)。ファイル名にPC名+日時を含めるため
 // 複数PCが同時に書き出しても衝突しない。Nextcloudが無いPCは従来どおりデスクトップへ。
-ipcMain.handle("edit-learning:export", () => {
+ipcMain.handle("editing-learning:initialize", (_event, input) => {
+  try { initializeEditingLearning(input || {}); return { ok: true }; }
+  catch (error) { return { ok: false, warning: String(error.message || error) }; }
+});
+ipcMain.handle("editing-learning:summary", () => editingLearningSummary());
+ipcMain.handle("editing-learning:exclude", (_event, input) => {
+  editingLearning.excludeExample({ corpusPath: editingCorpusPath(), exampleId: input?.exampleId });
+  return editingLearningSummary();
+});
+
+ipcMain.handle("edit-learning:export", async () => {
   const exportData = editLearning.buildLearningExport({
     runsRoot: path.join(repoRoot(), "runs"),
     correctionHistoryPath: correctionHistoryPath(),
+    editingCorpusPath: editingCorpusPath(),
     machineLabel: require("os").hostname(),
   });
-  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 13).replace("T", "-");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const host = require("os").hostname().replace(/\.local$/i, "").replace(/[^A-Za-z0-9_-]+/g, "-");
   const learningDir = nextcloudLearningDir();
   let outputPath;
@@ -5858,9 +5768,15 @@ ipcMain.handle("edit-learning:export", () => {
     outputPath = path.join(app.getPath("desktop"), `catcut-learning-${stamp}.json`);
     shared = false;
   }
-  fs.writeFileSync(outputPath, `${JSON.stringify(exportData, null, 2)}\n`, "utf-8");
+  const summaryPath = outputPath.replace(/\.json$/, ".txt");
+  await writeDraftJson(outputPath, exportData);
+  const temporarySummary = `${summaryPath}.tmp-${crypto.randomUUID()}`;
+  try {
+    await fs.promises.writeFile(temporarySummary, editLearning.formatLearningExportText(exportData), "utf8");
+    await fs.promises.rename(temporarySummary, summaryPath);
+  } finally { await fs.promises.rm(temporarySummary, { force: true }); }
   shell.showItemInFolder(outputPath);
-  return { path: outputPath, stats: exportData.stats, shared };
+  return { path: outputPath, summaryPath, stats: exportData.stats, shared };
 });
 
 // W16-7: AI最終チェック。現在の表示テキスト全シーンをpython(step06d)でLLM再チェックする。
@@ -5897,7 +5813,7 @@ ipcMain.handle("final-check:run", async (_event, input) => {
     command: python,
     args,
     cwd: root,
-    env: apiKeys.buildPipelineEnv(),
+    env: editingPipelineEnv(),
   });
   return readJson(outputPath);
 });
@@ -6154,6 +6070,7 @@ ipcMain.handle("transcript:waveform", async (_event, input) =>
 // フェーズU9: フィルムストリップ(サムネイル帯)とBGMトラック
 ipcMain.handle("transcript:filmstrip", async (_event, input) => generateFilmstripForRun(input?.runDir));
 ipcMain.handle("bgm:list", async (_event, input) => loadBgmStateForRun(input?.runDir));
+ipcMain.handle("bgm:waveform", async (_event, input) => getBgmWaveform(input));
 ipcMain.handle("bgm:add", async (_event, input) => addBgmToRun(input?.runDir, input?.startMs));
 // V6-4: ダイアログなし版(D&D)。OSからドラッグしたファイルのパス+開始msを直接受ける
 ipcMain.handle("bgm:add-file", async (_event, input) =>
@@ -6251,6 +6168,7 @@ ipcMain.handle("export:start", async (_event, options) => {
     applyTelopAndExport({
       runDir,
       renderFinal: options?.renderFinal !== false,
+      learningSnapshot: options?.learningSnapshot,
       outputPath: options?.outputPath || "",
       targetShortSide: options?.targetShortSide || 0,
       crf: options?.crf || 0,

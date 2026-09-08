@@ -202,9 +202,11 @@ def remap_telops_to_words(
         source_telop = original_by_id.get(page.get("id")) or fallback_telop
         original_highlights = source_telop.get("highlight_words") if isinstance(source_telop, dict) else None
         if isinstance(original_highlights, list):
+            searchable_page = page_text.replace("\r", "").replace("\n", "")
             kept_highlights = [
                 str(word) for word in original_highlights
-                if str(word) and str(word) in page_text
+                if str(word).replace("\r", "").replace("\n", "")
+                and str(word).replace("\r", "").replace("\n", "") in searchable_page
             ]
             if kept_highlights:
                 next_telop["highlight_words"] = kept_highlights
@@ -218,6 +220,7 @@ def remap_telops_to_words(
                 "type", "animation_in", "animation_out", "sfx", "speaker",
                 "style_overridden", "animation_overridden",
                 "video_effect", "video_effect_overridden",
+                "telop_position",
             ):
                 if key in source_telop and key not in next_telop:
                     next_telop[key] = source_telop[key]

@@ -127,6 +127,7 @@ export function effectiveDirectedStyleId(
  * startMs/endMs は元動画の絶対ms(directivesのsource_*_msと同じアンカー)。
  */
 export type DirectedSlotEdit = {
+  telopPosition?: Scene["telopPosition"];
   startMs: number;
   endMs: number;
   text: string;
@@ -163,9 +164,10 @@ export function deriveDirectedSlots(
     .map((scene) => {
       const text = scene.telopText.trim();
       const highlightWords = (scene.directedHighlightWords || []).filter(
-        (word) => word && text.includes(word),
+        (word) => Boolean(word.replace(/[\r\n]/g, "")) && text.replace(/[\r\n]/g, "").includes(word.replace(/[\r\n]/g, "")),
       );
       return {
+        ...(scene.telopPosition ? { telopPosition: scene.telopPosition } : {}),
         startMs: scene.sourceStartMs,
         endMs: scene.sourceEndMs,
         text,

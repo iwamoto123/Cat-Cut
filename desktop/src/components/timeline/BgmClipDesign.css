@@ -1,0 +1,157 @@
+/* Audio clips keep their own color and hit geometry inside the neutral editor. */
+.precisionTimeline .tlBgmLane .tlBgmAudioClip {
+  border: 1px solid #478c5e;
+  border-radius: 4px;
+  background: #286f46;
+  box-shadow: inset 0 -1px 0 #153e2966;
+  color: #ddf5e3;
+}
+.precisionTimeline .tlBgmLane .tlBgmAudioClip::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 19px;
+  border-radius: 3px 3px 0 0;
+  border-bottom: 1px solid #153f2980;
+  background: #214d34;
+  pointer-events: none;
+}
+.precisionTimeline .tlBgmLane .tlBgmAudioClip:hover { border-color: #78ab86; }
+.precisionTimeline .tlBgmLane .tlBgmAudioClip.selected {
+  border-color: #f4c95d;
+  background: #2b764b;
+  box-shadow: 0 0 0 1px #f4c95d;
+}
+.precisionTimeline .tlBgmLane .tlBgmClipLabel {
+  top: 2px;
+  height: 16px;
+  padding: 0;
+  gap: 4px;
+  color: #edf9ee;
+  font-size: 10px;
+  font-weight: 550;
+  line-height: 16px;
+}
+.precisionTimeline .tlBgmLane .tlBgmClipLabel > svg { flex-shrink: 0; opacity: .75; }
+.precisionTimeline .tlBgmLane .tlBgmFilename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.precisionTimeline .tlBgmLane .tlBgmVolumeLabel {
+  top: 3px;
+  right: 10px;
+  left: auto;
+  height: 14px;
+  transform: none;
+  color: #e2f5e7;
+  font: 9px/14px ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.precisionTimeline .tlBgmLane .tlBgmVolumeLabel > span { opacity: .7; }
+.precisionTimeline .tlBgmLane .tlLaneReorderHandle {
+  top: 2px;
+  left: 10px;
+  bottom: auto;
+  width: 13px;
+  height: 16px;
+  color: #e1f6e5;
+  opacity: .35;
+  z-index: 3;
+}
+.precisionTimeline .tlBgmLane .selected > .tlLaneReorderHandle,
+.precisionTimeline .tlBgmLane .tlLaneReorderHandle:hover { opacity: .8; }
+.precisionTimeline .tlBgmLane .tlBgmWaveformArea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  color: #b4ecbb;
+  pointer-events: none;
+}
+.precisionTimeline .tlBgmLane .tlBgmWaveform { display: block; fill: currentColor; opacity: .68; pointer-events: none; }
+.precisionTimeline .tlBgmLane .tlBgmWaveformStatus {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px;
+  color: #c0e0c9;
+  opacity: .7;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.precisionTimeline .tlBgmLane .tlBgmWaveformStatus button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #e7f6ec;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.precisionTimeline .tlBgmLane .tlBgmEnvelope { opacity: 1; overflow: visible; }
+.precisionTimeline .tlBgmLane .tlBgmEnvelopeFill { fill: #0b281713; }
+.precisionTimeline .tlBgmLane .tlBgmEnvelopeCurve { stroke: #d1e6d5; stroke-width: 1; opacity: .8; }
+.precisionTimeline .tlBgmLane .tlBgmVolumeLine { stroke: #d1e6d5; stroke-width: 1; opacity: .22; }
+.precisionTimeline .tlBgmLane .selected .tlBgmEnvelopeCurve { stroke: #f4eab9; opacity: 1; }
+.precisionTimeline .tlBgmLane .selected .tlBgmVolumeLine { stroke: #f4eab9; opacity: .5; }
+.precisionTimeline .tlBgmLane .tlBgmVolumeHit {
+  height: 10px;
+  margin: 0;
+  cursor: ns-resize;
+  z-index: 4;
+}
+.precisionTimeline .tlBgmLane .tlBgmVolumeHit > span {
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 7px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: #f4eab9;
+  box-shadow: 0 0 0 1px #224e32;
+}
+.precisionTimeline .tlBgmLane .tlBgmVolumeHit:hover > span { background: #fff8dc; box-shadow: 0 0 0 1px #fff8dc; }
+/* The 6px visible handle has a 14px hit target. Its center is the actual fade time. */
+.precisionTimeline .tlBgmLane .tlBgmFadeKnob {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: 8;
+}
+.precisionTimeline .tlBgmLane .tlBgmFadeKnob::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid #234e32;
+  border-radius: 2px;
+  background: #eef5ed;
+  box-shadow: 0 0 0 1px #e7f0e266;
+}
+.precisionTimeline .tlBgmLane .tlBgmFadeKnob:hover::before { background: #ffe79e; border-color: #ffe79e; }
+.precisionTimeline .tlBgmLane .tlBgmResizeHandle {
+  top: 0;
+  bottom: auto;
+  width: 8px;
+  height: 19px;
+  border-radius: 2px;
+  color: #fff0b3;
+  z-index: 7;
+}
+.precisionTimeline .tlBgmLane .tlBgmResizeHandleStart { left: 0; }
+.precisionTimeline .tlBgmLane .tlBgmResizeHandleEnd { right: 0; }
+.precisionTimeline .tlBgmLane .tlBgmResizeHandle:hover { background: #f4c95d33; }
+.precisionTimeline .tlBgmLane .selected > .tlBgmResizeHandle::after {
+  height: 11px;
+  top: auto;
+  bottom: 4px;
+  transform: none;
+  opacity: .85;
+}
+.precisionTimeline .tlBgmLane .compact .tlBgmResizeHandle { height: auto; bottom: 0; }
+.precisionTimeline .tlBgmLane .compact .tlBgmClipLabel > svg { display: none; }

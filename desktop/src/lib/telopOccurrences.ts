@@ -5,6 +5,7 @@
 
 import type { Scene } from "./scenes.ts";
 import { telopCharClass } from "./telopReplace.ts";
+import { rebaseHighlightWords } from "./telopHighlightEdit.ts";
 
 const CONTEXT_CHARS = 10;
 
@@ -122,7 +123,11 @@ export function replaceTelopOccurrences(
       nextText = replaceNthOccurrence(nextText, from, to, occurrenceIndex);
     }
     if (nextText === scene.telopText) return scene;
-    return { ...scene, telopText: nextText, telopEdited: true };
+    const directedHighlightWords = rebaseHighlightWords(scene.telopText, nextText, scene.directedHighlightWords);
+    return {
+      ...scene, telopText: nextText, telopEdited: true,
+      directedHighlightWords: directedHighlightWords.length ? directedHighlightWords : undefined,
+    };
   });
 }
 

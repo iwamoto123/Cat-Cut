@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -74,6 +75,8 @@ CHAPTER_CUT_PREVIEW_CHARS = 60
 OP_DIRECTOR_MAX_CANDIDATES = 60
 # 刺さりスコアが付きやすいtype(チャンク推薦に漏れた候補の補完に使う)
 OP_CANDIDATE_TYPES = ("hype", "punchline", "surprise", "emphasis", "quote", "harsh", "question")
+from shared.editing_learning import build_editing_examples_section, load_prompt_examples, select_editing_examples
+from shared.textwidth import glyph_length
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +88,7 @@ def build_slot_prompt(
     video_title: str = "",
     max_text_chars: int = 2 * DEFAULT_MAX_CHARS_PER_LINE,
     edit_examples: Optional[list[dict[str, Any]]] = None,
+    editing_examples: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     """スロットチャンク用プロンプト。文言・シーン種類(type)・強調語だけを決めさせる。"""
     payload = [{"slot_id": s["slot_id"], "text": s["text"]} for s in slots]
@@ -110,6 +114,19 @@ def build_slot_prompt(
             "# 同じ傾向を繰り返さず、編集者の確定文の情報量を基準にしてください:\n"
             + "\n".join(restored_examples)
             + "\n"
+        )
+    edit_examples_section += build_editing_examples_section(
+        editing_examples, {"proofreading", "scene_boundary", "line_break"}, " ".join(s["text"] for s in slots),
+    )
+    if select_editing_examples(editing_examples or [], {"scene_boundary"}, " ".join(s["text"] for s in slots)):
+        edit_examples_section += (
+            "\n### 編集例を参考にした短い表示シーンの結合\n"
+            "隣接する2スロットが同じ発話のまとまりで、不自然に分かれている場合に限り、"
+            "先のスロットへ merge_with_next:true を付けてよい。"
+            "textには2スロットの発話を順序どおり、省略・言い換えずすべて含めること。"
+            "両スロットとも通常どおりslots配列へ返す。システムが同じカット・同じ話者・連続した時間・"
+            f"{max_text_chars}文字以内を検証し、表示時間も2枠分へ結合する。"
+            "結合できない場合は元の2枠を維持する。動画のカット区間は変更しない。\n"
         )
     types = " / ".join(SEMANTIC_TYPES)
     max_chars_per_line = max(4, max_text_chars // 2)
@@ -419,6 +436,47 @@ def apply_slot_responses(
         )
         for index, slot in enumerate(slots)
     ]
+    # Optional display-only merge. Time boundaries come exclusively from the
+    # current slots; exact source-text coverage prevents silently losing a phrase.
+    merged_directives = []
+    aliases: dict[str, str] = {}
+    protected_slots: set[int] = set()
+    index = 0
+    while index < len(slots):
+        first = slots[index]
+        raw = raw_by_slot_id.get(first["slot_id"], {})
+        second = slots[index + 1] if index + 1 < len(slots) else None
+        compact_text = lambda value: re.sub(r"[\s。、，,.！？!?]+", "", str(value or ""))
+        can_merge = (
+            raw.get("merge_with_next") is True and raw.get("drop") is not True and second is not None
+            and first.get("cut_id") == second.get("cut_id")
+            and first.get("speaker") == second.get("speaker")
+            and first.get("source_end_ms") == second.get("source_start_ms")
+            and 0 < second["source_end_ms"] - first["source_start_ms"] <= 8000
+            and compact_text(raw.get("text")) == compact_text(first.get("text")) + compact_text(second.get("text"))
+            and glyph_length(compact_text(raw.get("text")), "weighted_cpl") <= (max_text_chars or 32)
+        )
+        if can_merge:
+            combined = {**first, "text": str(first.get("text", "")) + str(second.get("text", "")),
+                        "source_end_ms": second["source_end_ms"]}
+            if "end_ms" in second:
+                combined["end_ms"] = second["end_ms"]
+            directive = sanitize_slot_directive(combined, raw, type_mapping=type_mapping, max_text_chars=max_text_chars)
+            if not directive["fallback"]:
+                merged_directives.append({**directive, "merged_slot_ids": [first["slot_id"], second["slot_id"]]})
+                aliases[second["slot_id"]] = first["slot_id"]
+                index += 2
+                continue
+        # An invalid merge must not keep the combined phrase in the first slot
+        # (which would duplicate the next phrase). Restore the untouched source.
+        if raw.get("merge_with_next") is True or index in protected_slots:
+            merged_directives.append(sanitize_slot_directive(first, None, type_mapping=type_mapping, max_text_chars=max_text_chars))
+            if raw.get("merge_with_next") is True:
+                protected_slots.add(index + 1)
+        else:
+            merged_directives.append(directives[index])
+        index += 1
+    directives = merged_directives
     fallback_count = sum(1 for d in directives if d["fallback"])
 
     slots_by_id = {slot["slot_id"]: slot for slot in slots}
@@ -428,7 +486,9 @@ def apply_slot_responses(
         if overlay is not None:
             overlays.append(overlay)
 
-    op_picks = sanitize_op_picks(raw_op_picks, slots)
+    remapped_picks = [({**item, "slot_id": aliases.get(str(item.get("slot_id")), item.get("slot_id"))}
+                       if isinstance(item, dict) else aliases.get(str(item), item)) for item in raw_op_picks]
+    op_picks = sanitize_op_picks(remapped_picks, slots)
 
     return directives, overlays, op_picks, fallback_count
 
@@ -493,6 +553,7 @@ def run_step(
     print("[Step 6c] Direction (scene direction engine / AI pass 3)")
     reset_usage_tracking()
     edit_examples: list[dict[str, Any]] = []
+    editing_examples = load_prompt_examples(run_dir, telop_mode="directed")
     if edit_examples_path and Path(edit_examples_path).exists():
         try:
             raw_examples = _load_json(edit_examples_path)
@@ -608,6 +669,7 @@ def run_step(
             video_title=video_title,
             max_text_chars=max_text_chars,
             edit_examples=edit_examples,
+            editing_examples=editing_examples,
         )
         try:
             response = call_llm_json(resolved_provider, resolved_key, resolved_model, prompt, caller=caller)

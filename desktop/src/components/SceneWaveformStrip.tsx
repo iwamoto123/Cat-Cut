@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { Scene } from "../lib/scenes";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { computeSceneKeptSubRanges, type Scene } from "../lib/scenes";
 import { msFromScrubPosition } from "../lib/playhead";
 import {
   interpolateWaveformHeights,
@@ -7,8 +7,20 @@ import {
   sliceWaveformPeaks,
   smoothWaveformHeights,
 } from "../lib/waveform";
-import { formatEdgeTrimDelta, type EdgeTrimEdge } from "../lib/edgeTrim";
-import { isRangeDragActivated, rangeSelectionFromPx, snapRangeCutBounds } from "../lib/rangeCut";
+import { type EdgeTrimEdge } from "../lib/edgeTrim";
+import { cutSceneRangeMs, MIN_RANGE_CUT_MS, RANGE_CUT_ACTIVATE_PX } from "../lib/rangeCut";
+import { previewClickCut } from "../lib/clickCut";
+import {
+  beginWaveformGesture,
+  formatWaveformTime,
+  moveWaveformGesture,
+  sameWaveformEditScene,
+  waveformGesturePosition,
+  waveformSnapToleranceMs,
+  type WaveformGesture,
+  type WaveformPointer,
+} from "../lib/waveformGesture";
+import "./SceneWaveformPrecision.css";
 
 const HEIGHT = 40;
 /**
@@ -38,13 +50,17 @@ type Props = {
   onHoverSeek?: (ms: number) => void;
   /**
    * Bキーでトグルするハサミモード。ONの間は端ハンドルより範囲ドラッグを優先し、
-   * 8px超の横ドラッグを離した時点で範囲カットする。クリックだけでは分割・シークしない。
+   * 8px超の横ドラッグで範囲カット。クリックは1点目に印、2点目で間をカットする。
+   * 発話より外側の先頭/末尾余白は1クリックで端までカットする。
    */
   scissorsMode?: boolean;
   /** 旧ハサミクリック分割とのprops互換用。波形上のクリックでは呼び出さない。 */
   onScissorsCut?: (ms: number) => void;
   /** Phase 3: 端ハンドルのドラッグが開始した。改善3で300ms長押しを廃止し、押下即開始になった。 */
   onEdgeDragStart?: (edge: EdgeTrimEdge) => void;
+  onEdgeDragCancel?: () => void;
+  /** Pause playback and cancel pending hover seeks before taking the pointer. */
+  onWaveformGestureStart?: () => void;
   /** Phase 3: ドラッグ中、ポインタ位置から算出した絶対ms(スナップ・クランプ前の生値)。 */
   onEdgeDragMove?: (edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   /** Phase 3: ドラッグ終了(ポインタを離した)。この呼び出しでUndoスタックに1操作としてコミットする。 */
@@ -68,31 +84,6 @@ const COLOR_BAR_DELETED = "rgba(148, 163, 184, 0.55)";
 const COLOR_HATCH = "rgba(107, 114, 128, 0.35)";
 const COLOR_CUT_MARK = "#475467";
 
-/**
- * 改善3(端ドラッグ改善): 300ms長押し判定を廃止したため、ポインタダウン時点で即座に
- * ドラッグを開始する(「activated」フラグやタイマーは不要になった)。
- */
-type ActiveEdgeDrag = {
-  edge: EdgeTrimEdge;
-  pointerId: number;
-  startClientX: number;
-  startMs: number;
-  msPerPx: number;
-};
-
-/**
- * W20-1(範囲選択カット): 波形本体のpointerdownで開始する範囲選択候補。
- * 横8px(RANGE_CUT_ACTIVATE_PX)を超えて動くまではactivated=falseのままで、
- * その間に離せば従来どおりのクリック(シーク/キャレット確定)として扱う。
- */
-type ActiveRangeDrag = {
-  pointerId: number;
-  startClientX: number;
-  startX: number;
-  msPerPx: number;
-  activated: boolean;
-};
-
 /** 片側(ベースラインから上方向のみ)のミニ波形。シーン行カード・全体ナビバー共通の描画方針。 */
 export function SceneWaveformStrip({
   scene,
@@ -105,6 +96,8 @@ export function SceneWaveformStrip({
   onHoverSeek,
   scissorsMode,
   onEdgeDragStart,
+  onEdgeDragCancel,
+  onWaveformGestureStart,
   onEdgeDragMove,
   onEdgeDragEnd,
   dragTooltip,
@@ -114,13 +107,71 @@ export function SceneWaveformStrip({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(320);
-  const dragRef = useRef<ActiveEdgeDrag | null>(null);
+  const gestureRef = useRef<WaveformGesture | null>(null);
+  const [gestureView, setGestureView] = useState<WaveformGesture | null>(null);
   const justDraggedRef = useRef(false);
-  const [activeEdge, setActiveEdge] = useState<EdgeTrimEdge | null>(null);
   const [hoverEdge, setHoverEdge] = useState<EdgeTrimEdge | null>(null);
-  /** W20-1(範囲選択カット): ドラッグ中の範囲選択候補(ポインタ管理はref、表示はstate)。 */
-  const rangeDragRef = useRef<ActiveRangeDrag | null>(null);
-  const [rangeSelectPx, setRangeSelectPx] = useState<{ startX: number; currentX: number } | null>(null);
+  const [clickAnchor, setClickAnchor] = useState<{ scene: Scene; rawMs: number; toleranceMs: number } | null>(null);
+  const clickAnchorRef = useRef(clickAnchor);
+  clickAnchorRef.current = clickAnchor;
+  const [clickHover, setClickHover] = useState<{ rawMs: number; altKey: boolean } | null>(null);
+  const hasClickInteraction = clickAnchor != null || clickHover != null;
+  const sceneRef = useRef(scene);
+  const lastAnchorSceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const keptRanges = useMemo(() => computeSceneKeptSubRanges(scene), [scene]);
+  const frameRef = useRef<number | null>(null);
+  const removeGestureListenersRef = useRef<(() => void) | null>(null);
+  const callbacksRef = useRef({ onEdgeDragStart, onEdgeDragMove, onEdgeDragEnd, onEdgeDragCancel, onRangeCut });
+  callbacksRef.current = { onEdgeDragStart, onEdgeDragMove, onEdgeDragEnd, onEdgeDragCancel, onRangeCut };
+  const activeEdge = gestureView?.kind !== "range" && gestureView?.activated ? gestureView.kind : null;
+
+  function clearClickAnchor() {
+    clickAnchorRef.current = null;
+    setClickAnchor(null);
+  }
+
+  useEffect(() => {
+    if (!scissorsMode || !visible || !sameWaveformEditScene(lastAnchorSceneRef.current, scene)) {
+      clearClickAnchor();
+      setClickHover(null);
+    }
+    lastAnchorSceneRef.current = scene;
+  }, [scene, scissorsMode, visible]);
+
+  useEffect(() => {
+    if (!scissorsMode || !hasClickInteraction) return;
+    const cancel = () => { clearClickAnchor(); setClickHover(null); };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+      if (event.key === "Escape" || event.key === "Tab" || event.key.toLowerCase() === "b" ||
+        ["ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key) ||
+        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")) cancel();
+      if (event.key === "Alt") setClickHover((current) => current ? { ...current, altKey: event.type === "keydown" } : null);
+    };
+    const handleOutsidePointer = (event: PointerEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) cancel();
+    };
+    window.addEventListener("keydown", handleKey, true);
+    window.addEventListener("keyup", handleKey, true);
+    window.addEventListener("pointerdown", handleOutsidePointer, true);
+    window.addEventListener("blur", cancel);
+    return () => {
+      window.removeEventListener("keydown", handleKey, true);
+      window.removeEventListener("keyup", handleKey, true);
+      window.removeEventListener("pointerdown", handleOutsidePointer, true);
+      window.removeEventListener("blur", cancel);
+    };
+  }, [scissorsMode, hasClickInteraction]);
+
+  useEffect(() => () => {
+    if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+    removeGestureListenersRef.current?.();
+    if (gestureRef.current?.activated && gestureRef.current.kind !== "range") {
+      callbacksRef.current.onEdgeDragCancel?.();
+    }
+    gestureRef.current = null;
+  }, []);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -183,11 +234,18 @@ export function SceneWaveformStrip({
       ctx.stroke(areaPath);
     }
 
-    // 削除済みチップの区間はハッチング風の斜線オーバーレイで示す(モックアップの網掛け表現の近似)。
-    for (const word of scene.words) {
-      if (!word.deleted) continue;
-      const x1 = Math.max(0, msToX(Math.max(word.startMs, rangeStartMs)));
-      const x2 = Math.min(width, msToX(Math.min(word.endMs, rangeEndMs)));
+    // The authoritative retained intervals also show wordless cuts after text boxes merge.
+    // Draw their complement once, avoiding overlapping deleted-word hatches.
+    const removedRanges: Array<{ startMs: number; endMs: number }> = [];
+    let keptCursorMs = rangeStartMs;
+    for (const range of keptRanges) {
+      if (range.startMs > keptCursorMs) removedRanges.push({ startMs: keptCursorMs, endMs: range.startMs });
+      keptCursorMs = Math.max(keptCursorMs, range.endMs);
+    }
+    if (keptCursorMs < rangeEndMs) removedRanges.push({ startMs: keptCursorMs, endMs: rangeEndMs });
+    for (const range of removedRanges) {
+      const x1 = Math.max(0, msToX(range.startMs));
+      const x2 = Math.min(width, msToX(range.endMs));
       if (x2 <= x1) continue;
       ctx.save();
       ctx.beginPath();
@@ -223,16 +281,13 @@ export function SceneWaveformStrip({
       ctx.fillStyle = COLOR_CUT_MARK;
       ctx.fillText("✂", x, 11);
     }
-  }, [visible, width, peaks, globalPeakMax, binMs, scene]);
+  }, [visible, width, peaks, globalPeakMax, binMs, scene, keptRanges]);
 
   function xFromEvent(event: { clientX: number }): number {
-    const canvas = canvasRef.current;
-    if (!canvas) return 0;
-    const rect = canvas.getBoundingClientRect();
-    return event.clientX - rect.left;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    return rect ? event.clientX - rect.left : 0;
   }
 
-  /** ポインタのx位置が端ハンドルのヒット領域内にあれば該当edgeを返す。 */
   function edgeAtX(x: number): EdgeTrimEdge | null {
     if (x <= EDGE_HANDLE_HIT_PX) return "start";
     if (x >= width - EDGE_HANDLE_HIT_PX) return "end";
@@ -244,190 +299,245 @@ export function SceneWaveformStrip({
       justDraggedRef.current = false;
       return;
     }
-    // ハサミONのクリックだけでは分割もシークも行わない。
-    if (scissorsMode) return;
-    // 改善3(端ドラッグ改善): 端ハンドル領域は「つまみ」専用とし、波形本体のシーク領域とは
-    // 分離する(誤操作防止)。ハンドル上のクリックはシークを発生させない。
-    if (edgeAtX(xFromEvent(event))) return;
-    const ms = msFromScrubPosition(scene, xFromEvent(event), width);
-    onSeek(ms);
+    if (event.button !== 0 || scissorsMode || edgeAtX(xFromEvent(event))) return;
+    onSeek(msFromScrubPosition(scene, xFromEvent(event), width));
   }
 
   function handleMouseMove(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (dragRef.current) return;
-    // W20-1: 範囲選択ドラッグ中はホバースクラブを抑制する(選択とシークの二重動作を防ぐ)。
-    if (rangeDragRef.current?.activated) return;
-    if (edgeAtX(xFromEvent(event))) {
+    // Suppress hover from the press, including the small movement before activation.
+    if (gestureRef.current || event.buttons || scissorsMode || edgeAtX(xFromEvent(event))) return;
+    onHoverSeek?.(msFromScrubPosition(scene, xFromEvent(event), width));
+  }
+
+  function cancelFrame() {
+    if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+  }
+
+  function previewGesture() {
+    const gesture = gestureRef.current;
+    if (!gesture?.activated) return;
+    setGestureView(gesture);
+    if (gesture.kind !== "range") {
+      const position = waveformGesturePosition(gesture);
+      if (position.moved) callbacksRef.current.onEdgeDragMove?.(gesture.kind, position.rawTargetMs, position.chipSnapToleranceMs);
+      else callbacksRef.current.onEdgeDragCancel?.();
+    }
+  }
+
+  function schedulePreview() {
+    if (frameRef.current != null) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      previewGesture();
+    });
+  }
+
+  function updateGesture(pointer: WaveformPointer) {
+    const previous = gestureRef.current;
+    if (!previous || pointer.pointerId !== previous.pointerId) return;
+    const next = moveWaveformGesture(previous, pointer);
+    gestureRef.current = next;
+    if (next.activated && !previous.activated) clearClickAnchor();
+    if (next.activated && !previous.activated && next.kind !== "range") {
+      callbacksRef.current.onEdgeDragStart?.(next.kind);
+    }
+    if (next.activated) schedulePreview();
+  }
+
+  function finishGesture(commit: boolean, pointer?: WaveformPointer) {
+    let gesture = gestureRef.current;
+    if (!gesture || (pointer && pointer.pointerId !== gesture.pointerId)) return;
+    if (pointer) gesture = moveWaveformGesture(gesture, pointer);
+    // Clear before releasePointerCapture: lostpointercapture must not commit/cancel twice.
+    gestureRef.current = null;
+    cancelFrame();
+    removeGestureListenersRef.current?.();
+    removeGestureListenersRef.current = null;
+    setGestureView(null);
+    setHoverEdge(null);
+    const canvas = canvasRef.current;
+    if (canvas?.hasPointerCapture(gesture.pointerId)) canvas.releasePointerCapture(gesture.pointerId);
+    justDraggedRef.current = !commit || gesture.activated || gesture.kind !== "range";
+    if (gesture.kind === "range") {
+      if (!commit || !sameWaveformEditScene(gesture.scene, sceneRef.current)) {
+        clearClickAnchor();
+        setClickHover(null);
+        return;
+      }
+      if (!gesture.activated) {
+        if (scissorsMode && sameWaveformEditScene(gesture.scene, sceneRef.current) &&
+          Math.abs(gesture.current.clientX - gesture.startClientX) <= RANGE_CUT_ACTIVATE_PX &&
+          Math.abs(gesture.current.clientY - gesture.startClientY) <= RANGE_CUT_ACTIVATE_PX) {
+          const x = gesture.startX + gesture.current.clientX - gesture.startClientX;
+          const rawMs = msFromScrubPosition(gesture.scene, x, gesture.widthPx);
+          const tolerance = waveformSnapToleranceMs((gesture.scene.sourceEndMs - gesture.scene.sourceStartMs) / gesture.widthPx, gesture.current.altKey);
+          const anchor = clickAnchorRef.current && sameWaveformEditScene(clickAnchorRef.current.scene, gesture.scene) ? clickAnchorRef.current.rawMs : null;
+          const preview = previewClickCut(gesture.scene, rawMs, anchor, { chipSnapToleranceMs: tolerance });
+          if (preview.kind === "cut") {
+            clearClickAnchor();
+            setClickHover(null);
+            callbacksRef.current.onRangeCut?.(preview.rawStartMs, preview.rawEndMs, tolerance);
+          } else if (preview.kind === "anchor") {
+            const nextAnchor = { scene: gesture.scene, rawMs, toleranceMs: tolerance };
+            clickAnchorRef.current = nextAnchor;
+            setClickAnchor(nextAnchor);
+            setClickHover(null);
+          }
+        }
+        return;
+      }
+      clearClickAnchor();
+      setClickHover(null);
+      const position = waveformGesturePosition(gesture);
+      const preview = cutSceneRangeMs([gesture.scene], gesture.scene.id, position.range.startMs, position.range.endMs, {
+        chipSnapToleranceMs: position.chipSnapToleranceMs,
+      });
+      if (preview.mode !== "none") {
+        callbacksRef.current.onRangeCut?.(position.range.startMs, position.range.endMs, position.chipSnapToleranceMs);
+      }
       return;
     }
-    if (scissorsMode) return;
-    if (!onHoverSeek) return;
-    onHoverSeek(msFromScrubPosition(scene, xFromEvent(event), width));
+    const position = waveformGesturePosition(gesture);
+    if (commit && gesture.activated && position.moved) {
+      callbacksRef.current.onEdgeDragEnd?.(gesture.kind, position.rawTargetMs, position.chipSnapToleranceMs);
+    } else {
+      callbacksRef.current.onEdgeDragCancel?.();
+    }
   }
 
-  function computeChipSnapToleranceMs(msPerPx: number): number {
-    const SNAP_PX = 15;
-    return SNAP_PX * msPerPx;
-  }
-
-  /**
-   * 改善3(端ドラッグ改善): 300ms長押しを廃止し、端ハンドル領域を押した時点で即座にドラッグを
-   * 開始する。誤操作防止は「長押し」ではなく「当たり判定の分離(edgeAtX)」で担保する。
-   */
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
-    const x = xFromEvent(event);
-    const spanMs = Math.max(1, scene.sourceEndMs - scene.sourceStartMs);
-    const msPerPx = spanMs / Math.max(1, width);
-    // ハサミONでは波形端でも範囲ドラッグを優先する。端トリムはハサミOFFでのみ開始する。
-    if (scissorsMode) {
-      if (!onRangeCut) return;
-      event.preventDefault();
-      setHoverEdge(null);
-      rangeDragRef.current = {
-        pointerId: event.pointerId,
-        startClientX: event.clientX,
-        startX: x,
-        msPerPx,
-        activated: false,
-      };
-      return;
-    }
-    const edge = edgeAtX(x);
+    if (event.button !== 0 || !event.isPrimary || gestureRef.current) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const edge = scissorsMode ? null : edgeAtX(x);
+    if (edge ? !onEdgeDragMove || !onEdgeDragEnd : !onRangeCut) return;
+    event.preventDefault();
+    event.stopPropagation();
+    justDraggedRef.current = false;
+    gestureRef.current = beginWaveformGesture(edge ?? "range", scene, rect.width, x, event);
+    // Capture at press: starting near an edge and leaving before 8 px must still finish reliably.
+    event.currentTarget.setPointerCapture(event.pointerId);
     setHoverEdge(edge);
-    if (edge) {
-      if (!onEdgeDragMove || !onEdgeDragEnd) return;
-      event.preventDefault();
-      const canvas = canvasRef.current;
-      canvas?.setPointerCapture(event.pointerId);
-      const startMs = edge === "start" ? scene.sourceStartMs : scene.sourceEndMs;
-      dragRef.current = { edge, pointerId: event.pointerId, startClientX: event.clientX, startMs, msPerPx };
-      setActiveEdge(edge);
-      onEdgeDragStart?.(edge);
-      return;
-    }
-    // W20-1(範囲選択カット): 波形本体(端ハンドル外)は範囲選択の候補として押下位置を記録する。
-    // 横8px超動くまでは発動せず、そのまま離せば従来のクリック(シーク等)がhandleClickで動く。
-    if (!onRangeCut) return;
-    rangeDragRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startX: x,
-      msPerPx,
-      activated: false,
+    onWaveformGestureStart?.();
+    const handleKey = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.isComposing) return;
+      if (keyEvent.type === "keydown" && (
+        keyEvent.key === "Escape" || ((keyEvent.metaKey || keyEvent.ctrlKey) && keyEvent.key.toLowerCase() === "z")
+      )) {
+        keyEvent.preventDefault();
+        keyEvent.stopImmediatePropagation();
+        finishGesture(false);
+      } else if (keyEvent.key === "Alt") {
+        const active = gestureRef.current;
+        if (active) updateGesture({ ...active.current, altKey: keyEvent.type === "keydown" });
+      } else if (keyEvent.key !== "Shift" && keyEvent.key !== "Meta" && keyEvent.key !== "Control") {
+        // Editing/playback shortcuts cannot mutate the scene underneath a held pointer.
+        keyEvent.preventDefault();
+        keyEvent.stopImmediatePropagation();
+      }
+    };
+    const handleBlur = () => finishGesture(false);
+    window.addEventListener("keydown", handleKey, true);
+    window.addEventListener("keyup", handleKey, true);
+    window.addEventListener("blur", handleBlur);
+    removeGestureListenersRef.current = () => {
+      window.removeEventListener("keydown", handleKey, true);
+      window.removeEventListener("keyup", handleKey, true);
+      window.removeEventListener("blur", handleBlur);
     };
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
-    // W20-1(範囲選択カット): 候補中はしきい値判定、発動後は選択範囲のローカルstateだけを更新する
-    // (scenesは一切触らず、確定はpointerupの1回のみ=WYSIWYG)。
-    const rangeDrag = rangeDragRef.current;
-    if (rangeDrag && event.pointerId === rangeDrag.pointerId) {
-      const deltaPx = event.clientX - rangeDrag.startClientX;
-      if (!rangeDrag.activated) {
-        if (!isRangeDragActivated(deltaPx)) return;
-        rangeDrag.activated = true;
-        canvasRef.current?.setPointerCapture(event.pointerId);
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      setRangeSelectPx({ startX: rangeDrag.startX, currentX: rangeDrag.startX + deltaPx });
+    const gesture = gestureRef.current;
+    if (!gesture) {
+      const x = xFromEvent(event);
+      setHoverEdge(scissorsMode ? null : edgeAtX(x));
+      if (scissorsMode) setClickHover({ rawMs: msFromScrubPosition(scene, x, width), altKey: event.altKey });
       return;
     }
-    const drag = dragRef.current;
-    if (!drag) {
-      // ホバー中の端ハンドル表示切り替えのみ担当する(再生バー追従は既存のonMouseMoveに任せ、二重発火を避ける)。
-      setHoverEdge(edgeAtX(xFromEvent(event)));
-      return;
-    }
+    if (event.pointerId !== gesture.pointerId) return;
     event.preventDefault();
     event.stopPropagation();
-    const deltaPx = event.clientX - drag.startClientX;
-    const rawTargetMs = drag.startMs + deltaPx * drag.msPerPx;
-    onEdgeDragMove?.(drag.edge, rawTargetMs, computeChipSnapToleranceMs(drag.msPerPx));
-  }
-
-  function endActiveDrag(event: React.PointerEvent<HTMLCanvasElement>) {
-    const drag = dragRef.current;
-    if (!drag) return;
-    canvasRef.current?.releasePointerCapture(event.pointerId);
-    const deltaPx = event.clientX - drag.startClientX;
-    const rawTargetMs = drag.startMs + deltaPx * drag.msPerPx;
-    justDraggedRef.current = true;
-    setActiveEdge(null);
-    onEdgeDragEnd?.(drag.edge, rawTargetMs, computeChipSnapToleranceMs(drag.msPerPx));
-    dragRef.current = null;
-  }
-
-  /**
-   * W20-1(範囲選択カット): 範囲選択候補/ドラッグの終了処理。担当した場合trueを返す。
-   * 未発動(8px未満)なら何もせずクリアし、従来のクリック動作(handleClick)に任せる。
-   * 発動済みならcommit=trueのとき選択範囲(生ms)をonRangeCutへ発火する。
-   */
-  function finishRangeDrag(event: React.PointerEvent<HTMLCanvasElement>, commit: boolean): boolean {
-    const rangeDrag = rangeDragRef.current;
-    if (!rangeDrag || event.pointerId !== rangeDrag.pointerId) return false;
-    rangeDragRef.current = null;
-    setRangeSelectPx(null);
-    if (!rangeDrag.activated) return true;
-    canvasRef.current?.releasePointerCapture(event.pointerId);
-    justDraggedRef.current = true;
-    if (commit) {
-      const currentX = rangeDrag.startX + (event.clientX - rangeDrag.startClientX);
-      const range = rangeSelectionFromPx(scene, rangeDrag.startX, currentX, width);
-      onRangeCut?.(range.startMs, range.endMs, computeChipSnapToleranceMs(rangeDrag.msPerPx));
-    }
-    return true;
+    updateGesture(event);
   }
 
   function handlePointerUp(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (finishRangeDrag(event, true)) return;
-    endActiveDrag(event);
+    if (!gestureRef.current || event.pointerId !== gestureRef.current.pointerId) return;
+    event.stopPropagation();
+    finishGesture(true, event);
   }
 
   function handlePointerCancel(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (finishRangeDrag(event, false)) return;
-    endActiveDrag(event);
+    if (event.pointerId === gestureRef.current?.pointerId) finishGesture(false);
   }
 
   function handlePointerLeave() {
-    if (!dragRef.current) setHoverEdge(null);
+    if (!gestureRef.current) {
+      setHoverEdge(null);
+      setClickHover(null);
+    }
   }
 
   const showStartHandle = activeEdge === "start" || hoverEdge === "start" || highlightEdge === "start";
   const showEndHandle = activeEdge === "end" || hoverEdge === "end" || highlightEdge === "end";
   const edgeCursor = hoverEdge || activeEdge ? "ew-resize" : "pointer";
-
   const sceneSpanMs = Math.max(1, scene.sourceEndMs - scene.sourceStartMs);
-  const playheadPercent =
-    playheadMs != null
-      ? Math.max(0, Math.min(100, ((playheadMs - scene.sourceStartMs) / sceneSpanMs) * 100))
-      : null;
+  const playheadPercent = playheadMs != null
+    ? Math.max(0, Math.min(100, ((playheadMs - scene.sourceStartMs) / sceneSpanMs) * 100))
+    : null;
+  const validAnchor = scissorsMode && clickAnchor && sameWaveformEditScene(clickAnchor.scene, scene) ? clickAnchor : null;
+  const clickPreview = scissorsMode && !gestureView && clickHover
+    ? previewClickCut(scene, clickHover.rawMs, validAnchor?.rawMs ?? null, {
+      chipSnapToleranceMs: waveformSnapToleranceMs(sceneSpanMs / width, clickHover.altKey),
+    })
+    : null;
+  const anchorMs = validAnchor ? (clickPreview?.anchorMs ?? previewClickCut(scene, validAnchor.rawMs, null, {
+    chipSnapToleranceMs: validAnchor.toleranceMs,
+  }).pointMs) : null;
+  const clickReadout = clickPreview?.kind === "cut"
+    ? `${formatWaveformTime(clickPreview.appliedStartMs)} → ${formatWaveformTime(clickPreview.appliedEndMs)}  −${(clickPreview.removedDurationMs / 1000).toFixed(3)} 秒`
+    : clickPreview?.unavailableReason === "removed"
+      ? "カット済みの区間です"
+      : clickPreview?.kind === "none" && validAnchor ? "2点目をもう少し離して選択 · 最小 0.080 秒"
+        : validAnchor ? `${formatWaveformTime(anchorMs!)} に切り込み · 反対側をクリック`
+        : clickPreview?.kind === "none" ? "もう少し内側へ · 最小 0.080 秒"
+          : clickPreview ? `${formatWaveformTime(clickPreview.pointMs)} に1点目の切り込み` : null;
 
-  // W20-1(範囲選択カット): ドラッグ中の選択オーバーレイ。確定処理(cutSceneRangeMs)と同じ
-  // snapRangeCutBoundsでスナップした範囲を表示することで、プレビュー=確定結果を保証する。
-  let rangeCutOverlay: { leftPx: number; widthPx: number; label: string } | null = null;
-  if (rangeSelectPx) {
-    const raw = rangeSelectionFromPx(scene, rangeSelectPx.startX, rangeSelectPx.currentX, width);
-    const snapped = snapRangeCutBounds(scene, raw.startMs, raw.endMs, {
-      chipSnapToleranceMs: computeChipSnapToleranceMs(sceneSpanMs / Math.max(1, width)),
+  let rangeCutOverlay: { leftPx: number; widthPx: number; label: string; valid: boolean } | null = null;
+  if (gestureView?.kind === "range") {
+    const position = waveformGesturePosition(gestureView);
+    const preview = cutSceneRangeMs([gestureView.scene], gestureView.scene.id, position.range.startMs, position.range.endMs, {
+      chipSnapToleranceMs: position.chipSnapToleranceMs,
     });
-    const leftPx = ((snapped.startMs - scene.sourceStartMs) / sceneSpanMs) * width;
-    const rightPx = ((snapped.endMs - scene.sourceStartMs) / sceneSpanMs) * width;
+    const valid = preview.mode !== "none";
+    const removedDurationMs = computeSceneKeptSubRanges(gestureView.scene).reduce((sum, range) => sum + Math.max(0,
+      Math.min(range.endMs, preview.appliedEndMs) - Math.max(range.startMs, preview.appliedStartMs)), 0);
+    const leftPx = ((preview.appliedStartMs - scene.sourceStartMs) / sceneSpanMs) * width;
+    const rightPx = ((preview.appliedEndMs - scene.sourceStartMs) / sceneSpanMs) * width;
     rangeCutOverlay = {
       leftPx,
       widthPx: Math.max(1, rightPx - leftPx),
-      label: formatEdgeTrimDelta(-(snapped.endMs - snapped.startMs)),
+      valid,
+      label: valid
+        ? `${formatWaveformTime(preview.appliedStartMs)} → ${formatWaveformTime(preview.appliedEndMs)}  −${(removedDurationMs / 1000).toFixed(3)} 秒`
+        : preview.appliedEndMs - preview.appliedStartMs >= MIN_RANGE_CUT_MS && removedDurationMs === 0
+          ? "この範囲はカット済みです"
+          : "もう少し広げて選択 · 最小 0.080 秒",
     };
   }
 
   return (
-    <div className="sceneWaveformWrap" ref={wrapRef}>
+    <div className={`sceneWaveformWrap sceneWaveformPrecision ${gestureView ? "isGesturing" : ""}`} ref={wrapRef}>
       {visible ? (
         <canvas
           className="sceneWaveformCanvas"
           onClick={handleClick}
           onMouseMove={handleMouseMove}
           onPointerCancel={handlePointerCancel}
+          onLostPointerCapture={handlePointerCancel}
+          aria-label="波形。Bで2点クリックして間をカット、発話より外側は1クリックで端までカット。ドラッグで範囲カット、左右端でトリム。Optionで単語吸着解除、Escapeで取消"
+          title="B: 2点クリックで間をカット · 発話より外側は1クリックで端までカット · ドラッグで範囲カット · Optionで単語吸着解除 · Escで取消"
           onPointerDown={handlePointerDown}
           onPointerLeave={handlePointerLeave}
           onPointerMove={handlePointerMove}
@@ -438,13 +548,45 @@ export function SceneWaveformStrip({
       ) : (
         <div className="sceneWaveformPlaceholder" style={{ height: HEIGHT }} />
       )}
+      {visible && !gestureView && clickPreview?.kind === "cut" && (
+        <div
+          className="sceneRangeCutOverlay sceneClickCutOverlay"
+          style={{ left: (clickPreview.appliedStartMs - scene.sourceStartMs) / sceneSpanMs * width,
+            width: (clickPreview.appliedEndMs - clickPreview.appliedStartMs) / sceneSpanMs * width }}
+        />
+      )}
+      {visible && !gestureView && anchorMs != null && (
+        <div className="sceneClickCutAnchor" style={{ left: (anchorMs - scene.sourceStartMs) / sceneSpanMs * width }}>
+          <span>1</span>
+        </div>
+      )}
+      {visible && !gestureView && (clickReadout || validAnchor) && (
+        <div className="sceneWaveformGestureReadout sceneClickCutReadout" role="status">
+          <strong>{clickReadout ?? `${formatWaveformTime(anchorMs!)} に切り込み · 反対側をクリック`}</strong>
+          <span>{clickPreview?.kind === "cut"
+            ? `${clickPreview.intent === "start" ? "先頭まで" : clickPreview.intent === "end" ? "末尾まで" : "2点の間を"}クリックでカット`
+            : clickPreview?.kind === "none" ? "この位置ではカットしません"
+              : validAnchor ? "2点目でカット" : "1点目ではまだカットしません"} · Esc 取消</span>
+        </div>
+      )}
       {/* W20-1(範囲選択カット): ドラッグ中の選択範囲ハイライト+カット尺ラベル(「-1.24s」)。 */}
       {visible && rangeCutOverlay && (
         <div
-          className="sceneRangeCutOverlay"
+          className={`sceneRangeCutOverlay ${rangeCutOverlay.valid ? "" : "invalid"}`}
           style={{ left: rangeCutOverlay.leftPx, width: rangeCutOverlay.widthPx }}
         >
-          <span className="sceneRangeCutLabel">{rangeCutOverlay.label}</span>
+
+        </div>
+      )}
+      {visible && rangeCutOverlay && (
+        <div className="sceneWaveformGestureReadout" role="status">
+          <strong>{rangeCutOverlay.label}</strong>
+          <span>{gestureView?.current.altKey ? "20 ms グリッド" : "単語に吸着"} · 離して確定 · Esc 取消</span>
+        </div>
+      )}
+      {visible && !gestureView && !dragTooltip && !clickReadout && !validAnchor && (
+        <div aria-hidden="true" className="sceneWaveformTimeRange">
+          <span>{formatWaveformTime(scene.sourceStartMs)}</span><span>{formatWaveformTime(scene.sourceEndMs)}</span>
         </div>
       )}
       {/* 改善3(再生バーの見た目変更): 行貫通の赤縦線は廃止し、波形ストリップ内だけに薄め・細めの
@@ -479,7 +621,12 @@ export function SceneWaveformStrip({
         </>
       )}
       {dragTooltip && (
-        <div className={`sceneEdgeTooltip ${dragTooltip.edge}`}>{dragTooltip.label}</div>
+        <div className={`sceneEdgeTooltip ${dragTooltip.edge}`}>
+          {dragTooltip.edge === "start" ? "開始 " : "終了 "}
+          {formatWaveformTime(dragTooltip.edge === "start" ? scene.sourceStartMs : scene.sourceEndMs)}
+          <strong>{dragTooltip.label}</strong>
+          <span>{gestureView?.current.altKey ? "20 ms グリッド" : "単語に吸着"} · Esc 取消</span>
+        </div>
       )}
     </div>
   );

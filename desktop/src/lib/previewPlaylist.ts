@@ -309,13 +309,15 @@ export function shiftTimelineDurationMs(timelineDurationMs: number, shiftMs: num
  * - 各rangeの元動画区間を keepSegments と交差させ、残った断片を時系列に隙間なく再配置する
  * - 先頭のtimelineオフセット(=OP尺)は維持する
  * - 全rangeが無傷(削除なし)の場合は同一配列を返す(memo破壊を避ける。shiftTimelineCutRangesと同じ流儀)
- * - keepSegments が空(初期化前)は何もしない
+ * - keepSegments が空でも初期化済みなら本編をすべて除く。未初期化時は旧対応表を保持する
  */
 export function compactRangesToKeepSegments(
   ranges: TimelineCutRange[],
   keepSegments: Array<{ startMs: number; endMs: number; speed?: number }>,
+  options: { keepSegmentsReady?: boolean } = {},
 ): TimelineCutRange[] {
-  if (!ranges.length || !keepSegments.length) return ranges;
+  if (!ranges.length) return ranges;
+  if (!keepSegments.length) return options.keepSegmentsReady ? [] : ranges;
   const sortedRanges = [...ranges].sort((a, b) => a.timelineStartMs - b.timelineStartMs);
   const sortedKeeps = [...keepSegments].sort((a, b) => a.startMs - b.startMs);
 
@@ -479,9 +481,11 @@ export function playlistPositionForTimelineMs(
 export function clampTimelineMsToPlaylist(
   entries: PlaylistEntry[],
   timelineMs: number,
+  options: { allowFinalEnd?: boolean } = {},
 ): PlaylistPosition | null {
   const exact = playlistPositionForTimelineMs(entries, timelineMs);
   if (exact) return exact;
+  const finalEndMs = options.allowFinalEnd ? playlistTotalDurationMs(entries) : null;
   let bestDistance = Infinity;
   let bestPosition: PlaylistPosition | null = null;
   for (let index = 0; index < entries.length; index += 1) {
@@ -491,7 +495,10 @@ export function clampTimelineMsToPlaylist(
         ? { distance: entry.timelineStartMs - timelineMs, position: { index, offsetMs: 0 } }
         : {
             distance: timelineMs - entry.timelineEndMs,
-            position: { index, offsetMs: Math.max(0, entry.timelineEndMs - entry.timelineStartMs - 1) },
+            position: {
+              index,
+              offsetMs: Math.max(0, entry.timelineEndMs - entry.timelineStartMs - (entry.timelineEndMs === finalEndMs ? 0 : 1)),
+            },
           };
     if (candidate.distance < bestDistance) {
       bestDistance = candidate.distance;

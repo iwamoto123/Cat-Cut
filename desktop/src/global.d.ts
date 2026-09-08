@@ -142,6 +142,7 @@ interface CatCutOutputs {
   runDir: string;
   /** フェーズW7: レンダリング済みMP4が実在するか(適用のみのjob:doneと書き出し完了を区別する)。 */
   finalVideoExists: boolean;
+  learning?: { examples: number; changed: boolean; warning?: string };
   telop: string;
   telopReview: string;
   fontDirectives: string;
@@ -418,6 +419,7 @@ interface CatCutKeepSegment {
 }
 
 interface CatCutTelopPageBoundary {
+  telopPosition?: { x: number; y: number };
   startMs: number;
   endMs: number;
   /** 改善10-B-3: パイプライン適用済みページ本文。 */
@@ -575,6 +577,20 @@ interface CatCutRetranscribeState {
 }
 
 /** W14-2: runs/<run>/edit_history.json の1エントリ(シーン単位・beforeは初期テキスト)。 */
+type CatCutEditingLearningKind = "proofreading" | "cut" | "scene_boundary" | "line_break";
+interface CatCutEditingLearningSummary {
+  projects: number;
+  examples: number;
+  counts: Record<CatCutEditingLearningKind, number>;
+  recentExamples: Array<{
+    exampleId: string;
+    kind: CatCutEditingLearningKind;
+    before: { text: string; keepSegments: Array<{ startMs: number; endMs: number }>; scenes: Array<{ startMs: number; endMs: number; text: string }> };
+    after: { text: string; keepSegments: Array<{ startMs: number; endMs: number }>; scenes: Array<{ startMs: number; endMs: number; text: string }> };
+    context?: { baselineProvenance?: string };
+  }>;
+}
+
 interface CatCutEditHistoryEntry {
   scene_id: string;
   /** W15: 元テキスト(STT生テキスト)。W14時代のエントリでは空文字。 */
@@ -793,7 +809,7 @@ interface CatCutWaveformResult {
   durationMs: number;
   /** binMsごとの正規化済み(0-1)ピーク配列。60分素材で約18万要素になり得る(カード側でスライスして使う)。 */
   peaks: number[];
-  /** true の場合 ui_cache/waveform.json からの即時返却(再生成なし)。 */
+  /** true の場合 ui_cache 内の保存済み波形から返却(再生成なし)。 */
   cached: boolean;
 }
 
@@ -1067,9 +1083,13 @@ declare global {
        */
       exportLearningData: () => Promise<{
         path: string;
-        stats: { runs: number; editEntries: number; correctionPairs: number };
+        summaryPath?: string;
+        stats: { runs: number; editEntries: number; correctionPairs: number; editingExamples?: number; confirmedProjects?: number };
         shared: boolean;
       }>;
+      initializeEditingLearning: (input: { runDir: string; scenes: unknown[] }) => Promise<{ ok: boolean; warning?: string }>;
+      getEditingLearningSummary: () => Promise<CatCutEditingLearningSummary>;
+      excludeEditingLearningExample: (input: { exampleId: string }) => Promise<CatCutEditingLearningSummary>;
       recordLearningDecision: (input: {
         kind: string;
         action: string;
@@ -1099,6 +1119,8 @@ declare global {
       startExport: (options: {
         runDir: string;
         renderFinal: boolean;
+        /** 適用した編集版。レンダリング中に更新されるドラフトとは分けて保持する。 */
+        learningSnapshot?: { scenes: unknown[]; keepSegments: CatCutKeepSegment[] };
         outputPath?: string;
         /** フェーズW7(書き出し設定モーダル): 出力解像度の短辺上限(0/未指定=元のサイズ)。 */
         targetShortSide?: number;
@@ -1125,10 +1147,6 @@ declare global {
       }) => Promise<{
         version: string;
         updatedAt: string;
-        scenes: unknown[];
-        keepSegments: CatCutKeepSegment[];
-        overlayEdits: Record<string, { text?: string; subtitle?: string }>;
-        customStyles: Record<string, CatCutTelopStyle>;
       }>;
       loadSceneEditsDraft: (runDir: string) => Promise<{
         version: string;
@@ -1142,6 +1160,8 @@ declare global {
       applyTranscriptEdits: (input: {
         runDir: string;
         keepSegments: CatCutKeepSegment[];
+        /** 全シーンの位置指定。未指定のpositionは、その区間を自動配置へ戻す。 */
+        sceneTelopPositions?: Array<{ startMs: number; endMs: number; telopPosition?: { x: number; y: number } }>;
         corrections?: Array<{ wordId: string; text: string }>;
         /**
          * 検品UI v2(シーン行UI, Phase 1): keepSegmentsと同じ順序(cut_001, cut_002, ...)で
@@ -1163,6 +1183,7 @@ declare global {
         directedSlots?: Array<{
           startMs: number;
           endMs: number;
+          telopPosition?: { x: number; y: number };
           text: string;
           styleId: string;
           /** フェーズT2.5-4: シーンの意味種類(旧runのtype無しシーンはnull)。 */
@@ -1208,6 +1229,8 @@ declare global {
       generateFilmstrip: (input: { runDir: string }) => Promise<CatCutFilmstripResult>;
       /** フェーズU9: BGMクリップ一覧(bgm.json + 配信URL・音源長)。 */
       listBgm: (input: { runDir: string }) => Promise<CatCutBgmState>;
+      /** BGM実音源のピーク波形。逐次生成、最大4096ビン、音源更新時のみ再生成。 */
+      getBgmWaveform: (input: { runDir: string; file: string }) => Promise<CatCutWaveformResult>;
       /**
        * フェーズU9: ファイル選択→runs/<run>/bgm/へコピー→既定値でクリップ追加。キャンセル時null。
        * V6-5: startMs=追加開始位置(既存クリップ最後尾の終端。レンダラーが計算して渡す)。

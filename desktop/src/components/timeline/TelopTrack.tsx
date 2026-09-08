@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+import { isEditorSelection, type EditorSelection } from "../../lib/editorSelection";
 import { Pencil } from "lucide-react";
 import type { SceneTimelineBlock } from "../../lib/timelineLayout";
 
@@ -5,6 +7,7 @@ type Props = {
   blocks: SceneTimelineBlock[];
   pxPerMs: number;
   currentSceneId: string | null;
+  selection: EditorSelection;
   /** sceneId→プリセットの代表fill色(telopStyleSwatchColorsで解決済み)。 */
   colorBySceneId: Map<string, string>;
   onSelect: (block: SceneTimelineBlock) => void;
@@ -18,21 +21,27 @@ type Props = {
  * - クリックで選択(=再生ヘッド移動でシーン検品のシーン選択と連動)
  * - ダブルクリック or 選択中ブロックの編集ボタンで詳細エディタを開く
  */
-export function TelopTrack({ blocks, pxPerMs, currentSceneId, colorBySceneId, onSelect, onEdit }: Props) {
+export function TelopTrack({ blocks, pxPerMs, currentSceneId, selection, colorBySceneId, onSelect, onEdit }: Props) {
   return (
     <div className="tlLane tlTelopLane">
       {blocks.map((block) => {
         const widthPx = (block.timelineEndMs - block.timelineStartMs) * pxPerMs;
         const color = colorBySceneId.get(block.sceneId) ?? "#94a3b8";
-        const selected = block.sceneId === currentSceneId;
+        const selected = isEditorSelection(selection, "telop", block.sceneId);
+        const current = block.sceneId === currentSceneId;
         return (
           <div
-            className={`tlTelopBlock${selected ? " selected" : ""}`}
+            className={`tlTelopBlock${selected ? " selected" : ""}${current ? " current" : ""}`}
             key={block.sceneId}
             onClick={(event) => {
               event.stopPropagation();
+              event.currentTarget.focus({ preventScroll: true });
               onSelect(block);
             }}
+            tabIndex={-1}
+            role="button"
+            aria-label={`テロップ ${block.sceneIndex + 1}: ${block.telopText || "テロップなし"}`}
+            aria-pressed={selected}
             onDoubleClick={
               onEdit
                 ? (event) => {
@@ -44,13 +53,11 @@ export function TelopTrack({ blocks, pxPerMs, currentSceneId, colorBySceneId, on
             style={{
               left: `${block.timelineStartMs * pxPerMs}px`,
               width: `${Math.max(4, widthPx)}px`,
-              // fill色を白へ7割混ぜたパステル背景+同系のボーダー(モックアップの色付きブロック)
-              background: `color-mix(in srgb, ${color} 30%, #ffffff)`,
-              borderColor: selected ? undefined : `color-mix(in srgb, ${color} 55%, #ffffff)`,
-            }}
+              "--clip-telop-color": color,
+            } as CSSProperties}
             title={block.telopText}
           >
-            {widthPx >= 28 && <span className="tlTelopBlockText">{block.telopText}</span>}
+            {widthPx >= 28 && <span className={`tlTelopBlockText${block.telopText ? "" : " empty"}`}>{block.telopText || "テロップなし"}</span>}
             {selected && onEdit && widthPx >= 48 && (
               <button
                 className="tlTelopEditButton"

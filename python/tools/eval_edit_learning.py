@@ -1,12 +1,12 @@
-"""W15: 学習データ(catcut-learning-*.json)の集約・再学習・評価ツール(開発機用)。
+"""学習データ(catcut-learning-*.json)の集約・共有・評価用分割ツール(開発機用)。
 
 各PC(自分・社員)のCat-Cutで「学習済み修正 → 学習データを書き出す」が生成した
 エクスポートJSONを取り込み、次を行う:
 
 1. 集約: 全PCの編集履歴(元テキスト/表示テキスト/編集後)を1つのデータセットへ統合
-2. 再学習: 修正ペアを開発機の correction_history.json へマージ
+2. 共有: 修正ペアと確定編集例を、ローカル観測とは別の共有正本へマージ
    (step05/step06b のプロンプト注入が全PC分の修正例で賢くなる)
-3. 評価: 既知ペアが編集をどれだけカバーできているか等のレポートを出力
+3. 記述統計: 既知ペア被覆率と素材単位の評価用分割を出力(AIの精度測定ではない)
 
 Usage:
     # エクスポートを集約してレポートだけ見る
@@ -15,7 +15,7 @@ Usage:
     # 自分のMacのruns/も直接取り込む場合
     .venv/bin/python python/tools/eval_edit_learning.py exports/*.json --local
 
-    # 開発機の correction_history.json へマージ(再学習)まで行う場合
+    # 共有正本へ公開する場合(各PCのローカル観測履歴は上書きしない)
     .venv/bin/python python/tools/eval_edit_learning.py exports/*.json --merge-history
 """
 
@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import socket
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +34,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from shared.app_paths import default_correction_history_path  # noqa: E402
+from shared.editing_learning import merge_editing_corpora, split_corpus_holdout, timestamp_rank  # noqa: E402
 
 CORRECTION_HISTORY_MAX_PAIRS = 500  # desktop/main/editLearning.cjs と同じ上限
 
@@ -86,22 +89,28 @@ def collect_local_export(runs_root: Path, correction_history_path: Path) -> Dict
             entries = history.get("entries") if isinstance(history, dict) else None
             if isinstance(entries, list) and entries:
                 runs.append({"run": run_dir.name, "entries": entries})
-    pairs: List[Dict[str, Any]] = []
+    history_record: Dict[str, Any] = {"version": "1.0.0", "pairs": []}
     if correction_history_path.is_file():
         try:
             with open(correction_history_path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
             if isinstance(raw, dict) and isinstance(raw.get("pairs"), list):
-                pairs = raw["pairs"]
+                history_record = raw
         except (OSError, json.JSONDecodeError):
             pass
+    corpus_path = correction_history_path.parent / "editing_learning_corpus.json"
+    try:
+        corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        corpus = {}
     return {
         "version": "1.0.0",
         "kind": "catcut-learning-export",
-        "machine": "local",
+        "machine": socket.gethostname(),
         "exportedAt": datetime.now().isoformat(),
         "runs": runs,
-        "correctionHistory": {"version": "1.0.0", "pairs": pairs},
+        "correctionHistory": history_record,
+        "editingCorpus": merge_editing_corpora([corpus]),
     }
 
 
@@ -109,13 +118,54 @@ def collect_local_export(runs_root: Path, correction_history_path: Path) -> Dict
 # 集約・マージ(純関数)
 # ---------------------------------------------------------------------------
 
+def _export_stamp(export: Dict[str, Any]) -> str:
+    return str(export.get("exportedAt") or max(
+        (str(entry.get("ts") or "") for run in export.get("runs", []) if isinstance(run, dict)
+         for entry in run.get("entries", []) if isinstance(entry, dict)), default=""))
+
+
+def latest_exports(exports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Full snapshots from one machine replace each other, never accumulate."""
+    latest: Dict[str, Dict[str, Any]] = {}
+    for export in exports:
+        if not isinstance(export, dict):
+            continue
+        identity = str(export.get("machine") or "unknown")
+        previous = latest.get(identity)
+        tie = json.dumps(export, ensure_ascii=False, sort_keys=True)
+        rank = (timestamp_rank(_export_stamp(export)), hashlib.sha256(tie.encode()).hexdigest())
+        if previous is None or rank > (timestamp_rank(_export_stamp(previous)), hashlib.sha256(json.dumps(previous, ensure_ascii=False, sort_keys=True).encode()).hexdigest()):
+            latest[identity] = export
+    return [latest[key] for key in sorted(latest)]
+
+
+def build_shared_correction_history(exports: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Keep per-machine provenance so published counts cannot become new votes."""
+    candidates = []
+    for export in latest_exports(exports):
+        history = export.get("correctionHistory") or {}
+        if not isinstance(history, dict):
+            continue
+        if history.get("origin") == "aggregate":
+            for contribution in history.get("contributions") or []:
+                if isinstance(contribution, dict) and contribution.get("machine"):
+                    candidates.append({"machine": contribution["machine"], "exportedAt": contribution.get("exportedAt", ""),
+                                       "runs": [], "correctionHistory": {"pairs": contribution.get("pairs") or []}})
+        else:
+            candidates.append(export)
+    contributions = [{"machine": export.get("machine") or "unknown", "exportedAt": _export_stamp(export),
+                      "pairs": merge_correction_pairs([(export.get("correctionHistory") or {}).get("pairs") or []])}
+                     for export in latest_exports(candidates)]
+    return {"version": "1.1.0", "origin": "aggregate", "contributions": contributions,
+            "pairs": merge_correction_pairs([item["pairs"] for item in contributions])}
+
 def build_dataset(exports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """全エクスポートのシーン編集を1つのデータセット(1行=1シーン編集)へ統合する。
 
-    同一 machine+run+scene_id は後勝ち(エクスポートが新しいほど後ろに並ぶ想定)。
+    PCごとの最新全件snapshotを採用し、同一sceneは最新tsを採用する。
     """
     by_key: Dict[str, Dict[str, Any]] = {}
-    for export in exports:
+    for export in latest_exports(exports):
         machine = str(export.get("machine") or "unknown")
         for run in export.get("runs") or []:
             run_name = str(run.get("run") or "")
@@ -128,7 +178,7 @@ def build_dataset(exports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 if before == after:
                     continue
                 key = f"{machine}\u0000{run_name}\u0000{scene_id}"
-                by_key[key] = {
+                candidate = {
                     "machine": machine,
                     "run": run_name,
                     "scene_id": scene_id,
@@ -137,6 +187,8 @@ def build_dataset(exports: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "after": after,
                     "ts": str(entry.get("ts") or ""),
                 }
+                if key not in by_key or timestamp_rank(candidate["ts"]) >= timestamp_rank(by_key[key]["ts"]):
+                    by_key[key] = candidate
     return list(by_key.values())
 
 
@@ -145,9 +197,11 @@ def merge_correction_pairs(histories: List[List[Dict[str, Any]]]) -> List[Dict[s
     merged: Dict[str, Dict[str, Any]] = {}
     for pairs in histories:
         for entry in pairs or []:
+            if not isinstance(entry, dict):
+                continue
             before = str(entry.get("before") or "").strip()
             after = str(entry.get("after") or "").strip()
-            if not before or not after or before == after:
+            if not before or not after or before == after or max(len(before), len(after)) > 40:
                 continue
             try:
                 count = max(1, int(entry.get("count") or 1))
@@ -216,6 +270,8 @@ def build_report(
     dataset: List[Dict[str, Any]],
     merged_pairs: List[Dict[str, Any]],
     evaluation: Dict[str, Any],
+    corpus: Dict[str, Any] | None = None,
+    holdout: Dict[str, Any] | None = None,
 ) -> str:
     """人間が読むMarkdownレポートを組み立てる。"""
     lines: List[str] = []
@@ -240,13 +296,25 @@ def build_report(
         "(AI整形済みシーンへの追加修正)"
     )
     lines.append("")
-    lines.append("## 既知ペアによるカバレッジ")
+    lines.append("## 既知ペアによる被覆率（記述統計・AI精度ではありません）")
     lines.append("")
     lines.append(
         f"- 編集 {evaluation['total_edits']}件中 **{evaluation['covered_by_known_pairs']}件"
         f"({evaluation['coverage_rate']:.1%})** は学習済みペアで説明可能"
     )
-    lines.append("- 未カバーの編集ほど「AIがまだ拾えていない修正」= プロンプト・辞書改善の候補")
+    lines.append("- 同じ収集データ由来の語ペアとの一致を数えた値です。AI推論・未見動画での改善は測定していません。")
+    if corpus is not None and holdout is not None:
+        counts = {}
+        for project in corpus["projects"]:
+            for example in project["examples"]:
+                counts[example["kind"]] = counts.get(example["kind"], 0) + 1
+        lines.extend(["", "## 書き出し確定済みの編集例と評価用分割", "",
+                      f"- 種類別件数: {json.dumps(counts, ensure_ascii=False)}",
+                      f"- 参照用 {len(holdout['train']['projects'])}プロジェクト / 評価用 {len(holdout['holdout']['projects'])}プロジェクト",
+                      "- 同一素材の複製は同じ側へ配置します。参照用と評価用の素材重複は0件です。",
+                      "- AIを実行した評価結果はありません。カット過剰削除ms・境界誤差・文字誤り率などは未測定です。"])
+        if holdout["reason"] != "holdout_ready":
+            lines.append("- 独立した素材が2件未満のため、評価用分割はまだ成立しません。")
     lines.append("")
     lines.append("## 頻度上位の修正ペア(プロンプト注入対象・上位30)")
     lines.append("")
@@ -263,8 +331,7 @@ def build_report(
         lines.append("")
     lines.append("## 次のアクション")
     lines.append("")
-    lines.append("- `--merge-history` を付けて再実行すると、統合ペアが開発機の correction_history.json へ")
-    lines.append("  反映され、以降の解析(step05/step06b)のプロンプト注入が全PC分の修正例で動く")
+    lines.append("- `--merge-history` は共有用正本を公開します。各PCのローカル観測履歴へ統合件数を書き戻しません。")
     lines.append("- 回数が多い確定的な誤記はユーザー辞書(user_dictionary.json)への昇格を検討")
     return "\n".join(lines) + "\n"
 
@@ -274,13 +341,13 @@ def build_report(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Cat-Cut学習データの集約・再学習・評価")
+    parser = argparse.ArgumentParser(description="Cat-Cut学習データの集約・共有・評価用分割")
     parser.add_argument("exports", nargs="*", help="catcut-learning-*.json (社員PCからの書き出し)")
     parser.add_argument("--local", action="store_true", help="このPCのruns/とcorrection_historyも取り込む")
     parser.add_argument(
         "--merge-history",
         action="store_true",
-        help="統合修正ペアを開発機の correction_history.json へ書き戻す(再学習)",
+        help="統合修正ペアと確定編集例を共有正本へ公開する(ローカル観測履歴は変更しない)",
     )
     parser.add_argument(
         "--output-dir",
@@ -313,9 +380,10 @@ def main() -> None:
         )
 
     dataset = build_dataset(exports)
-    merged_pairs = merge_correction_pairs(
-        [(export.get("correctionHistory") or {}).get("pairs") or [] for export in exports],
-    )
+    shared_history = build_shared_correction_history(exports)
+    merged_pairs = shared_history["pairs"]
+    corpus = merge_editing_corpora([export.get("editingCorpus") or {} for export in exports])
+    holdout = split_corpus_holdout(corpus)
     evaluation = evaluate_dataset(dataset, merged_pairs)
 
     output_dir = Path(args.output_dir)
@@ -324,31 +392,28 @@ def main() -> None:
 
     dataset_path = output_dir / f"dataset_{stamp}.json"
     with open(dataset_path, "w", encoding="utf-8") as f:
-        json.dump({"version": "1.0.0", "entries": dataset}, f, ensure_ascii=False, indent=2)
+        json.dump({"version": "1.1.0", "entries": dataset, "editingCorpus": corpus}, f, ensure_ascii=False, indent=2)
 
-    report = build_report(exports, dataset, merged_pairs, evaluation)
+    for label in ["train", "holdout"]:
+        (output_dir / f"editing_{label}_{stamp}.json").write_text(
+            json.dumps(holdout[label], ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        )
+
+    report = build_report(latest_exports(exports), dataset, merged_pairs, evaluation, corpus, holdout)
     report_path = output_dir / f"report_{stamp}.md"
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
     if args.merge_history:
-        history_path = default_correction_history_path()
-        history_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(history_path, "w", encoding="utf-8") as f:
-            json.dump({"version": "1.0.0", "pairs": merged_pairs}, f, ensure_ascii=False, indent=2)
-        print(f"再学習: {history_path} へ {len(merged_pairs)}ペアを反映しました")
-
-        # 統合結果をNextcloudへ公開する。各PCのCat-Cutが解析時に自動で参照する
-        # (shared_correction_history.json の書き手はこのツール=開発機だけ。コンフリクトしない)
-        learning_dir = find_nextcloud_learning_dir()
-        if learning_dir:
-            learning_dir.mkdir(parents=True, exist_ok=True)
-            shared_path = learning_dir / "shared_correction_history.json"
-            tmp_path = learning_dir / ".shared_correction_history.json.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump({"version": "1.0.0", "pairs": merged_pairs}, f, ensure_ascii=False, indent=2)
+        publish_dir = find_nextcloud_learning_dir() or output_dir
+        publish_dir.mkdir(parents=True, exist_ok=True)
+        for filename, payload in [("shared_correction_history.json", shared_history),
+                                  ("shared_editing_learning_corpus.json", corpus)]:
+            shared_path = publish_dir / filename
+            tmp_path = publish_dir / f".{filename}.tmp"
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             tmp_path.replace(shared_path)
-            print(f"共有公開: {shared_path} へ {len(merged_pairs)}ペアを公開しました(全PCが次回解析から参照)")
+            print(f"共有用正本: {shared_path}")
 
     print("")
     print(f"データセット: {dataset_path}")

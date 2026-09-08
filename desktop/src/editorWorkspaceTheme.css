@@ -1,0 +1,173 @@
+/* The timeline is a neutral editing surface; canvas/output styling stays in the player. */
+body:has(.appShellTimeline) { background: #1b1c1e; }
+.appShellTimeline { padding-top: 14px; }
+.appShellTimeline .rightPane.reviewMode { background: transparent; }
+.sceneWorkspaceTimeline {
+  --editor-line: #414348;
+  --editor-ink: #e4e5e8;
+  --editor-muted: #a7aab2;
+  --editor-accent: #80b8f7;
+  --editor-selected: #f4c95d;
+  background: #242528;
+  border-color: #414348;
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--editor-ink);
+  box-shadow: 0 3px 18px #0002;
+}
+.sceneWorkspaceTimeline .sceneThemeBar {
+  background: #292b2e;
+  border-color: #414348;
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+.sceneWorkspaceTimeline .sceneThemeBarLabel,
+.sceneWorkspaceTimeline .sceneThemeBarProgress { color: #b6b9c1; font-size: 11px; font-weight: 500; }
+.sceneWorkspaceTimeline .sceneThemeOpenButton { border-color: #4a4c52; box-shadow: none; }
+.sceneWorkspaceTimeline .sceneThemeBarRight > button {
+  min-height: 32px;
+  height: 32px;
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.sceneWorkspaceTimeline .sceneProjectsBackButton { background: #35373c; border-color: #50535a; color: #e2e4e8; }
+.sceneWorkspaceTimeline .sceneProjectsBackButton:hover:not(:disabled) { background: #41444a; }
+.sceneWorkspaceTimeline .sceneThemeBarRight .primaryButton { background: #377dcc; border-color: #5492db; color: white; }
+.sceneWorkspaceTimeline .sceneThemeBarRight .primaryButton:hover:not(:disabled) { background: #438bdc; }
+.sceneWorkspaceTimeline .reviewViewTabs { background: #1d1e21; border-color: #3e4046; border-radius: 5px; }
+.sceneWorkspaceTimeline .reviewViewTabs button { color: #aeb2bb; font-size: 12px; font-weight: 550; padding: 6px 11px; }
+.sceneWorkspaceTimeline .reviewViewTabs button.active { background: #41444a; color: #f3f4f6; box-shadow: inset 0 1px #ffffff0d; }
+.sceneWorkspaceTimeline .transcriptWorkspaceHeader { padding-block: 0; }
+.sceneWorkspaceTimeline .transcriptWorkspaceActions > button { background: #2e3034; border-color: #44474d; color: #c1c5ce; }
+.sceneWorkspaceTimeline .transcriptWorkspaceActions > button:hover:not(:disabled) { background: #41444a; }
+.sceneWorkspaceTimeline .draftSaveIndicator { color: #a6ada8; font-size: 10px; }
+.sceneWorkspaceTimeline .draftSaveIndicator.error { color: #ffaea5; }
+.sceneWorkspaceTimeline .transcriptPreviewPanel { border-color: #46484d; border-radius: 6px; background: #131416; box-shadow: none; }
+.sceneWorkspaceTimeline .previewViewport { background: #101113; }
+.sceneWorkspaceTimeline .previewTransportBar { background: #25272b; border-color: #44464c; }
+.sceneWorkspaceTimeline .previewTransportButton { color: #e0e3e8; }
+.sceneWorkspaceTimeline .previewTransportTime { color: #d1d5dc; font-variant-numeric: tabular-nums; }
+.sceneWorkspaceTimeline .previewTransportRate { color: #b5bac4; }
+.sceneWorkspaceTimeline .previewTransportRate select { background: #34373d; color: #e5e7eb; border-color: #555962; color-scheme: dark; }
+.sceneWorkspaceTimeline .previewFidelityToolbar { gap: 5px; }
+.sceneWorkspaceTimeline .previewFidelityToolbar button { background: #2c2e32; border-color: #484b51; color: #aab0b9; border-radius: 4px; font-size: 10px; padding: 4px 9px; }
+.sceneWorkspaceTimeline .previewFidelityToolbar button.active { background: #2c3e36; border-color: #4c6c59; color: #b3ddbe; }
+.sceneWorkspaceTimeline .previewFidelityToolbar button:hover { border-color: #7b8592; }
+
+/* Compact inspector: labels recede, values retain contrast and fixed-width digits. */
+.sceneWorkspaceTimeline .selectionInspector { background: #292b2e; color: #e3e5e9; border-color: #45474d; border-radius: 6px; color-scheme: dark; }
+.sceneWorkspaceTimeline .selectionInspectorHeader { background: #303236; border-color: #45474d; }
+.sceneWorkspaceTimeline .selectionInspectorIcon { background: #3a4656; color: #accef5; border-radius: 4px; }
+.sceneWorkspaceTimeline .selectionInspector-bgm .selectionInspectorIcon { background: #294a38; color: #9bd6aa; }
+.sceneWorkspaceTimeline .selectionInspector-image .selectionInspectorIcon { background: #4b394f; color: #d7b6e3; }
+.sceneWorkspaceTimeline .selectionInspector-telop .selectionInspectorIcon { background: #453b63; color: #c9b8f5; }
+.sceneWorkspaceTimeline .selectionInspectorType { color: #aeb3bd; font-weight: 500; letter-spacing: .02em; }
+.sceneWorkspaceTimeline .selectionInspectorHeader strong { font-weight: 550; }
+.sceneWorkspaceTimeline .selectionInspectorDelete { color: #b9bec8; }
+.sceneWorkspaceTimeline .selectionInspectorDelete:hover:not(:disabled) { background: #653938; border-color: #995553; color: #ffd3cd; }
+.sceneWorkspaceTimeline .selectionInspectorEmpty { color: #8d929c; }
+.sceneWorkspaceTimeline .selectionInspectorEmpty p { color: #b4b9c2; }
+.sceneMainAreaTimeline .selectionInspectorEmpty { min-height: 0; padding: 12px; gap: 6px; }
+.sceneWorkspaceTimeline .precisionSection { border-color: #414348; }
+.sceneWorkspaceTimeline .precisionSectionTitle { color: #e1e4e9; font-weight: 550; }
+.sceneWorkspaceTimeline .precisionSectionTitle > span + span,
+.sceneWorkspaceTimeline .precisionFieldLabel { color: #b1b6bf; }
+.sceneWorkspaceTimeline .precisionFieldInput { background: #202225; border-color: #4a4d53; border-radius: 4px; }
+.sceneWorkspaceTimeline .precisionFieldInput input { color: #e8ebf0; }
+.sceneWorkspaceTimeline .precisionFieldInput > span { color: #a2a8b3; }
+.sceneWorkspaceTimeline .precisionFieldInput:focus-within { background: #1c2025; border-color: #80b8f7; box-shadow: 0 0 0 1px #80b8f744; }
+.sceneWorkspaceTimeline .precisionFieldInput.invalid { border-color: #f19087; }
+.sceneWorkspaceTimeline .precisionFieldNote,
+.sceneWorkspaceTimeline .precisionHelp,
+.sceneWorkspaceTimeline .precisionKeyboardHelp { color: #9aa1ac; }
+.sceneWorkspaceTimeline .precisionKeyboardHelp { border-color: #414348; }
+.sceneWorkspaceTimeline .precisionSeekButtons button,
+.sceneWorkspaceTimeline .precisionTextButton,
+.sceneWorkspaceTimeline .precisionSpeedButtons button { background: #35373d; border-color: #51555d; color: #d2d7e0; border-radius: 4px; }
+.sceneWorkspaceTimeline .precisionSeekButtons button:hover:not(:disabled),
+.sceneWorkspaceTimeline .precisionTextButton:hover:not(:disabled),
+.sceneWorkspaceTimeline .precisionSpeedButtons button:hover:not(:disabled) { background: #434a55; border-color: #7b95b6; }
+.sceneWorkspaceTimeline .precisionSpeedButtons button.active { background: #354d6a; color: #d6e8ff; border-color: #7d9ec4; }
+.sceneWorkspaceTimeline .precisionReadout,
+.sceneWorkspaceTimeline .precisionSceneText { color: #c0c6d0; }
+.sceneWorkspaceTimeline .precisionKeyboardHelp kbd,
+.sceneWorkspaceTimeline .precisionTimelineHint kbd { background: #303339; border-color: #50545d; color: #b9c0cb; }
+
+/* Distinct timeline surfaces and role colours, with a single selected-clip outline. */
+.sceneWorkspaceTimeline .timelineView.precisionTimeline { background: #1e2023; border-color: #474a50; border-radius: 6px; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineToolbar { background: #303236; border-color: #45484e; border-radius: 5px 5px 0 0; gap: 9px; padding: 7px 10px; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineToolbarTitle { color: #c0c6ce; font-weight: 500; font-size: 11px; }
+.sceneWorkspaceTimeline .precisionTimelineClock { color: #ecedf0; font-size: 13px; letter-spacing: -.03em; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineToolbarDuration { color: #a5adb9; }
+.sceneWorkspaceTimeline .precisionTimelineButton,
+.sceneWorkspaceTimeline .timelineZoomButton { background: #3b3e44; border-color: #545860; color: #d9dde4; border-radius: 4px; }
+.sceneWorkspaceTimeline .precisionTimelineButton:hover:not(:disabled),
+.sceneWorkspaceTimeline .timelineZoomButton:hover:not(:disabled) { background: #4a505a; border-color: #7d8999; color: #fff; }
+.sceneWorkspaceTimeline .precisionTimelineButton.active { background: #354e6b; border-color: #6086b0; color: #d8eaff; }
+.sceneWorkspaceTimeline .precisionZoomValue { color: #aeb8c5; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineLabels { background: #292b2f; border-color: #45484f; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineLabelCell { color: #b8bfcb; border-color: #3c3f45; font-weight: 500; gap: 6px; padding-inline: 10px; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineLabelBgm > svg { color: #9ac9aa; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineLabelVideo > svg { color: #93bde8; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineLabelImage > svg { color: #c5a2d1; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineLabelTelop > svg { color: #bda5df; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineBgmAddButton { background: #383d45; color: #bbc6d5; border: 1px solid #4c5562; border-radius: 4px; padding: 3px 5px; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineBgmAddButton:hover:not(:disabled) { background: #485261; border-color: #899aae; color: #fff; }
+.sceneWorkspaceTimeline .precisionTimeline .tlRuler { background: #25272b; border-color: #454950; }
+.sceneWorkspaceTimeline .precisionTimeline .tlRulerTick { background: #5d626c; }
+.sceneWorkspaceTimeline .precisionTimeline .tlRulerTickMajor { background: #8a919d; }
+.sceneWorkspaceTimeline .precisionTimeline .tlRulerLabel { color: #bac1cc; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.sceneWorkspaceTimeline .precisionTimeline .tlLane { background: #202226; border-color: #373a41; }
+.sceneWorkspaceTimeline .precisionTimeline .tlVideoLane { background: #252930; }
+.sceneWorkspaceTimeline .precisionTimeline .tlBgmLane { background: #1f2522; }
+.sceneWorkspaceTimeline .precisionTimeline .tlLanePlaceholder { color: #959eac; font-size: 10px; }
+.sceneWorkspaceTimeline .precisionTimeline .tlTelopBlock { background: #51446c; border: 1px solid #786496; border-radius: 3px; }
+.sceneWorkspaceTimeline .precisionTimeline .tlTelopBlock::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--clip-telop-color, #9e88c4); opacity: .85; pointer-events: none; }
+.sceneWorkspaceTimeline .precisionTimeline .tlTelopBlockText { color: #f1eafa; font-weight: 500; }
+.sceneWorkspaceTimeline .precisionTimeline .tlTelopBlockText.empty { color: #b4a9c2; }
+.sceneWorkspaceTimeline .precisionTimeline .tlTelopEditButton { background: #6b5b88; color: #f4ebff; border-color: #a18abb; }
+.sceneWorkspaceTimeline .precisionTimeline .tlVideoBlock { background: #315c85; border: 1px solid #5c88b2; border-radius: 3px; }
+.sceneWorkspaceTimeline .precisionTimeline .tlVideoLabel { color: #e0eeff; }
+.sceneWorkspaceTimeline .precisionTimeline .tlVideoIndex { color: #abcbec; font-size: 11px; }
+.sceneWorkspaceTimeline .precisionTimeline .tlVideoThumb { border-radius: 2px; }
+.sceneWorkspaceTimeline .precisionTimeline .tlImageClip { background: #664b70; border: 1px solid #9778a3; border-radius: 3px; }
+.sceneWorkspaceTimeline .precisionTimeline .tlImageClipLabel { color: #f0e0f5; left: 25px; right: 10px; padding: 0; font-weight: 500; }
+.sceneWorkspaceTimeline .tlImageClipLabel > span { overflow: hidden; min-width: 0; text-overflow: ellipsis; }
+.sceneWorkspaceTimeline .tlImageClipLabel > svg { flex-shrink: 0; }
+.sceneWorkspaceTimeline .precisionTimeline .tlImageResizeHandle { color: #f2defb; }
+.sceneWorkspaceTimeline .precisionTimeline .tlLaneReorderHandle { color: #e3d6ed; }
+.sceneWorkspaceTimeline .precisionTimeline :is(.tlVideoBlock, .tlTelopBlock, .tlImageClip, .tlBgmClip).selected { border: 1px solid var(--editor-selected); box-shadow: inset 0 0 0 1px var(--editor-selected); }
+.sceneWorkspaceTimeline .precisionTimeline :is(.tlVideoBlock, .tlTelopBlock).current:not(.selected) { box-shadow: inset 0 -2px #d8e7f480; }
+.sceneWorkspaceTimeline .precisionTimeline .timelinePlayhead { background: #f0f2f5; width: 1px; }
+.sceneWorkspaceTimeline .precisionTimeline .timelinePlayheadHandle { background: #f0f2f5; }
+.sceneWorkspaceTimeline .precisionTimeline .timelineEndPadding { border-color: #636b78; background: #292d3480; }
+.sceneWorkspaceTimeline .precisionTimelineHint { background: #282b30; color: #a6afbd; border-color: #42474e; border-radius: 0 0 5px 5px; font-size: 9px; gap: 5px 9px; padding: 5px 10px; }
+.sceneWorkspaceTimeline .timelineMediaError { background: #543730; border-color: #966b56; color: #ffd8bb; }
+.sceneWorkspaceTimeline :is(button, select):focus-visible { outline: 2px solid #9bc8ff; outline-offset: 2px; }
+.sceneWorkspaceTimeline :is(.timelineBody, .selectionInspectorBody) { scrollbar-color: #626772 #25272b; }
+
+/* Small native range controls match the viewer without expanding hit targets into adjacent tools. */
+.sceneWorkspaceTimeline :is(.timelineZoomControl, .previewTransportBar) input[type="range"] { appearance: none; -webkit-appearance: none; height: 16px; background: transparent; cursor: pointer; outline-offset: 2px; }
+.sceneWorkspaceTimeline :is(.timelineZoomControl, .previewTransportBar) input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: #606672; border-radius: 2px; }
+.sceneWorkspaceTimeline :is(.timelineZoomControl, .previewTransportBar) input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 10px; height: 10px; margin-top: -3.5px; border-radius: 50%; background: #d4d9e1; border: 1px solid #e8ebef; box-shadow: 0 1px 2px #0008; }
+.sceneWorkspaceTimeline :is(.timelineZoomControl, .previewTransportBar) input[type="range"]:hover::-webkit-slider-thumb { background: #fff; }
+@media (max-width: 1050px) {
+  .sceneWorkspaceTimeline .precisionTimeline .timelineToolbar { gap: 6px; }
+  .sceneWorkspaceTimeline .precisionTimeline .timelineToolbarTitle { display: none; }
+  .sceneWorkspaceTimeline .sceneThemeBarRight > button { padding-inline: 9px; }
+}
+
+.bgmGainControl { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.bgmGainReadout { display: flex; align-items: center; justify-content: space-between; gap: 4px; color: #b1b6bf; font-size: 10px; }
+.bgmGainReadout output { color: #c8e7ce; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.bgmGainControl input[type="range"] { width: 100%; min-width: 0; height: 29px; margin: 0; accent-color: #87bc95; cursor: pointer; }
+.sceneWorkspaceTimeline .precisionTimeline .tlImageClipLabel { width: 100%; box-sizing: border-box; padding: 0 10px 0 25px; }
+/* Keep the playhead grab on the ruler so it never steals clip-edge/fade drags. */
+.sceneWorkspaceTimeline .precisionTimeline .timelinePlayheadGrab { bottom: auto; height: 30px; }
+.sceneWorkspaceTimeline .selectionInspector .precisionFieldInput input { color: #e8ebf0 !important; -webkit-text-fill-color: #e8ebf0; }
+.sceneWorkspaceTimeline .selectionInspector .bgmGainControl input[type="range"] { appearance: none; -webkit-appearance: none; background: transparent; }
+.sceneWorkspaceTimeline .bgmGainControl input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: #5b6660; border-radius: 2px; }
+.sceneWorkspaceTimeline .bgmGainControl input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 50%; background: #b2d7bc; border: 1px solid #d3e9d9; box-shadow: 0 1px 2px #0008; }

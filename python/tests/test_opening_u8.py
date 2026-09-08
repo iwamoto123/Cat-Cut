@@ -441,13 +441,15 @@ def test_build_op_teaser_invalid_user_clips_fall_back_to_auto():
     assert op["highlight_cuts"][0]["text"] == "自動"
 
 
-def test_build_op_teaser_falls_back_to_title_card_without_slots():
-    # fullモード等でスロットが無い場合、OPを黙って消さずtitle_cardへ
+def test_build_op_teaser_uses_retained_video_without_slots():
+    # fullモード等でスロットが無くても、無地カードではなく実映像を使う。
     op = build_op(
         {"pattern": "highlight_teaser", "title": "T", "catch_copy": "", "clips": None},
         load_op_patterns(), [], _KEEP_SEGMENTS, _CUTS, "/videos/x.mp4",
     )
-    assert op["pattern"] == "title_card"
+    assert op["pattern"] == "highlight_teaser"
+    assert op["highlight_cuts"][0]["file_path"] == _CUTS[0]["video"]["file_path"]
+    assert op["duration_ms"] == 3500
 
 
 def test_build_op_teaser_outputs_decoration_and_text_animation():

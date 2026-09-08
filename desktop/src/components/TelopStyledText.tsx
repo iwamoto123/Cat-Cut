@@ -4,7 +4,7 @@ import { buildGlowFilter, combineTelopFilters } from "../lib/telopGlow";
 import { resolveBlockBackground } from "../lib/previewTelop";
 import { DEFAULT_HIGHLIGHT_COLOR } from "../lib/telopHighlight";
 import {
-  buildHighlightMask,
+  buildHighlightMasksForLines,
   DEFAULT_LATIN_FONT_FAMILY,
   DEFAULT_PARTICLE_SCALE,
   splitStyledRuns,
@@ -202,8 +202,9 @@ export function TelopStyledText({
   // U1-2(部分ハイライト): 塗り潰しレイヤーはタイポグラフィ+ハイライト色を合成する
   // (Remotion Telop.tsx の renderFillLine と同一関数・同一規則)。
   const highlightColor = style.highlight_color ?? DEFAULT_HIGHLIGHT_COLOR;
-  const renderFillLine = (line: string, lineStart = 0) => {
-    const runs = splitStyledRuns(line, buildHighlightMask(line, highlightWords));
+  const lineHighlightMasks = buildHighlightMasksForLines(lines, highlightWords);
+  const renderFillLine = (line: string, lineStart = 0, lineIndex = 0) => {
+    const runs = splitStyledRuns(line, lineHighlightMasks[lineIndex]);
     if (!typewriterActive && runs.every((run) => run.kind === "normal" && !run.highlight)) {
       return line;
     }
@@ -315,7 +316,7 @@ export function TelopStyledText({
             </div>
           )}
           <div style={{ ...textStyle, ...fillStyle, position: hasStroke ? "absolute" : "relative", inset: 0 }}>
-            {renderFillLine(line, typewriterLayout?.offsets[index] ?? 0)}
+            {renderFillLine(line, typewriterLayout?.offsets[index] ?? 0, index)}
           </div>
         </div>
       ))}

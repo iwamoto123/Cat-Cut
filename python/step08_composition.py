@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -259,6 +260,13 @@ def run_step(
         if directed:
             cut_slots = directed_slot_assignments[i]
             if cut_slots:
+                # Slots are anchored in source ms; caption timing uses output ms like voice_words.
+                # Keep absolute source anchors intact for later edits and position projection.
+                if speed != 1.0:
+                    cut_slots = [
+                        {**slot, "start_ms": slot["start_ms"] / speed, "end_ms": slot["end_ms"] / speed}
+                        for slot in cut_slots
+                    ]
                 voice_words_rel = [
                     {
                         "text": w["text"],
@@ -476,6 +484,8 @@ def run_step(
             # フェーズW4: AI生成のOPタイトル(ユーザー未入力時のフォールバック。
             # 無い旧run・full モードは従来どおりファイル名既定)
             ai_title=str((directives.get("op_title") if directed else "") or ""),
+            # 候補不足でも、保持区間内の発話を使った短い導入映像を生成する。
+            source_words=words,
         )
     if op:
         apply_op_offset(cuts, overlays, int(op["duration_ms"]))
@@ -760,8 +770,13 @@ def _cleanup_segment_cache(segments_dir: str, manifest: dict, used_hashes: set, 
 def _encode_segment(source_path: str, start_s: float, duration_s: float, encode_args: list, segment_path: str):
     """W11-1a/1b: セグメント1本を ffmpeg で抽出する。成功=None / 失敗=stderr文字列。
 
-    失敗時は書きかけファイルを消す(壊れたファイルを次回キャッシュヒットさせないため)。
+    同一ディレクトリの一時ファイルへ書き、成功後だけキャッシュ名へ置換する。
+    強制終了で一時ファイルが残っても完成キャッシュとして再利用されない。
     """
+    fd, temp_path = tempfile.mkstemp(
+        prefix=".segment_tmp_", suffix=".mp4", dir=os.path.dirname(segment_path),
+    )
+    os.close(fd)
     cmd = [
         "ffmpeg", "-y",
         "-ss", str(start_s),
@@ -771,17 +786,33 @@ def _encode_segment(source_path: str, start_s: float, duration_s: float, encode_
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
         "-b:a", "128k",
-        segment_path,
+        temp_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        return None
     try:
-        if os.path.exists(segment_path):
-            os.remove(segment_path)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            return result.stderr or ""
+        if not _segment_cache_available(temp_path):
+            return "FFmpeg produced an empty segment"
+        os.replace(temp_path, segment_path)
+        return None
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
+def _segment_cache_available(segment_path: str) -> bool:
+    """旧キャッシュは維持し、少なくとも空ファイル・ディレクトリは再利用しない。
+
+    過去の版が残した非空の破損MP4までは判定しない(全件ffprobeの負荷を避ける)。
+    新規ファイルの中断対策は _encode_segment の原子的な置換で保証する。
+    """
+    try:
+        return os.path.isfile(segment_path) and os.path.getsize(segment_path) > 0
     except OSError:
-        pass
-    return result.stderr or ""
+        return False
 
 
 def _segment_parallel_jobs() -> int:
@@ -885,14 +916,20 @@ def _extract_segments(cuts: list, source_video: str, output_dir: str, rotation: 
             "end_ms": item["end_ms"],
             "last_used": int(now),
         }
-        video = item["cut"]["video"]
-        video["file_path"] = os.path.abspath(item["segment_path"])
-        video["start_ms"] = 0
-        video["end_ms"] = int(item["duration_s"] * 1000)
+        for cut in [item["cut"], *item.get("alias_cuts", [])]:
+            video = cut["video"]
+            video["file_path"] = os.path.abspath(item["segment_path"])
+            video["start_ms"] = 0
+            video["end_ms"] = int(item["duration_s"] * 1000)
+
+    def _mark_done(item):
+        for _ in range(1 + len(item.get("alias_cuts", []))):
+            _advance_progress()
 
     def _log_encoded(item):
-        nonlocal encoded
+        nonlocal encoded, reused
         encoded += 1
+        reused += len(item.get("alias_cuts", []))
         seg_size = os.path.getsize(item["segment_path"]) / 1024 / 1024
         print(f"    {item['cut']['cut_id']}: {item['duration_s']:.1f}s -> {seg_size:.1f}MB (seg_{item['seg_hash']})")
 
@@ -916,7 +953,7 @@ def _extract_segments(cuts: list, source_video: str, output_dir: str, rotation: 
                 if stderr is None:
                     successes.append(item)
                     _log_encoded(item)
-                    _advance_progress()
+                    _mark_done(item)
                 else:
                     failures.append((item, stderr))
         else:
@@ -935,7 +972,7 @@ def _extract_segments(cuts: list, source_video: str, output_dir: str, rotation: 
                     if stderr is None:
                         successes.append(item)
                         _log_encoded(item)
-                        _advance_progress()
+                        _mark_done(item)
                     else:
                         failures.append((item, stderr))
         for item in successes:
@@ -950,26 +987,34 @@ def _extract_segments(cuts: list, source_video: str, output_dir: str, rotation: 
         encode_args, encode_desc = _segment_encode_settings()
         replanned = []
         for item in items:
-            item = _plan_item(item["cut"])
-            if os.path.exists(item["segment_path"]):
-                reused += 1
+            item = {**_plan_item(item["cut"]), "alias_cuts": item.get("alias_cuts", [])}
+            if _segment_cache_available(item["segment_path"]):
+                reused += 1 + len(item["alias_cuts"])
                 _finalize(item)
-                _advance_progress()
+                _mark_done(item)
             else:
                 replanned.append(item)
         return replanned
 
     # Phase 1(直列): キャッシュヒット判定。ヒットは即確定し、ミスだけを後段へ回す
     pending = []
+    pending_by_hash = {}
     for cut in cuts:
         item = _plan_item(cut)
-        if os.path.exists(item["segment_path"]):
+        if _segment_cache_available(item["segment_path"]):
             # W11-1a: キャッシュヒット。ffmpeg をスキップして再利用
             reused += 1
             _finalize(item)
             _advance_progress()
         else:
-            pending.append(item)
+            # 同じ素材・境界を複数cutが参照していても1本だけ生成する。
+            # 並列workerが同じキャッシュ出力へ競合することも防ぐ。
+            existing = pending_by_hash.get(item["seg_hash"])
+            if existing is not None:
+                existing.setdefault("alias_cuts", []).append(cut)
+            else:
+                pending_by_hash[item["seg_hash"]] = item
+                pending.append(item)
 
     # Phase 2(HWプローブ): -encoders に載っていても実行時にHWエンコードが失敗する環境が
     # ある(エンコーダHWへアクセスできないサンドボックス・仮想環境等)。並列で一斉に失敗
@@ -984,7 +1029,7 @@ def _extract_segments(cuts: list, source_video: str, output_dir: str, rotation: 
         if stderr is None:
             pending = pending[1:]
             _log_encoded(probe)
-            _advance_progress()
+            _mark_done(probe)
             _finalize(probe)
         else:
             print(f"    WARNING: HW encode failed, falling back to libx264: {stderr[-200:]}")
@@ -1001,7 +1046,7 @@ def _extract_segments(cuts: list, source_video: str, output_dir: str, rotation: 
 
     for item, stderr in failures:
         print(f"    WARNING: Failed to extract {item['cut']['cut_id']}: {stderr[-200:]}")
-        _advance_progress()
+        _mark_done(item)
 
     removed = _cleanup_segment_cache(segments_dir, manifest, used_hashes, now)
     _save_segment_manifest(segments_dir, manifest)

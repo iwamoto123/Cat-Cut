@@ -5,8 +5,7 @@
 // 仕様:
 // - highlight_words の各語について、行テキスト中の「全出現」をハイライト対象にする
 // - 複数語が重なる・隣接する場合は範囲をマージして1つのハイライト区間として扱う
-// - 行折返し(wrapTelopLine)後の行単位で適用する想定のため、折返し位置には影響しない
-//   (行をまたぐ語はその行内に完全一致した部分のみマッチする)
+// - 明示改行は色指定の一致判定に影響しない。折返し後はブロック全体のマスクを行へ分配する。
 
 /** ハイライト分割後の1区間。highlight=true の区間だけ塗り色を highlight_color に変える。 */
 export interface HighlightRun {
@@ -26,17 +25,23 @@ export function splitHighlightRuns(
   highlightWords: readonly string[] | undefined,
 ): HighlightRun[] {
   if (!lineText) return [];
-  const words = (highlightWords ?? []).filter((w) => w.length > 0);
+  const words = (highlightWords ?? []).map((word) => word.replace(/[\r\n]/g, "")).filter(Boolean);
   if (words.length === 0) return [{ text: lineText, highlight: false }];
+
+  const sourceIndices: number[] = [];
+  for (let index = 0; index < lineText.length; index += 1) {
+    if (lineText[index] !== "\r" && lineText[index] !== "\n") sourceIndices.push(index);
+  }
+  const searchableText = lineText.replace(/[\r\n]/g, "");
 
   // 各語の全出現位置を [start, end) 区間として収集する
   const ranges: Array<[number, number]> = [];
   for (const word of words) {
     let from = 0;
-    while (from <= lineText.length - word.length) {
-      const idx = lineText.indexOf(word, from);
+    while (from <= searchableText.length - word.length) {
+      const idx = searchableText.indexOf(word, from);
       if (idx < 0) break;
-      ranges.push([idx, idx + word.length]);
+      ranges.push([sourceIndices[idx], sourceIndices[idx + word.length - 1] + 1]);
       from = idx + 1; // 重複出現も拾う(マージで正規化される)
     }
   }

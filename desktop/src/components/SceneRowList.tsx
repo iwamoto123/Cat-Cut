@@ -38,6 +38,8 @@ type RowHandlers = {
   onScissorsSplitChip?: (sceneId: string, groupIndex: number) => void;
   onScissorsCutMs?: (sceneId: string, ms: number) => void;
   onEdgeDragStart?: (sceneId: string, edge: EdgeTrimEdge) => void;
+  onEdgeDragCancel?: () => void;
+  onWaveformGestureStart?: () => void;
   onEdgeDragMove?: (sceneId: string, edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   onEdgeDragEnd?: (sceneId: string, edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   onRangeCut?: (sceneId: string, rawStartMs: number, rawEndMs: number, chipSnapToleranceMs: number) => void;
@@ -70,6 +72,8 @@ function useStableRowHandlers(handlers: RowHandlers): RowHandlers {
     handlers.onScissorsSplitChip,
     handlers.onScissorsCutMs,
     handlers.onEdgeDragStart,
+    handlers.onEdgeDragCancel,
+    handlers.onWaveformGestureStart,
     handlers.onEdgeDragMove,
     handlers.onEdgeDragEnd,
     handlers.onRangeCut,
@@ -116,6 +120,8 @@ function useStableRowHandlers(handlers: RowHandlers): RowHandlers {
       onScissorsCutMs: ref.current.onScissorsCutMs
         ? (sceneId, ms) => ref.current.onScissorsCutMs?.(sceneId, ms)
         : undefined,
+      onEdgeDragCancel: ref.current.onEdgeDragCancel ? () => ref.current.onEdgeDragCancel?.() : undefined,
+      onWaveformGestureStart: ref.current.onWaveformGestureStart ? () => ref.current.onWaveformGestureStart?.() : undefined,
       onEdgeDragStart: ref.current.onEdgeDragStart
         ? (sceneId, edge) => ref.current.onEdgeDragStart?.(sceneId, edge)
         : undefined,
@@ -168,6 +174,7 @@ type SceneRowItemProps = {
   confirmedCaretIndex: number | null;
   flashSceneId?: string | null;
   linkedNext: boolean;
+  canMergeWithNext: boolean;
   dragTooltip?: { edge: EdgeTrimEdge; label: string };
   highlightEdge?: EdgeTrimEdge | null;
   isPlaybackActive: boolean;
@@ -199,6 +206,7 @@ const SceneRowItem = memo(function SceneRowItem({
   confirmedCaretIndex,
   flashSceneId,
   linkedNext,
+  canMergeWithNext,
   dragTooltip,
   highlightEdge,
   isPlaybackActive,
@@ -250,6 +258,8 @@ const SceneRowItem = memo(function SceneRowItem({
           ? (edge, rawTargetMs, tolerance) => handlers.onEdgeDragMove?.(sceneId, edge, rawTargetMs, tolerance)
           : undefined
       }
+      onEdgeDragCancel={handlers.onEdgeDragCancel}
+      onWaveformGestureStart={handlers.onWaveformGestureStart}
       onEdgeDragStart={handlers.onEdgeDragStart ? (edge) => handlers.onEdgeDragStart?.(sceneId, edge) : undefined}
       onRangeCutMs={
         handlers.onRangeCut
@@ -296,7 +306,7 @@ const SceneRowItem = memo(function SceneRowItem({
       onSetHighlightWords={
         handlers.onSetHighlightWords ? (words) => handlers.onSetHighlightWords?.(sceneId, words) : undefined
       }
-      onMergeWithNext={handlers.onMergeWithNext ? () => handlers.onMergeWithNext?.(sceneId) : undefined}
+      onMergeWithNext={canMergeWithNext && handlers.onMergeWithNext ? () => handlers.onMergeWithNext?.(sceneId) : undefined}
       onEditDesign={handlers.onEditDesign ? () => handlers.onEditDesign?.(sceneId) : undefined}
       onOpenApiSettings={handlers.onOpenApiSettings}
     />
@@ -364,6 +374,8 @@ type Props = {
   /** W19-A5: ドラッグ中に内容がライブ追従する行だけのプレビュー版Scene差し替え(最大2件)。 */
   sceneOverrideById?: Map<string, Scene> | null;
   onEdgeDragStart?: (sceneId: string, edge: EdgeTrimEdge) => void;
+  onEdgeDragCancel?: () => void;
+  onWaveformGestureStart?: () => void;
   onEdgeDragMove?: (sceneId: string, edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   onEdgeDragEnd?: (sceneId: string, edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   /** W20-1(範囲選択カット): 波形本体の横ドラッグで選択した範囲をカットする。 */
@@ -443,6 +455,8 @@ export function SceneRowList({
   edgeDragVisual,
   sceneOverrideById,
   onEdgeDragStart,
+  onEdgeDragCancel,
+  onWaveformGestureStart,
   onEdgeDragMove,
   onEdgeDragEnd,
   onRangeCut,
@@ -482,6 +496,8 @@ export function SceneRowList({
     onScissorsSplitChip,
     onScissorsCutMs,
     onEdgeDragStart,
+    onEdgeDragCancel,
+    onWaveformGestureStart,
     onEdgeDragMove,
     onEdgeDragEnd,
     onRangeCut,
@@ -494,6 +510,12 @@ export function SceneRowList({
     onEditDesign,
     onOpenApiSettings,
   });
+  const lastLiveSceneId = useMemo(() => {
+    for (let index = scenes.length - 1; index >= 0; index -= 1) {
+      if (!isSceneFullyDeleted(scenes[index])) return scenes[index].id;
+    }
+    return null;
+  }, [scenes]);
   if (!scenes.length) {
     return <div className="sceneRowListEmpty">表示できるシーンがありません。</div>;
   }
@@ -507,7 +529,9 @@ export function SceneRowList({
             <div className="sceneRowDeletedStub" data-scene-id={scene.id} key={scene.id}>
               <div className="sceneRowIndex">{index + 1}</div>
               <span className="sceneRowDeletedStubLabel">シーン{index + 1} を削除しました</span>
-              <button
+              {Array.isArray(scene.sourceKeepRanges) ? (
+                <span className="sceneRowDeletedStubLabel">⌘Zで取り消し</span>
+              ) : <button
                 className="sceneRowDeletedStubRestore"
                 onClick={() => onRestoreScene?.(scene.id)}
                 title="このシーンを復元します(⌘Zでも戻せます)"
@@ -515,7 +539,7 @@ export function SceneRowList({
               >
                 <RotateCcw size={12} />
                 復元
-              </button>
+              </button>}
             </div>
           );
         }
@@ -525,6 +549,7 @@ export function SceneRowList({
           <SceneRowItem
             active={scene.id === activeSceneId}
             binMs={binMs}
+            canMergeWithNext={scene.id !== lastLiveSceneId}
             chipSelection={chipSelection && chipSelection.sceneId === scene.id ? chipSelection : null}
             confirmedCaretIndex={
               confirmedCaret && confirmedCaret.sceneId === scene.id ? confirmedCaret.groupIndex : null

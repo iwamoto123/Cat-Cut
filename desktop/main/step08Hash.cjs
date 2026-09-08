@@ -83,7 +83,9 @@ function computeStep08InputHash({
 }) {
   const runFile = (...parts) => path.join(runDir, ...parts);
   const components = {
-    version: 1,
+    // Rebuild composition once for directed speed timing and preserved manual colors.
+    // The underlying video segment cache remains reusable.
+    version: 2,
     keep_segments: sha1(JSON.stringify(Array.isArray(keepSegments) ? keepSegments : [])),
     telop_directives: hashJsonFileStable(runFile("telop_directives.json")),
     orientation: hashJsonFileStable(runFile("orientation.json")),

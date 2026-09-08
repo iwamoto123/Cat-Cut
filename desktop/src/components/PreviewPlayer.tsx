@@ -1,3 +1,4 @@
+import { PLAYBACK_RATES } from "../lib/followAlong";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Check, Crop, Move, Pause, Play, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import type { KeepSegment, TranscriptWord } from "../lib/keepSegments";
@@ -16,7 +17,8 @@ import { effectiveCutTelopY } from "../lib/adSafeZone";
 import { normalizePunchIn, punchInStyle } from "../lib/punchIn";
 import { parseLetterSpacingEm, resolveBlockBackground } from "../lib/previewTelop";
 import type { OverlayItem } from "../lib/overlayItems";
-import { sourceMsToTimelineMs, type TimelineCutRange } from "../lib/previewTimeline";
+import { sourceMsToTimelineEditMs, sourceMsToTimelineMs, type TimelineCutRange } from "../lib/previewTimeline";
+import { resolveKeepPlaybackAction } from "../lib/previewPlayback";
 import {
   buildPreviewPlaylist,
   clampTimelineMsToPlaylist,
@@ -46,10 +48,13 @@ import {
 } from "../lib/videoFramingDrag";
 import { formatTimelineMs } from "../lib/timelineLayout";
 import { useBgmPreviewAudio, type BgmPreviewClip } from "../hooks/useBgmPreviewAudio";
+import { createPreviewAudioGroup } from "../lib/previewAudio";
 import { TelopStyledText } from "./TelopStyledText";
 import { PreviewOverlays } from "./PreviewOverlays";
 import { OpPreviewOverlay } from "./OpPreviewOverlay";
 import { PreviewImageLayer, type PreviewImageClip } from "./PreviewImageLayer";
+import { TelopPositionControls } from "./TelopPositionControls";
+import { clampTelopPosition, moveTelopPosition, normalizeTelopPosition, type TelopPosition, type TelopPositionGeometry } from "../lib/telopPosition";
 
 /**
  * 改善7-2(プレビューテロップの適正サイズ): telopFontSize/telopBaseWidthが未指定の場合の
@@ -103,12 +108,15 @@ type VirtualPlaybackState = {
 type Props = {
   videoUrl: string;
   keepSegments: KeepSegment[];
+  /** 初期化済みの空配列は全カット。本編を再生しない。 */
+  keepSegmentsReady?: boolean;
   words: TranscriptWord[];
   seekMs: number | null;
   onSeekConsumed: () => void;
   onActiveWordChange: (wordId: string | null) => void;
   /** 再生速度（既定1.0）。追い読みモードでは1.5等に切り替える（B-3）。 */
   playbackRate?: number;
+  onPlaybackRateChange?: (rate: number) => void;
   /** 現在の再生位置(ms)。ハイライト更新と同じフレーム精度で追い読み進捗計算に使う（B-3）。 */
   onTimeUpdate?: (currentMs: number) => void;
   /**
@@ -140,6 +148,10 @@ type Props = {
    * 上下セーフエリアクランプを合わせてRemotionと同じ縦位置に描画する。未指定時は従来の下部固定。
    */
   telopY?: number;
+  telopPosition?: TelopPosition;
+  /** A completed drag/number edit calls once; null restores automatic placement. */
+  onTelopPositionChange?: (position: TelopPosition | null) => void;
+  onAllTelopPositionsChange?: (position: TelopPosition | null) => void;
   /** U1-2: highlight_words 部分ハイライト(現在シーンのスロット由来)。 */
   telopHighlightWords?: string[];
   /**
@@ -219,6 +231,8 @@ type Props = {
    * commit=true が操作確定(親がimages.jsonへ保存する)。未指定なら表示のみ。
    */
   onImageClipsChange?: (clips: PreviewImageClip[], commit: boolean) => void;
+  selectedImageClipId?: string | null;
+  onImageSelect?: (id: string | null) => void;
   /**
    * フェーズW2(シーン映像ギミック): composition timeline.video_effects の正規化済み配列
    * (タイムラインms基準)。Remotionと同じ純関数(videoEffectStyle)でvideo要素へ
@@ -329,13 +343,6 @@ function framingCropDimRects(videoRect: PxRect, cropRect: PxRect): PxRect[] {
   return rects.filter((rect) => rect.width > 0.5 && rect.height > 0.5);
 }
 
-function findNextKeepStart(segments: KeepSegment[], currentMs: number) {
-  for (const segment of segments) {
-    if (segment.startMs > currentMs) return segment.startMs;
-  }
-  return null;
-}
-
 /** op_static の裏で先読みしておく映像エントリ(次以降で最初に映像を持つもの)。 */
 function findNextVideoEntry(entries: PlaylistEntry[], fromIndex: number): PlaylistEntry | null {
   for (let index = fromIndex + 1; index < entries.length; index += 1) {
@@ -348,11 +355,13 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   {
     videoUrl,
     keepSegments,
+    keepSegmentsReady = false,
     words,
     seekMs,
     onSeekConsumed,
     onActiveWordChange,
     playbackRate = 1,
+    onPlaybackRateChange,
     onTimeUpdate,
     telopText,
     telopStyle,
@@ -361,6 +370,9 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     telopBaseHeight,
     telopMaxCharsPerLine,
     telopY,
+    telopPosition,
+    onTelopPositionChange,
+    onAllTelopPositionsChange,
     telopHighlightWords,
     telopAnimationIn,
     telopAnimationDurationMs,
@@ -386,6 +398,8 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     onTimelineTimeUpdate,
     imageClips,
     onImageClipsChange,
+    selectedImageClipId,
+    onImageSelect,
     videoEffects,
     canvasWidth,
     canvasHeight,
@@ -408,6 +422,14 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   onPlayingChangeRef.current = onPlayingChange;
   // フェーズW9(カスタムトランスポートバー): 再生中フラグの内部state(親通知と同じ経路で更新)。
   const [transportPlaying, setTransportPlaying] = useState(false);
+  const pauseBgmRef = useRef<() => void>(() => {});
+  const oneShotAudioRef = useRef<ReturnType<typeof createPreviewAudioGroup> | null>(null);
+  if (!oneShotAudioRef.current) oneShotAudioRef.current = createPreviewAudioGroup();
+  const pausePreviewAudio = useCallback(() => {
+    pauseBgmRef.current();
+    oneShotAudioRef.current?.pauseAll();
+  }, []);
+  useEffect(() => () => pausePreviewAudio(), [pausePreviewAudio]);
   const publishPlaying = useCallback((playing: boolean) => {
     setTransportPlaying(playing);
     onPlayingChangeRef.current?.(playing);
@@ -432,6 +454,8 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   );
   const sortedSegmentsRef = useRef(sortedSegments);
   sortedSegmentsRef.current = sortedSegments;
+  const keepSegmentsReadyRef = useRef(keepSegmentsReady);
+  keepSegmentsReadyRef.current = keepSegmentsReady;
   const wordsRef = useRef(words);
   wordsRef.current = words;
   const onActiveWordChangeRef = useRef(onActiveWordChange);
@@ -542,7 +566,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       if (!url) return;
       const audio = new Audio(url);
       audio.volume = Math.max(0, Math.min(1, effectiveVolume));
-      audio.play().catch(() => {});
+      oneShotAudioRef.current?.play(audio);
     };
     if (!fired.title && opMs >= phases.titleMs) {
       fired.title = true;
@@ -601,7 +625,9 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       virtual.staticPlaying = false;
       setOpView(null);
       applyVideoPlaybackRate(entry.speed || 1);
-      engineSeekTo(entry.sourceStartMs + offsetMs * (entry.speed || 1));
+      engineSeekTo(timelineMs === entry.timelineEndMs
+        ? entry.sourceEndMs
+        : Math.min(entry.sourceEndMs, entry.sourceStartMs + offsetMs * (entry.speed || 1)));
       publishTimelineMs(timelineMs);
       if (playing) video.play().catch(() => {});
       return;
@@ -680,6 +706,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         videoRef.current?.play().catch(() => {});
       },
       pause: () => {
+        pausePreviewAudio();
         const virtual = virtualRef.current;
         if (virtual.mode === "op" && virtual.staticPlaying) {
           virtual.staticPlaying = false;
@@ -725,7 +752,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   // フェーズV3: タイムラインms基準のシーク(タイムラインViewのクリック)。OP区間へも入れる
   useEffect(() => {
     if (seekTimelineMs == null) return;
-    const position = clampTimelineMsToPlaylist(playlistRef.current, seekTimelineMs);
+    const position = clampTimelineMsToPlaylist(playlistRef.current, seekTimelineMs, { allowFinalEnd: true });
     onSeekTimelineConsumed?.();
     if (!position) return;
     enterEntry(position.index, position.offsetMs, isVirtuallyPlaying(), false);
@@ -930,6 +957,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     const entry = playlistRef.current[virtual.entryIndex];
     if (virtual.mode === "op" && entry?.kind === "op_static") {
       if (virtual.staticPlaying) {
+        pausePreviewAudio();
         virtual.staticPlaying = false;
         publishPlaying(false);
       } else {
@@ -942,13 +970,13 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) video.play().catch(() => {});
-    else video.pause();
+    else { pausePreviewAudio(); video.pause(); }
   }
 
   /** W9: シークバー(タイムラインms基準。プレイリスト無し=composition未生成は元動画ms直)。 */
   function handleTransportSeek(ms: number) {
     if (playlistRef.current.length > 0) {
-      const position = clampTimelineMsToPlaylist(playlistRef.current, ms);
+      const position = clampTimelineMsToPlaylist(playlistRef.current, ms, { allowFinalEnd: true });
       if (position) enterEntry(position.index, position.offsetMs, isVirtuallyPlaying(), false);
       return;
     }
@@ -1065,7 +1093,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   // U1-3: 縦位置(中心基準%)。telop_y + プリセットy_position_offset + 上下セーフエリアクランプ。
   // telopY未指定(旧UI互換)は従来の下部固定レイアウトを維持する。
   // W24 Phase A-2: cut単位のtelop_yがあればグローバルより優先(Remotionと同じ解決)。
-  const telopYPercent = useMemo(() => {
+  const automaticTelopYPercent = useMemo(() => {
     if (telopY === undefined || !telopLayout) return null;
     // W27(縦書き): 1列の文字数ぶんの高さを行数×行高として近似する(Remotionと同一)
     const isVerticalWriting = effectiveTelopStyle.writing_mode === "vertical";
@@ -1082,6 +1110,71 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       blockPaddingY: blockBackground ? (blockBackground.padding_y ?? 0) : 0,
     });
   }, [telopY, cutTelopY, telopLayout, effectiveTelopStyle, baseHeight, blockBackground]);
+
+  const [telopPositionEditing, setTelopPositionEditing] = useState(false);
+  const [telopPositionDraft, setTelopPositionDraft] = useState<TelopPosition | null>(null);
+  const telopDragRef = useRef<{ pointerId: number; x: number; y: number; start: TelopPosition; latest: TelopPosition; slotKey: string | null | undefined } | null>(null);
+  const positionGeometry: TelopPositionGeometry = {
+    lineTexts: telopLayout?.lineTexts ?? [], fontSize: telopLayout?.fontSize ?? 52,
+    lineHeight: effectiveTelopStyle.line_height ?? 1.4,
+    letterSpacingEm: parseLetterSpacingEm(effectiveTelopStyle.letter_spacing),
+    videoWidth: baseWidth, videoHeight: baseHeight,
+    paddingX: blockBackground?.padding_x ?? (effectiveTelopStyle.background ? (telopLayout?.fontSize ?? 52) * 0.5 : 0),
+    paddingY: blockBackground?.padding_y ?? (effectiveTelopStyle.background ? (telopLayout?.fontSize ?? 52) * 0.15 : 0),
+    lineGapPx: blockBackground ? 0 : TELOP_LINE_GAP_PX,
+    strokePx: Math.max(effectiveTelopStyle.inner_stroke?.width ?? 0, effectiveTelopStyle.outer_stroke?.width ?? 0, effectiveTelopStyle.outer_stroke2?.width ?? 0) * (telopLayout?.fontSize ?? 52) / 52,
+    rotateDeg: effectiveTelopStyle.rotate ?? 0, verticalWriting: effectiveTelopStyle.writing_mode === "vertical",
+  };
+  const manualTelopPosition = !opActive ? normalizeTelopPosition(telopPositionDraft ?? telopPosition) : undefined;
+  const displayedTelopPosition = manualTelopPosition ? clampTelopPosition(manualTelopPosition, positionGeometry) : { x: 0.5, y: (automaticTelopYPercent ?? 88) / 100 };
+  const telopYPercent = manualTelopPosition ? displayedTelopPosition.y * 100 : automaticTelopYPercent;
+  const telopPositionEditable = Boolean(onTelopPositionChange && !opActive && telopLayout && containedBox.width > 0);
+  const commitTelopPosition = (position: TelopPosition | null) => {
+    if (!telopPositionEditable) return;
+    onTelopPositionChange?.(position ? clampTelopPosition(position, positionGeometry) : null);
+  };
+  const cancelTelopPositionDrag = () => { telopDragRef.current = null; setTelopPositionDraft(null); };
+  useEffect(() => {
+    cancelTelopPositionDrag();
+  }, [telopSlotKey, opActive, telopPositionEditing]);
+  useEffect(() => {
+    if (!telopPositionEditing) return;
+    const cancel = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;
+      const undoDuringDrag = Boolean(telopDragRef.current && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z");
+      if (!undoDuringDrag && event.key !== "Escape") return;
+      if (!telopDragRef.current && event.target instanceof HTMLElement && event.target.closest("input,textarea,select,[contenteditable='true']")) return;
+      event.preventDefault(); event.stopImmediatePropagation(); cancelTelopPositionDrag();
+      if (!undoDuringDrag) setTelopPositionEditing(false);
+    };
+    const onBlur = () => cancelTelopPositionDrag();
+    window.addEventListener("keydown", cancel, true); window.addEventListener("blur", onBlur);
+    return () => { window.removeEventListener("keydown", cancel, true); window.removeEventListener("blur", onBlur); };
+  }, [telopPositionEditing]);
+  function handleTelopPositionPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!telopPositionEditing || !telopPositionEditable || event.button !== 0) return;
+    event.preventDefault(); event.stopPropagation();
+    pausePreviewAudio();
+    videoRef.current?.pause();
+    telopDragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, start: displayedTelopPosition, latest: displayedTelopPosition, slotKey: telopSlotKey };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function updateTelopPositionDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = telopDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || drag.slotKey !== telopSlotKey) return;
+    event.stopPropagation();
+    drag.latest = moveTelopPosition(drag.start, event.clientX - drag.x, event.clientY - drag.y, containedBox.width, containedBox.height, positionGeometry);
+    setTelopPositionDraft(drag.latest);
+  }
+  function finishTelopPositionDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = telopDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    updateTelopPositionDrag(event);
+    telopDragRef.current = null;
+    setTelopPositionDraft(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (drag.slotKey === telopSlotKey && (Math.abs(drag.latest.x - drag.start.x) > 0.0001 || Math.abs(drag.latest.y - drag.start.y) > 0.0001)) commitTelopPosition(drag.latest);
+  }
 
   // コンポジション座標系 → 実表示pxへのスケール。
   const displayScale = containedBox.width > 0 && baseWidth > 0 ? containedBox.width / baseWidth : 0;
@@ -1118,7 +1211,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       playbackRate: playbackRateRef.current,
     };
   }, []);
-  useBgmPreviewAudio({
+  pauseBgmRef.current = useBgmPreviewAudio({
     clips: bgmClips ?? [],
     muted: bgmMuted ?? false,
     getPlayback: getPlaybackForBgm,
@@ -1153,7 +1246,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     if (!url) return;
     const audio = new Audio(url);
     audio.volume = VIDEO_EFFECT_SFX_VOLUME;
-    audio.play().catch(() => {});
+    oneShotAudioRef.current?.play(audio);
   }, [activeVideoEffectId]);
 
   // U1-6(効果音): テロップスロットの表示開始で効果音を再生する。
@@ -1181,7 +1274,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     lastSfxSourceMsRef.current = nowMs;
     const audio = new Audio(url);
     audio.volume = Math.max(0, Math.min(1, volume ?? 0.25));
-    audio.play().catch(() => {});
+    oneShotAudioRef.current?.play(audio);
     // telopSlotKey(=スロット表示開始)のみをトリガーにする。url等は発火時点の最新値をrefで読む。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [telopSlotKey]);
@@ -1198,7 +1291,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     let rvfcId: number | null = null;
 
     function update() {
-      const currentMs = video.currentTime * 1000;
+      let currentMs = video.currentTime * 1000;
       const virtual = virtualRef.current;
 
       // フェーズV3: OPクリップ再生中はkeep_segmentsスキップを行わず、クリップ終端で次エントリへ
@@ -1213,7 +1306,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           exitOpToMain();
           return;
         }
-        if (currentMs >= entry.sourceEndMs) {
+        if (currentMs >= entry.sourceEndMs && !video.paused && !video.seeking) {
           advanceFromEntry(virtual.entryIndex);
           return;
         }
@@ -1227,20 +1320,18 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       }
 
       const segments = sortedSegmentsRef.current;
+      const action = resolveKeepPlaybackAction(segments, currentMs, !video.paused && !video.seeking, {
+        keepSegmentsReady: keepSegmentsReadyRef.current,
+      });
+      if (action.seekMs !== null) {
+        engineSeekTo(action.seekMs);
+        currentMs = action.seekMs;
+      }
+      if (action.stop) video.pause();
       const activeSegment = segments.find(
         (segment) => currentMs >= segment.startMs && currentMs < segment.endMs,
       );
       applyVideoPlaybackRate(activeSegment?.speed || 1);
-      const toleranceMs = 100;
-      const inside = segments.some(
-        (segment) => currentMs >= segment.startMs - toleranceMs && currentMs < segment.endMs - toleranceMs,
-      );
-      if (!inside) {
-        const nextStartMs = findNextKeepStart(segments, currentMs);
-        if (nextStartMs != null) {
-          video.currentTime = nextStartMs / 1000;
-        }
-      }
 
       const activeIndex = findActiveWordIndex(wordsRef.current, currentMs);
       const activeWordId = activeIndex >= 0 ? wordsRef.current[activeIndex].id : null;
@@ -1249,7 +1340,11 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         onActiveWordChangeRef.current(activeWordId);
       }
       onTimeUpdateRef.current?.(currentMs);
-      publishTimelineMs(sourceMsToTimelineMs(rangesRef.current, currentMs));
+      // 「この行だけ再生」の親コールバックがOUT点へ戻した場合も、時計を同じ位置に揃える。
+      currentMs = video.currentTime * 1000;
+      publishTimelineMs(video.paused
+        ? sourceMsToTimelineEditMs(rangesRef.current, currentMs)
+        : sourceMsToTimelineMs(rangesRef.current, currentMs));
       // W9(トランスポートバー): タイムライン写像が無いrun(composition未生成)向けの現在位置
       setSourceNowMs(Math.round(currentMs));
     }
@@ -1263,6 +1358,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
 
     function loop() {
       update();
+      if (video.paused) return;
       if (supportsRvfc) {
         rvfcId = video.requestVideoFrameCallback(loop);
       } else {
@@ -1283,7 +1379,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       }
       stopLoop();
       loop();
-      publishPlaying(true);
+      publishPlaying(!video.paused);
     }
     function handlePauseOrEnded() {
       stopLoop();
@@ -1393,17 +1489,22 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
 
   return (
     <div className="transcriptPreviewPanel">
+      <div className="previewViewport">
       {/* キャンバス領域ラッパー: ステージと全オーバーレイ(テロップ・画像・OP・フレーミング)の
           位置基準(position:relative)。縦型ではfit-content+中央寄せでステージにフィットさせる
           =左右の黒帯が出ない。オーバーレイはこのラッパー基準の絶対配置なので中央寄せしても
           ステージとの相対位置(containedBoxオフセット)は崩れない。 */}
-      <div className={`previewCanvasArea${stageVertical ? " previewCanvasAreaVertical" : ""}`}>
+      <div
+        className={`previewCanvasArea${stageVertical ? " previewCanvasAreaVertical" : ""}`}
+        style={stageVertical ? { aspectRatio: stageAspect } : undefined}
+      >
       {/* フェーズW2: シーン映像ギミック。外側=黒背景+clip(pinchの縮小で見える余白と
           zoomのはみ出しをRemotionのコンポジション境界と同じ扱いにする)、
           内側wrapper=videoEffectStyle(Remotionと同一の純関数)のtransform/filter。
           効果なしの間はスタイルが空なので従来と完全同一の描画。 */}
-      <div style={videoEffectCssActive ? { backgroundColor: "#000", overflow: "hidden" } : undefined}>
+      <div className="previewEffectClip" style={videoEffectCssActive ? { backgroundColor: "#000", overflow: "hidden" } : undefined}>
         <div
+          className="previewEffectTransform"
           style={
             videoEffectCssActive
               ? {
@@ -1420,6 +1521,11 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           <div
             className={`transcriptPreviewStage${stageVertical ? " transcriptPreviewStageVertical" : ""}`}
             ref={stageRef}
+            onClick={(event) => {
+              if (selectedImageClipId && (event.target === event.currentTarget || event.target instanceof HTMLVideoElement)) {
+                onImageSelect?.(null);
+              }
+            }}
             style={{ aspectRatio: stageAspect }}
           >
             {/* キャンバスレイヤー(表示px)。編集モード中はズームアウト表示のためクリップしない */}
@@ -1493,7 +1599,21 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         <PreviewImageLayer
           box={containedBox}
           clips={imageClips}
+          interactive={!telopPositionEditing}
           onClipsChange={onImageClipsChange}
+          selectedClipId={selectedImageClipId}
+          onSelect={(id) => {
+            if (id) {
+              // Keep the displayed image available for the entire drag, including OP stills.
+              const virtual = virtualRef.current;
+              if (virtual.mode === "op" && virtual.staticPlaying) {
+                virtual.staticPlaying = false;
+                publishPlaying(false);
+              }
+              videoRef.current?.pause();
+            }
+            onImageSelect?.(id);
+          }}
           timelineMs={timelineNowMs}
         />
       )}
@@ -1501,7 +1621,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         <div
           className="previewTelopOverlay"
           style={{
-            left: `${containedBox.offsetX}px`,
+            left: `${containedBox.offsetX + (displayedTelopPosition.x - 0.5) * containedBox.width}px`,
             width: containedBox.width ? `${containedBox.width}px` : "100%",
             // U1-3: telop_y指定時はRemotionと同じ「中心基準% + translateY(-50%)」で配置する。
             ...(telopYPercent !== null
@@ -1516,12 +1636,17 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           <div
             // key=スロットIDでテロップ表示開始のたびにCSSアニメを再発火する(U1-6)
             key={activeSlotKey ?? "static"}
-            className={blockAnimationIn ? `previewTelopAnimated previewTelopAnim-${blockAnimationIn}` : undefined}
+            className={telopPositionEditing && telopPositionEditable ? "previewTelopPositionHandle" : blockAnimationIn ? `previewTelopAnimated previewTelopAnim-${blockAnimationIn}` : undefined}
+            onPointerDown={handleTelopPositionPointerDown}
+            onPointerMove={updateTelopPositionDrag}
+            onPointerUp={finishTelopPositionDrag}
+            onPointerCancel={cancelTelopPositionDrag}
+            onLostPointerCapture={cancelTelopPositionDrag}
             // フェーズU6: テロップクリックでスタイル詳細エディタを開く。親レイヤーは
             // pointer-events:noneのため、この要素だけクリック可能にする(動画操作を妨げない)。
             // V3: OPクリップテロップはシーン由来ではないためクリック編集を無効にする。
             onClick={
-              onTelopClick && !opActive
+              onTelopClick && !opActive && !telopPositionEditing
                 ? (event) => {
                     event.stopPropagation();
                     onTelopClick();
@@ -1530,9 +1655,9 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
             }
             style={{
               ...animationVars,
-              ...(onTelopClick && !opActive ? { pointerEvents: "auto" as const, cursor: "pointer" } : {}),
+              ...(telopPositionEditing && telopPositionEditable ? { pointerEvents: "auto" as const, cursor: "move" } : onTelopClick && !opActive ? { pointerEvents: "auto" as const, cursor: "pointer" } : {}),
             }}
-            title={onTelopClick && !opActive ? "クリックでテロップデザインを編集" : undefined}
+            title={telopPositionEditing ? "上下左右にドラッグして移動（Escで取消）" : onTelopClick && !opActive ? "クリックでテロップデザインを編集" : undefined}
           >
             <TelopStyledText
               lines={telopLayout.lineTexts}
@@ -1694,7 +1819,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         </div>
       )}
       {/* W9: モードボタン(ステージ左下)と編集中アクション(ステージ右上)。FCP風のダークオーバーレイ */}
-      {framingEditable && containedBox.width > 0 && (
+      {framingEditable && containedBox.width > 0 && !telopPositionEditing && (
         <div
           className="previewFramingModeButtons"
           style={{
@@ -1705,7 +1830,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           <button
             className={`previewFramingModeButton${framingEditMode === "transform" ? " isActive" : ""}`}
             disabled={opActive}
-            onClick={() => setFramingEditMode((mode) => (mode === "transform" ? null : "transform"))}
+            onClick={() => { setTelopPositionEditing(false); setFramingEditMode((mode) => (mode === "transform" ? null : "transform")); }}
             title="変形(スケール・位置)"
             type="button"
           >
@@ -1715,7 +1840,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           <button
             className={`previewFramingModeButton${framingEditMode === "crop" ? " isActive" : ""}`}
             disabled={opActive}
-            onClick={() => setFramingEditMode((mode) => (mode === "crop" ? null : "crop"))}
+            onClick={() => { setTelopPositionEditing(false); setFramingEditMode((mode) => (mode === "crop" ? null : "crop")); }}
             title="クロップ(切り抜き)"
             type="button"
           >
@@ -1753,10 +1878,11 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         </div>
       )}
       </div>
+      </div>
       {/* フェーズW9: カスタムトランスポートバー(ネイティブcontrolsの代替)。
           シークバーはタイムラインms基準(OP込み。composition未生成runは元動画ms)。
           V6-3の方針どおり映像矩形の上には重ねず、映像の下の帯に置く。 */}
-      <div className="previewTransportBar">
+      <div className={`previewTransportBar${onPlaybackRateChange ? " previewTransportBarWithRate" : ""}`}>
         <button
           className="previewTransportButton"
           onClick={handleTransportToggle}
@@ -1770,6 +1896,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           {formatTimelineMs(transportTotalMs)}
         </span>
         <input
+          aria-label="再生位置"
           className="previewTransportSeek"
           max={Math.max(1, transportTotalMs)}
           min={0}
@@ -1778,6 +1905,14 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           type="range"
           value={Math.min(transportNowMs, Math.max(1, transportTotalMs))}
         />
+        {onPlaybackRateChange && (
+          <label className="previewTransportRate" title="プレビューの再生速度。書き出す動画の速度は変わりません">
+            <span>速度</span>
+            <select aria-label="プレビューの再生速度" value={playbackRate} onChange={(event) => onPlaybackRateChange(Number(event.target.value))}>
+              {PLAYBACK_RATES.map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
+            </select>
+          </label>
+        )}
         <button
           className="previewTransportButton"
           onClick={() => setTransportMuted((muted) => !muted)}
@@ -1787,6 +1922,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           {transportMuted || transportVolume <= 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </button>
         <input
+          aria-label="プレビュー音量"
           className="previewTransportVolume"
           max={1}
           min={0}
@@ -1799,6 +1935,12 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           value={transportMuted ? 0 : transportVolume}
         />
       </div>
+      {onTelopPositionChange && <TelopPositionControls
+        key={telopSlotKey ?? "no-telop"} position={displayedTelopPosition} manual={Boolean(manualTelopPosition)}
+        editing={telopPositionEditing} disabled={!telopPositionEditable}
+        onEditingChange={(editing) => { setTelopPositionEditing(editing); if (editing) { pausePreviewAudio(); videoRef.current?.pause(); setFramingEditMode(null); onImageSelect?.(null); } }}
+        onChange={commitTelopPosition} onApplyAll={onAllTelopPositionsChange}
+      />}
     </div>
   );
 });

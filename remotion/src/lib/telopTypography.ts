@@ -1,3 +1,5 @@
+import { splitHighlightRuns } from "./telopHighlight.ts";
+
 /**
  * テロップの文字組み(タイポグラフィ)ルール。
  *
@@ -140,21 +142,17 @@ export function splitStyledRuns(text: string, highlightMask: boolean[]): StyledT
 
 /** highlight_words から文字単位のハイライトマスクを作る(複数語・複数出現対応)。 */
 export function buildHighlightMask(text: string, highlightWords?: string[]): boolean[] {
-  const chars = Array.from(text);
-  const mask = chars.map(() => false);
-  if (!highlightWords?.length) return mask;
-  for (const word of highlightWords) {
-    if (!word) continue;
-    let fromIndex = 0;
-    while (fromIndex <= text.length - word.length) {
-      const found = text.indexOf(word, fromIndex);
-      if (found === -1) break;
-      // string index -> char index (サロゲートペア対応)
-      const before = Array.from(text.slice(0, found)).length;
-      const len = Array.from(word).length;
-      for (let i = before; i < before + len && i < mask.length; i += 1) mask[i] = true;
-      fromIndex = found + word.length;
-    }
-  }
-  return mask;
+  return splitHighlightRuns(text, highlightWords).flatMap((run) => Array.from(run.text, () => run.highlight));
+}
+
+/** Match across visual line breaks, then slice the same character mask for each line. */
+export function buildHighlightMasksForLines(lines: readonly string[], highlightWords?: string[]): boolean[][] {
+  const mask = buildHighlightMask(lines.join(""), highlightWords?.map((word) => word.replace(/[\r\n]/g, "")));
+  let offset = 0;
+  return lines.map((line) => {
+    const length = Array.from(line).length;
+    const lineMask = mask.slice(offset, offset + length);
+    offset += length;
+    return lineMask;
+  });
 }

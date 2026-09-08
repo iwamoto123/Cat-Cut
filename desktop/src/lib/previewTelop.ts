@@ -73,7 +73,11 @@ export function filterHighlightWords(
   telopText: string,
 ): string[] {
   if (!words || !words.length || !telopText) return [];
-  return words.filter((word) => Boolean(word) && telopText.includes(word));
+  const searchableText = telopText.replace(/[\r\n]/g, "");
+  return words.filter((word) => {
+    const searchableWord = word.replace(/[\r\n]/g, "");
+    return Boolean(searchableWord) && searchableText.includes(searchableWord);
+  });
 }
 
 export type ResolvedPreviewAnimation = {

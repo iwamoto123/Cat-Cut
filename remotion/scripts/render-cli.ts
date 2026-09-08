@@ -23,7 +23,7 @@ import path from "path";
 import fs from "fs";
 import http from "http";
 import os from "os";
-import crypto from "crypto";
+import { computeBundleCacheKey } from "./bundleCache.ts";
 
 function parseArgs(): {
   composition: string;
@@ -86,30 +86,6 @@ function parseArgs(): {
 const BUNDLE_CACHE_DIR = path.resolve(__dirname, "../node_modules/.cache/catcut-bundle");
 
 /**
- * W11-1c: remotion/src/** と package.json の mtime+size を合成したキャッシュキー。
- * ソースが1ファイルでも変われば(mtime/size変化)キーが変わり、bundle し直す。
- */
-function computeBundleCacheKey(): string {
-  const remotionRoot = path.resolve(__dirname, "..");
-  const hash = crypto.createHash("sha1");
-  const addFile = (filePath: string) => {
-    const stat = fs.statSync(filePath);
-    hash.update(`${path.relative(remotionRoot, filePath)}|${stat.mtimeMs}|${stat.size}\n`);
-  };
-  const walk = (dir: string) => {
-    const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.isFile()) addFile(full);
-    }
-  };
-  walk(path.join(remotionRoot, "src"));
-  addFile(path.join(remotionRoot, "package.json"));
-  return hash.digest("hex");
-}
-
-/**
  * W25: public/ 配下の壊れたシンボリックリンク(リンク先が消えたもの)を除去する。
  * 開発時に張ったリンクの先(旧runのsegments等)が掃除で消えると、Remotionの bundle() が
  * realpath ENOENT で即失敗し書き出し全体が落ちるため(2026-08-21 実害あり)、事前に取り除く。
@@ -139,7 +115,7 @@ async function bundleWithCache(): Promise<string> {
   const keyPath = path.join(BUNDLE_CACHE_DIR, "key.json");
   let cacheKey = "";
   try {
-    cacheKey = computeBundleCacheKey();
+    cacheKey = computeBundleCacheKey(path.resolve(__dirname, ".."));
     if (fs.existsSync(keyPath) && fs.existsSync(path.join(bundleDir, "index.html"))) {
       const saved = JSON.parse(fs.readFileSync(keyPath, "utf-8")) as { key?: string };
       if (saved.key === cacheKey) {
@@ -426,7 +402,7 @@ async function main() {
   console.log("");
 
   try {
-    // Remotion バンドル(W11-1c: src+package.json が変わっていなければ前回出力を再利用)
+    // Remotion バンドル: ソース・public素材・依存lock・設定が同じなら前回出力を再利用
     const bundleLocation = await bundleWithCache();
     console.log(`Bundle location: ${bundleLocation}`);
 

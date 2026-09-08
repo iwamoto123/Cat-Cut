@@ -417,6 +417,76 @@ def resolve_user_clips(
     return resolved
 
 
+def select_fallback_clip(
+    slots: List[Dict[str, Any]],
+    keep_segments: List[Dict[str, Any]],
+    cuts: List[Dict[str, Any]],
+    source_words: Optional[List[Dict[str, Any]]] = None,
+    clip_max_ms: int = 3500,
+) -> List[Dict[str, Any]]:
+    """No highlight candidate: use actual retained speech/video, never an empty color card.
+
+    The fallback is one short clip within a single retained interval. Prefer the first
+    usable spoken passage; otherwise use available video. Do not regenerate captions
+    from STT here: users may have intentionally removed their displayed text.
+    """
+    speech: List[Tuple[int, int]] = []
+    for word in source_words or []:
+        if not isinstance(word, dict) or word.get("deleted") or word.get("silence") or not str(word.get("text") or "").strip():
+            continue
+        try:
+            start, end = int(word["start_ms"]), int(word["end_ms"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+        if end > start:
+            speech.append((start, end))
+    if not speech:
+        for slot in slots or []:
+            if not isinstance(slot, dict) or slot.get("drop") or not str(slot.get("text") or "").strip():
+                continue
+            try:
+                start, end = int(slot["source_start_ms"]), int(slot["source_end_ms"])
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            if end > start:
+                speech.append((start, end))
+    speech.sort()
+    cap_ms = max(1, int(clip_max_ms))
+    candidates: List[Tuple[Tuple[int, int, int], Dict[str, Any]]] = []
+    for index, segment in enumerate(keep_segments):
+        if index >= len(cuts) or not str(cuts[index].get("video", {}).get("file_path") or "").strip():
+            continue
+        try:
+            seg_start, seg_end = int(segment["start_ms"]), int(segment["end_ms"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+        if seg_end <= seg_start:
+            continue
+        spoken = [(max(start, seg_start), min(end, seg_end)) for start, end in speech if start < seg_end and end > seg_start]
+        start_ms = spoken[0][0] if spoken else seg_start
+        end_ms = min(seg_end, start_ms + cap_ms)
+        # End on a complete spoken word/slot when possible, rather than adding trailing
+        # silence or cutting the next word. A single very long word still obeys the cap.
+        complete_ends = [end for start, end in spoken if end <= end_ms and end - start_ms >= USER_CLIP_MIN_MS]
+        if complete_ends:
+            end_ms = max(complete_ends)
+        duration = end_ms - start_ms
+        clip = {
+            "cut_index": index,
+            "start_ms": start_ms - seg_start,
+            "end_ms": end_ms - seg_start,
+            "source_start_ms": start_ms,
+            "source_end_ms": end_ms,
+        }
+        # Avoid picking a tiny cut fragment when a usable passage follows. If the entire
+        # video is shorter than the usual minimum, keep its real duration (no blank pad).
+        rank = (0 if duration >= USER_CLIP_MIN_MS else 1, 0 if spoken else 1, start_ms)
+        candidates.append((rank, clip))
+    if not candidates:
+        return []
+    return [min(candidates, key=lambda item: item[0])[1]]
+
+
 def build_op(
     op_config: Dict[str, Any],
     patterns: Dict[str, Dict[str, Any]],
@@ -427,6 +497,7 @@ def build_op(
     type_mapping: Optional[Dict[str, Any]] = None,
     op_picks: Optional[List[str]] = None,
     ai_title: str = "",
+    source_words: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """timeline.op を構築する(cuts はセグメント抽出後=video.file_pathがセグメント参照)。
 
@@ -438,12 +509,14 @@ def build_op(
     - highlight_teaser のクリップ:
       1. op_config.clips(フェーズV2のユーザー指定)があればそれを優先(resolve_user_clips)
       2. 無ければAI自動選定(select_highlight_clips。V8-6: op_picks があれば最優先)
-      3. 候補ゼロ(fullモード・該当スロットなし等)は title_card へフォールバックする
-         (OPを黙って消さない)
+      3. 候補ゼロ(fullモード・該当スロットなし等)は保持済みの発話/映像から短い導入を作る。
+         映像が皆無の場合のみ、文言のあるtitle_cardを使う。文言も無ければ明確に失敗する。
     - 各ハイライトカットに text/style(横スライドテロップ用)と source_*_ms/cut_id
       (OP編集UIがサムネ・シーン対応の表示に使う。Remotionは参照しない)を出力する
     """
     pattern = op_config["pattern"]
+    if pattern == "none":
+        return None
     spec = patterns.get(pattern) or FALLBACK_OP_PATTERNS.get(pattern) or {}
     # W11-5: ファイル名フォールバックを廃止(ユーザー入力 > AI生成のみ。無ければ非表示)。
     # title_enabled=False(「表示しない」チェック)なら常に空文字にする
@@ -485,12 +558,21 @@ def build_op(
                 target_total_ms=int(spec.get("target_total_ms", 15000)),
             )
         if not clips:
-            fallback = dict(op_config)
-            fallback["pattern"] = "title_card"
-            return build_op(
-                fallback, patterns, directive_slots, keep_segments, cuts, video_path,
-                type_mapping=type_mapping, op_picks=op_picks, ai_title=ai_title,
+            clips = select_fallback_clip(
+                directive_slots or [], keep_segments, cuts, source_words=source_words,
+                clip_max_ms=int(spec.get("clip_max_ms", 3500)),
             )
+            if clips:
+                op["fallback_reason"] = "no_highlight_candidates"
+            elif title or catch_copy:
+                fallback = dict(op_config)
+                fallback["pattern"] = "title_card"
+                return build_op(
+                    fallback, patterns, directive_slots, keep_segments, cuts, video_path,
+                    type_mapping=type_mapping, op_picks=op_picks, ai_title=ai_title,
+                )
+            else:
+                raise ValueError("OPに使える映像がありません。カットを戻すか、OPを「なし」にしてください。")
         highlight_cuts = []
         for clip in clips:
             cut = cuts[clip["cut_index"]]

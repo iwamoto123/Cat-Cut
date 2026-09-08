@@ -1,27 +1,19 @@
 import { useCallback, useMemo, useState } from "react";
-
-type HistoryState<T> = {
-  past: T[];
-  present: T;
-  future: T[];
-};
+import {
+  createEditHistory,
+  redoEditHistory,
+  replaceHistoryPresent,
+  setHistoryPresent,
+  undoEditHistory,
+} from "../lib/editHistory";
 
 export function useEditHistory<T>(initialPresent: T) {
-  const [history, setHistory] = useState<HistoryState<T>>({
-    past: [],
-    present: initialPresent,
-    future: [],
-  });
+  const [history, setHistory] = useState(() => createEditHistory(initialPresent));
 
   const setPresent = useCallback((next: T | ((current: T) => T)) => {
     setHistory((current) => {
       const value = typeof next === "function" ? (next as (input: T) => T)(current.present) : next;
-      if (Object.is(value, current.present)) return current;
-      return {
-        past: [...current.past, current.present],
-        present: value,
-        future: [],
-      };
+      return setHistoryPresent(current, value);
     });
   }, []);
 
@@ -33,45 +25,20 @@ export function useEditHistory<T>(initialPresent: T) {
   const replacePresent = useCallback((next: T | ((current: T) => T)) => {
     setHistory((current) => {
       const value = typeof next === "function" ? (next as (input: T) => T)(current.present) : next;
-      if (Object.is(value, current.present)) return current;
-      return {
-        past: current.past,
-        present: value,
-        future: [],
-      };
+      return replaceHistoryPresent(current, value);
     });
   }, []);
 
   const reset = useCallback((nextPresent: T) => {
-    setHistory({
-      past: [],
-      present: nextPresent,
-      future: [],
-    });
+    setHistory(createEditHistory(nextPresent));
   }, []);
 
   const undo = useCallback(() => {
-    setHistory((current) => {
-      if (!current.past.length) return current;
-      const previous = current.past[current.past.length - 1];
-      return {
-        past: current.past.slice(0, -1),
-        present: previous,
-        future: [current.present, ...current.future],
-      };
-    });
+    setHistory(undoEditHistory);
   }, []);
 
   const redo = useCallback(() => {
-    setHistory((current) => {
-      if (!current.future.length) return current;
-      const [next, ...rest] = current.future;
-      return {
-        past: [...current.past, current.present],
-        present: next,
-        future: rest,
-      };
-    });
+    setHistory(redoEditHistory);
   }, []);
 
   const canUndo = history.past.length > 0;

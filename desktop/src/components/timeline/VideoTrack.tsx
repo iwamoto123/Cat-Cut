@@ -1,3 +1,9 @@
+import { isEditorSelection, type EditorSelection } from "../../lib/editorSelection";
+import { useEffect, useRef, useState } from "react";
+import type { TimelineCutRange } from "../../lib/previewTimeline";
+import { timelineBladePoint } from "../../lib/timelineBladeCut";
+import { formatPrecisionTime } from "../../lib/precisionMedia";
+import "./BladeCut.css";
 import { Pencil } from "lucide-react";
 import { nearestFilmstripFrame, type SceneTimelineBlock, type TimelineOpInfo } from "../../lib/timelineLayout";
 
@@ -5,6 +11,11 @@ type Props = {
   blocks: SceneTimelineBlock[];
   pxPerMs: number;
   currentSceneId: string | null;
+  selection: EditorSelection;
+  scissorsMode?: boolean;
+  fps?: number;
+  timelineCutRanges?: TimelineCutRange[];
+  onBladeCut?: (sceneId: string, sourceMs: number) => void;
   /** U9のfilmstripキャッシュ由来のフレーム(元動画ms+配信URL)。 */
   frames: Array<{ ms: number; url: string }>;
   op: TimelineOpInfo | null;
@@ -32,9 +43,12 @@ function circledNumber(oneBasedIndex: number): string {
  *   フェーズV3: クリック=OP区間へのシーク(プレビューでOPを再生できるようになったため)。
  *   OP編集は右上の✎ボタンまたはダブルクリック。
  */
-export function VideoTrack({ blocks, pxPerMs, currentSceneId, frames, op, onSelect, onOpClick, onOpSeek }: Props) {
+export function VideoTrack({ blocks, pxPerMs, currentSceneId, selection, frames, op, onSelect, onOpClick, onOpSeek, scissorsMode = false, fps = 30, timelineCutRanges = [], onBladeCut }: Props) {
+  const [bladeHover, setBladeHover] = useState<{ sceneId: string; timelineMs: number; sourceMs: number } | null>(null);
+  const bladePress = useRef<{ sceneId: string; x: number; y: number } | null>(null);
+  useEffect(() => { bladePress.current = null; setBladeHover(null); }, [blocks, scissorsMode]);
   return (
-    <div className="tlLane tlVideoLane">
+    <div className={`tlLane tlVideoLane${scissorsMode ? " isBladeMode" : ""}`}>
       {op && (
         <div
           className={`tlOpBlock${onOpSeek || onOpClick ? " clickable" : ""}`}
@@ -103,18 +117,45 @@ export function VideoTrack({ blocks, pxPerMs, currentSceneId, frames, op, onSele
       )}
       {blocks.map((block) => {
         const widthPx = (block.timelineEndMs - block.timelineStartMs) * pxPerMs;
-        const selected = block.sceneId === currentSceneId;
+        const selected = isEditorSelection(selection, "video", block.sceneId);
+        const current = block.sceneId === currentSceneId;
         const frame = nearestFilmstripFrame(frames, block.sourceStartMs);
         return (
           <div
-            className={`tlVideoBlock${selected ? " selected" : ""}`}
+            className={`tlVideoBlock${selected ? " selected" : ""}${current ? " current" : ""}`}
             key={block.sceneId}
             onClick={(event) => {
               event.stopPropagation();
+              event.currentTarget.focus({ preventScroll: true });
+              if (scissorsMode) {
+                const press = bladePress.current;
+                bladePress.current = null;
+                if (!onBladeCut || event.detail > 1 || press?.sceneId !== block.sceneId || Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
+                const point = timelineBladePoint(block, event.clientX - event.currentTarget.getBoundingClientRect().left, pxPerMs, timelineCutRanges, fps);
+                if (point) onBladeCut(block.sceneId, point.sourceMs);
+                return;
+              }
               onSelect(block);
             }}
+            onPointerDown={(event) => {
+              if (!scissorsMode || event.button !== 0 || !event.isPrimary) return;
+              event.preventDefault();
+              event.stopPropagation();
+              bladePress.current = { sceneId: block.sceneId, x: event.clientX, y: event.clientY };
+            }}
+            onPointerMove={(event) => {
+              if (!scissorsMode) return;
+              const point = timelineBladePoint(block, event.clientX - event.currentTarget.getBoundingClientRect().left, pxPerMs, timelineCutRanges, fps);
+              setBladeHover(point ? { ...point, sceneId: block.sceneId } : null);
+            }}
+            onPointerCancel={() => { bladePress.current = null; setBladeHover(null); }}
+            onPointerLeave={() => { bladePress.current = null; setBladeHover(null); }}
+            tabIndex={-1}
+            role="button"
+            aria-label={`映像 ${block.sceneIndex + 1}: ${block.telopText || "テロップなし"}${scissorsMode ? "。クリック位置で分割" : ""}`}
+            aria-pressed={selected}
             style={{ left: `${block.timelineStartMs * pxPerMs}px`, width: `${Math.max(4, widthPx)}px` }}
-            title={`${circledNumber(block.sceneIndex + 1)} ${block.telopText}`}
+            title={scissorsMode ? "B: クリック位置で映像を分割 · 範囲削除はシーン検品の波形 · Aで選択に戻る" : `${circledNumber(block.sceneIndex + 1)} ${block.telopText}`}
           >
             {frame && widthPx >= 44 && (
               <img alt="" className="tlVideoThumb" draggable={false} src={frame.url} />
@@ -129,6 +170,9 @@ export function VideoTrack({ blocks, pxPerMs, currentSceneId, frames, op, onSele
           </div>
         );
       })}
+      {scissorsMode && bladeHover && <div className={`tlVideoBlade${bladeHover.timelineMs * pxPerMs > 210 ? " isRight" : ""}`} data-source-ms={bladeHover.sourceMs} data-timeline-ms={bladeHover.timelineMs} style={{ left: bladeHover.timelineMs * pxPerMs }}>
+        <span>{formatPrecisionTime(bladeHover.timelineMs)} · クリックで分割</span>
+      </div>}
     </div>
   );
 }

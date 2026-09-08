@@ -1,5 +1,5 @@
 // 実行時(値)importのため、node --experimental-strip-types でテストを直接実行できるよう拡張子を明示する。
-import { autoTelopTextFromWords, type Scene, type SceneWord } from "./scenes.ts";
+import { autoTelopTextFromWords, computeSceneKeptSubRanges, normalizeSceneSourceKeepRanges, type Scene, type SceneWord } from "./scenes.ts";
 import { snapMsToGrid } from "./boundaryNudge.ts";
 
 /**
@@ -124,6 +124,13 @@ export function snapEdgeTargetMs(
  * W20-1: 範囲選択カット(rangeCut.ts)も同じ規則で両端をトリムするため公開する。
  */
 export function withUpdatedBounds(scene: Scene, sourceStartMs: number, sourceEndMs: number): Scene {
+  const explicit = normalizeSceneSourceKeepRanges(scene.sourceKeepRanges, scene.sourceStartMs, scene.sourceEndMs);
+  // Stretching an edge reveals precisely the newly exposed media. Moving either outer edge
+  // must leave all established interior cuts unchanged, even when autoTrimmed words return.
+  const expanded = explicit ? [...computeSceneKeptSubRanges(scene)] : [];
+  if (sourceStartMs < scene.sourceStartMs) expanded.push({ startMs: sourceStartMs, endMs: scene.sourceStartMs });
+  if (sourceEndMs > scene.sourceEndMs) expanded.push({ startMs: scene.sourceEndMs, endMs: sourceEndMs });
+  const sourceKeepRanges = explicit ? normalizeSceneSourceKeepRanges(expanded, sourceStartMs, sourceEndMs) : undefined;
   let wordsChanged = false;
   const words = scene.words.map((word) => {
     const inRange = wordOverlapsRange(word, sourceStartMs, sourceEndMs);
@@ -131,7 +138,8 @@ export function withUpdatedBounds(scene: Scene, sourceStartMs: number, sourceEnd
       wordsChanged = true;
       return { ...word, deleted: true, autoTrimmed: true };
     }
-    if (inRange && word.deleted && word.autoTrimmed) {
+    const hasKeptAudio = !sourceKeepRanges || sourceKeepRanges.some((range) => wordOverlapsRange(word, range.startMs, range.endMs));
+    if (inRange && hasKeptAudio && word.deleted && word.autoTrimmed) {
       wordsChanged = true;
       return { ...word, deleted: false, autoTrimmed: false };
     }
@@ -147,6 +155,7 @@ export function withUpdatedBounds(scene: Scene, sourceStartMs: number, sourceEnd
     words: nextWords,
     telopText,
     cutMarks,
+    ...(explicit ? { sourceKeepRanges } : {}),
   };
 }
 
@@ -191,6 +200,7 @@ export function applyEdgeTrim(
       const lowerBound = scene.sourceStartMs + minDurationMs;
       const upperBound = next.sourceEndMs - minDurationMs;
       const appliedMs = clamp(snapped, lowerBound, Math.max(lowerBound, upperBound));
+      if (appliedMs === scene.sourceEndMs) return { scenes, appliedMs, linked: true, neighborIndex: sceneIndex + 1 };
       const updatedScene = withUpdatedBounds(scene, scene.sourceStartMs, appliedMs);
       const updatedNext = withUpdatedBounds(next, appliedMs, next.sourceEndMs);
       const nextScenes = replaceAt(replaceAt(scenes, sceneIndex, updatedScene), sceneIndex + 1, updatedNext);
@@ -199,6 +209,7 @@ export function applyEdgeTrim(
     const lowerBound = scene.sourceStartMs + minDurationMs;
     const upperBound = next ? next.sourceStartMs : sourceDurationMs;
     const appliedMs = clamp(snapped, lowerBound, Math.max(lowerBound, upperBound));
+    if (appliedMs === scene.sourceEndMs) return { scenes, appliedMs, linked: false, neighborIndex: null };
     const updatedScene = withUpdatedBounds(scene, scene.sourceStartMs, appliedMs);
     const nextScenes = replaceAt(scenes, sceneIndex, updatedScene);
     return { scenes: nextScenes, appliedMs, linked: false, neighborIndex: null };
@@ -209,6 +220,7 @@ export function applyEdgeTrim(
     const upperBound = scene.sourceEndMs - minDurationMs;
     const lowerBound = prev.sourceStartMs + minDurationMs;
     const appliedMs = clamp(snapped, Math.min(lowerBound, upperBound), upperBound);
+    if (appliedMs === scene.sourceStartMs) return { scenes, appliedMs, linked: true, neighborIndex: sceneIndex - 1 };
     const updatedScene = withUpdatedBounds(scene, appliedMs, scene.sourceEndMs);
     const updatedPrev = withUpdatedBounds(prev, prev.sourceStartMs, appliedMs);
     const nextScenes = replaceAt(replaceAt(scenes, sceneIndex - 1, updatedPrev), sceneIndex, updatedScene);
@@ -217,6 +229,7 @@ export function applyEdgeTrim(
   const upperBound = scene.sourceEndMs - minDurationMs;
   const lowerBound = prev ? prev.sourceEndMs : 0;
   const appliedMs = clamp(snapped, lowerBound, Math.max(lowerBound, upperBound));
+  if (appliedMs === scene.sourceStartMs) return { scenes, appliedMs, linked: false, neighborIndex: null };
   const updatedScene = withUpdatedBounds(scene, appliedMs, scene.sourceEndMs);
   const nextScenes = replaceAt(scenes, sceneIndex, updatedScene);
   return { scenes: nextScenes, appliedMs, linked: false, neighborIndex: null };

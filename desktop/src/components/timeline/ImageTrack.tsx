@@ -1,16 +1,16 @@
-import { useRef, useState } from "react";
-import { GripVertical, Image as ImageIcon, Trash2 } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { GripVertical, Image as ImageIcon } from "lucide-react";
 import type { ImageClipData } from "../../lib/imageOverlay";
 import {
   moveImageClip,
-  removeImageClip,
   replaceImageClip,
   resizeImageClip,
 } from "../../lib/imageClips";
 import { laneIndexForArrayIndex, laneIndexForOffsetY, moveClipToLane } from "../../lib/clipLanes";
+import { isEditorSelection, type EditorSelection, type MediaEditPhase } from "../../lib/editorSelection";
+import { formatPrecisionTime, snapMediaDelta } from "../../lib/precisionMedia";
+import { playheadStore } from "../../lib/playheadStore";
 
-/** ドラッグ中のスナップしきい値(px)。ms換算はズーム倍率(pxPerMs)で行う(BGMトラックと同値)。 */
-const SNAP_PX = 8;
 /** クリップのレーン内上下インセット(px)。 */
 const CLIP_INSET_PX = 5;
 
@@ -18,20 +18,33 @@ export type ImagesState = Awaited<ReturnType<typeof window.catcut.listImages>>;
 export type ImageUiClip = ImagesState["clips"][number];
 
 type DragState = {
+  captureTarget: HTMLElement;
+  pointerId: number;
   clipId: string;
   mode: "move" | "resize-start" | "resize-end" | "lane";
   startClientX: number;
+  startScrollLeft: number;
+  pxPerMs: number;
+  scrollTarget: HTMLElement | null;
   /** レーン入替え(mode=lane)用: トラック(.tlLane)上端のクライアントY。 */
   trackTopClientY: number;
   /** ドラッグ開始時点のクリップ(差分は常にこのスナップショットへ適用する)。 */
   snapshot: ImageUiClip;
+  initialState: ImagesState;
+  latestState: ImagesState;
 };
 
 type Props = {
-  runDir: string;
+  disabled?: boolean;
+  timelineDurationMs?: number;
+  snapEnabled?: boolean;
+  snapPointsMs?: number[];
   state: ImagesState | null;
-  /** ドラッグ中のライブ更新と保存後の反映(プレビュー反映のためAppが保持する)。 */
-  onStateChange: (state: ImagesState) => void;
+  getState?: () => ImagesState | null;
+  /** ライブ更新と操作確定を親へ通知。履歴・保存は親が管理する。 */
+  onStateChange: (state: ImagesState, phase?: MediaEditPhase) => void;
+  selection: EditorSelection;
+  onSelectionChange: (selection: EditorSelection) => void;
   pxPerMs: number;
   /** V6-5: 1レーンあたりの高さ(px)。トラック全体の高さは親(TimelineView)がクリップ数×この値で確保する。 */
   laneHeightPx: number;
@@ -48,29 +61,32 @@ function applyClipUpdate(clip: ImageUiClip, updated: ImageClipData): ImageUiClip
  *   0ms/総尺端スナップ)、クリック選択で削除ボタン
  * - V6-5: 1クリップ=1レーンの段積み表示。配列順=前後関係(配列末尾=最前面=一番上のレーン)で、
  *   左端のグリップを上下ドラッグするとレーン順(=前後関係=images.jsonの配列順)を入替えられる
- * - 変更は操作確定(ポインタ解放)ごとに images.json へ即保存(書き出し時にstep08が転写)
+ * - 変更はライブ更新/操作確定に分けて親へ通知し、履歴と保存を全トラックで共有する
  * - 画像の位置(x,y)・大きさ(scale)の調整はプレビュー上のドラッグ/四隅ハンドルが担当する
  */
-export function ImageTrack({ runDir, state, onStateChange, pxPerMs, laneHeightPx }: Props) {
+export function ImageTrack({ disabled = false, state, getState, onStateChange, selection, onSelectionChange, pxPerMs, laneHeightPx, timelineDurationMs, snapEnabled = true, snapPointsMs = [] }: Props) {
+  const laneRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const draggedRef = useRef(false);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const previewFrameRef = useRef<number | null>(null);
+  function cancelPreviewFrame() {
+    if (previewFrameRef.current !== null) cancelAnimationFrame(previewFrameRef.current);
+    previewFrameRef.current = null;
+  }
+  useEffect(() => cancelPreviewFrame, []);
 
   const clips = state?.clips ?? [];
 
-  async function persist(nextClips: ImageUiClip[]) {
-    if (!state) return;
-    // ライブ状態を即時反映してから保存(保存結果=正規化済みで上書き)
-    onStateChange({ ...state, clips: nextClips });
-    try {
-      const saved = await window.catcut.saveImages({
-        runDir,
-        clips: nextClips.map(({ url: _url, ...data }) => data),
-      });
-      onStateChange(saved);
-    } catch {
-      // 保存失敗時もUI状態は維持する(次の操作で再保存される)
-    }
+  function preview(nextClips: ImageUiClip[]) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    drag.latestState = { ...drag.latestState, clips: nextClips };
+    // Keep pointer samples locally; publish at most once per animation frame.
+    // Pointerup commits latestState synchronously, including a sample not yet painted.
+    if (previewFrameRef.current === null) previewFrameRef.current = requestAnimationFrame(() => {
+      previewFrameRef.current = null;
+      if (dragRef.current === drag) onStateChange(drag.latestState, "preview");
+    });
   }
 
   function handlePointerDown(
@@ -78,23 +94,40 @@ export function ImageTrack({ runDir, state, onStateChange, pxPerMs, laneHeightPx
     clip: ImageUiClip,
     mode: DragState["mode"],
   ) {
+    if (disabled || event.button !== 0 || !state || dragRef.current) return;
     event.stopPropagation();
     event.preventDefault();
+    // preventDefaultで以前の映像側フォーカスが残らないよう、操作対象へ明示的に移す。
+    event.currentTarget.closest<HTMLElement>(".tlImageClip")?.focus({ preventScroll: true });
+    const currentState = getState?.() ?? state;
+    const currentClip = currentState.clips.find((candidate) => candidate.id === clip.id);
+    if (!currentClip) return;
     const track = (event.currentTarget as HTMLElement).closest(".tlLane");
+    const scrollTarget = event.currentTarget.closest<HTMLElement>(".timelineBody");
     dragRef.current = {
+      captureTarget: event.currentTarget,
+      pointerId: event.pointerId,
       clipId: clip.id,
       mode,
       startClientX: event.clientX,
+      startScrollLeft: scrollTarget?.scrollLeft ?? 0,
+      scrollTarget,
+      pxPerMs,
       trackTopClientY: track ? track.getBoundingClientRect().top : 0,
-      snapshot: clip,
+      snapshot: currentClip,
+      initialState: currentState,
+      latestState: currentState,
     };
     draggedRef.current = false;
+    onSelectionChange({ kind: "image", id: clip.id });
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLElement>) {
     const drag = dragRef.current;
-    if (!drag || !state || pxPerMs <= 0) return;
+    if (!drag || drag.pointerId !== event.pointerId || !state || drag.pxPerMs <= 0) return;
+    event.stopPropagation();
+    const clips = drag.latestState.clips;
     if (drag.mode === "lane") {
       // V6-5: レーン入替え。ポインタYの属するレーンへ配列位置を移す(配列順=前後関係)
       draggedRef.current = true;
@@ -104,15 +137,22 @@ export function ImageTrack({ runDir, state, onStateChange, pxPerMs, laneHeightPx
         clips.length,
       );
       const next = moveClipToLane(clips, drag.clipId, targetLane);
-      if (next !== clips) onStateChange({ ...state, clips: next });
+      if (next !== clips) preview(next);
       return;
     }
-    const deltaPx = event.clientX - drag.startClientX;
-    const deltaMs = deltaPx / pxPerMs;
+    const deltaPx = event.clientX - drag.startClientX + (drag.scrollTarget?.scrollLeft ?? 0) - drag.startScrollLeft;
+    let deltaMs = deltaPx / drag.pxPerMs;
     if (Math.abs(deltaPx) > 2) draggedRef.current = true;
+    if (!draggedRef.current) return;
+    if (drag.mode === "move" || drag.mode === "resize-start" || drag.mode === "resize-end") {
+      const playheadMs = playheadStore.getTimelineMs();
+      const targets = [...snapPointsMs, ...clips.filter((clip) => clip.id !== drag.clipId).flatMap((clip) => [clip.start_ms, clip.end_ms])];
+      if (playheadMs !== null) targets.push(playheadMs);
+      deltaMs = snapMediaDelta(drag.snapshot, deltaMs, drag.mode, targets, drag.pxPerMs, snapEnabled && !event.altKey);
+    }
     const bounds = {
-      timelineDurationMs: state.timelineDurationMs,
-      snapMs: SNAP_PX / pxPerMs,
+      timelineDurationMs: timelineDurationMs ?? state.timelineDurationMs,
+      snapMs: 0,
     };
     let updated: ImageClipData;
     switch (drag.mode) {
@@ -128,37 +168,59 @@ export function ImageTrack({ runDir, state, onStateChange, pxPerMs, laneHeightPx
     }
     const current = clips.find((clip) => clip.id === drag.clipId);
     if (!current) return;
-    onStateChange({ ...state, clips: replaceImageClip(clips, applyClipUpdate(current, updated)) as ImageUiClip[] });
+    preview(replaceImageClip(clips, applyClipUpdate(current, updated)) as ImageUiClip[]);
   }
 
-  function handlePointerUp(event: React.PointerEvent<HTMLElement>) {
+  function finishGesture(event: React.PointerEvent<HTMLElement>, cancelled = false) {
     const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    if (!drag || !state) return;
-    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    cancelPreviewFrame();
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     if (draggedRef.current) {
-      void persist(clips);
-      setSelectedClipId(drag.clipId);
-    } else {
-      // 動かさずに離した=クリック選択のトグル
-      setSelectedClipId((current) => (current === drag.clipId ? null : drag.clipId));
+      onStateChange(cancelled ? drag.initialState : drag.latestState, "commit");
     }
   }
 
-  function handleDelete(clipId: string) {
-    setSelectedClipId(null);
-    void persist(removeImageClip(clips, clipId) as ImageUiClip[]);
+  function handlePointerUp(event: React.PointerEvent<HTMLElement>) {
+    handlePointerMove(event);
+    finishGesture(event);
+  }
+
+  function handlePointerCancel(event: React.PointerEvent<HTMLElement>) {
+    finishGesture(event, true);
+  }
+
+  function handleGestureKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (event.key !== "Escape" && !((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = null;
+    cancelPreviewFrame();
+    if (drag.captureTarget.hasPointerCapture?.(drag.pointerId)) drag.captureTarget.releasePointerCapture(drag.pointerId);
+    if (draggedRef.current) onStateChange(drag.initialState, "commit");
   }
 
   return (
-    <div className="tlLane tlImageLane">
+    <div
+      className="tlLane tlImageLane"
+      ref={laneRef}
+      onKeyDown={handleGestureKeyDown}
+      tabIndex={-1}
+    >
       {clips.length === 0 && (
         <span className="tlLanePlaceholder">画像はまだありません（左の「+ 画像」かファイルのドラッグ&ドロップで追加）</span>
       )}
       {clips.map((clip, arrayIndex) => {
         const durationMs = clip.end_ms - clip.start_ms;
         const widthPx = Math.max(8, durationMs * pxPerMs);
-        const selected = selectedClipId === clip.id;
+        const trimming = dragRef.current?.clipId === clip.id && (dragRef.current.mode === "resize-start" || dragRef.current.mode === "resize-end");
+        const selected = isEditorSelection(selection, "image", clip.id);
         const laneIndex = laneIndexForArrayIndex(clips.length, arrayIndex);
         return (
           <div
@@ -168,6 +230,12 @@ export function ImageTrack({ runDir, state, onStateChange, pxPerMs, laneHeightPx
             onPointerDown={(event) => handlePointerDown(event, clip, "move")}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            onLostPointerCapture={handlePointerCancel}
+            tabIndex={-1}
+            aria-label={`画像 ${clip.file}`}
+            aria-pressed={selected}
+            role="button"
             style={{
               left: `${clip.start_ms * pxPerMs}px`,
               width: `${widthPx}px`,
@@ -177,48 +245,41 @@ export function ImageTrack({ runDir, state, onStateChange, pxPerMs, laneHeightPx
             title={`${clip.file} / ${(durationMs / 1000).toFixed(1)}秒（上のレーンほど手前に表示。位置・大きさはプレビュー上でドラッグ）`}
           >
             {/* 左端グリップ: 上下ドラッグでレーン順(=前後関係)入替え */}
-            <div
+            {widthPx >= 48 && <div
               className="tlLaneReorderHandle"
               onPointerDown={(event) => handlePointerDown(event, clip, "lane")}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onLostPointerCapture={handlePointerCancel}
               title="上下ドラッグでレーン順を入替え（上のレーン=手前に表示）"
             >
               <GripVertical size={11} />
-            </div>
+            </div>}
             <span className="tlImageClipLabel">
               <ImageIcon size={11} />
-              {clip.file}
+              <span>{clip.file}</span>
             </span>
             {/* 左右端: 伸縮ハンドル */}
-            <div
+            {selected && (widthPx >= 28 || trimming) && <div
               className="tlImageResizeHandle tlImageResizeHandleStart"
               onPointerDown={(event) => handlePointerDown(event, clip, "resize-start")}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onLostPointerCapture={handlePointerCancel}
               title="表示開始を伸縮"
-            />
-            <div
+            />}
+            {selected && (widthPx >= 28 || trimming) && <div
               className="tlImageResizeHandle tlImageResizeHandleEnd"
               onPointerDown={(event) => handlePointerDown(event, clip, "resize-end")}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onLostPointerCapture={handlePointerCancel}
               title="表示終了を伸縮"
-            />
-            {selected && (
-              <button
-                className="tlImageDeleteButton"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleDelete(clip.id);
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-                title="この画像クリップを削除"
-                type="button"
-              >
-                <Trash2 size={11} />
-              </button>
-            )}
+            />}
+
           </div>
         );
       })}

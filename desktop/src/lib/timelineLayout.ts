@@ -4,6 +4,7 @@
 //
 // 実行時(値)importのため、node --experimental-strip-types でテストを直接実行できるよう拡張子を明示する。
 import { timelineMsToSourceMs, type TimelineCutRange } from "./previewTimeline.ts";
+import { normalizeSceneSourceKeepRanges } from "./scenes.ts";
 
 /** ズームの上限(px/ms)。100px=1秒まで拡大できれば十分細かい。 */
 export const TIMELINE_MAX_PX_PER_MS = 0.1;
@@ -165,6 +166,7 @@ type SceneLike = {
   id: string;
   sourceStartMs: number;
   sourceEndMs: number;
+  sourceKeepRanges?: Array<{ startMs: number; endMs: number }>;
   telopText: string;
   /** V6-2: 単語のdeleted状態。全単語deletedのシーンはブロックを作らない(タイムライン即時連動)。 */
   words?: Array<{ deleted: boolean }>;
@@ -182,16 +184,25 @@ type SceneLike = {
 export function sceneTimelineBlocks(scenes: SceneLike[], ranges: TimelineCutRange[]): SceneTimelineBlock[] {
   const blocks: SceneTimelineBlock[] = [];
   scenes.forEach((scene, sceneIndex) => {
-    if (scene.words && scene.words.length > 0 && scene.words.every((word) => word.deleted)) return;
+    const explicit = normalizeSceneSourceKeepRanges(scene.sourceKeepRanges, scene.sourceStartMs, scene.sourceEndMs);
+    if (explicit ? explicit.length === 0 : scene.words && scene.words.length > 0 && scene.words.every((word) => word.deleted)) return;
+    const sourceRanges = explicit ?? [{ startMs: scene.sourceStartMs, endMs: scene.sourceEndMs }];
     let startMs = Infinity;
     let endMs = -Infinity;
+    let sourceStartMs = scene.sourceStartMs;
     for (const range of ranges) {
-      const overlapStart = Math.max(scene.sourceStartMs, range.sourceStartMs);
-      const overlapEnd = Math.min(scene.sourceEndMs, range.sourceEndMs);
-      if (overlapEnd <= overlapStart) continue;
-      const speed = range.speed || 1;
-      startMs = Math.min(startMs, range.timelineStartMs + (overlapStart - range.sourceStartMs) / speed);
-      endMs = Math.max(endMs, range.timelineStartMs + (overlapEnd - range.sourceStartMs) / speed);
+      for (const sourceRange of sourceRanges) {
+        const overlapStart = Math.max(sourceRange.startMs, range.sourceStartMs);
+        const overlapEnd = Math.min(sourceRange.endMs, range.sourceEndMs);
+        if (overlapEnd <= overlapStart) continue;
+        const speed = range.speed || 1;
+        const overlapTimelineStart = range.timelineStartMs + (overlapStart - range.sourceStartMs) / speed;
+        if (overlapTimelineStart < startMs) {
+          startMs = overlapTimelineStart;
+          sourceStartMs = overlapStart;
+        }
+        endMs = Math.max(endMs, range.timelineStartMs + (overlapEnd - range.sourceStartMs) / speed);
+      }
     }
     if (!Number.isFinite(startMs) || endMs <= startMs) return;
     blocks.push({
@@ -200,7 +211,7 @@ export function sceneTimelineBlocks(scenes: SceneLike[], ranges: TimelineCutRang
       timelineStartMs: Math.round(startMs),
       timelineEndMs: Math.round(endMs),
       telopText: scene.telopText,
-      sourceStartMs: scene.sourceStartMs,
+      sourceStartMs,
       speed: scene.speed || 1,
     });
   });

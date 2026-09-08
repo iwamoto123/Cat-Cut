@@ -59,6 +59,15 @@ export function createPlayheadStore(): PlayheadStore {
 /** アプリ全体で共有するシングルトン(Appは1つしかマウントされない前提)。 */
 export const playheadStore = createPlayheadStore();
 
+/**
+ * 非current行用。固定スナップショットだけでは全行へ毎フレーム通知が届いてしまうため、
+ * 購読そのものも外す。安定参照なので非current行の通常編集でも購読し直さない。
+ */
+export const inactivePlayheadSubscription = {
+  subscribe: (_listener: () => void) => () => {},
+  getSnapshot: (): null => null,
+};
+
 /** 再生ヘッドの元動画msを購読する(毎フレーム再レンダリングされるので最小のコンポーネントで使う)。 */
 export function usePlayheadSourceMs(): number {
   return useSyncExternalStore(playheadStore.subscribe, playheadStore.getSourceMs);

@@ -12,6 +12,8 @@
 // electron に依存しない純Node実装(desktop/tests/editLearning.test.ts から直接テストする)。
 const fs = require("fs");
 const path = require("path");
+const { randomUUID } = require("node:crypto");
+const editingLearning = require("./editingLearning.cjs");
 
 /** correction_history.json に保持する修正ペアの上限(超過分はLRUで削除)。 */
 const CORRECTION_HISTORY_MAX_PAIRS = 500;
@@ -32,7 +34,13 @@ function readJsonSafe(filePath) {
 
 function writeJson(filePath, data) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+  const temporary = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+    fs.renameSync(temporary, filePath);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +66,13 @@ function sanitizeCorrectionHistory(raw) {
       updatedAt: String(entry?.updatedAt || ""),
     });
   }
-  return { version: "1.0.0", pairs };
+  const contributions = Array.isArray(raw?.contributions) ? raw.contributions
+    .filter((entry) => entry && typeof entry.machine === "string" && entry.machine)
+    .map((entry) => ({ machine: entry.machine, pairs: sanitizeCorrectionHistory({ pairs: entry.pairs }).pairs })) : undefined;
+  return { version: contributions ? "1.1.0" : "1.0.0", pairs,
+    ...(raw?.origin === "aggregate" ? { origin: "aggregate" } : {}),
+    ...(raw?.kind === "catcut-shared-correction-history" ? { kind: raw.kind } : {}),
+    ...(contributions ? { contributions } : {}) };
 }
 
 /** correction_history.json を読む(無い・壊れている場合は空履歴)。 */
@@ -71,7 +85,7 @@ function loadCorrectionHistory(filePath) {
  * 新規は count=1 で追加し、上限超過時は updatedAt が古いペアから削除する(LRU)。
  */
 function mergeCorrectionPairs(history, rawPairs, nowIso) {
-  const pairs = [...(history?.pairs || [])];
+  const pairs = (history?.pairs || []).map((pair) => ({ ...pair }));
   for (const raw of Array.isArray(rawPairs) ? rawPairs : []) {
     const pair = sanitizePair(raw);
     if (!pair) continue;
@@ -103,9 +117,14 @@ function recordCorrectionPairs(filePath, rawPairs, nowIso = new Date().toISOStri
  * 上限超過時は既存と同じく updatedAt が古いペアから削除する。
  * 合成結果は毎回2つの正本から導出する(累積させない)ため、繰り返し呼んでも二重計上しない。
  */
-function combineCorrectionHistories(localHistory, sharedHistory) {
+function combineCorrectionHistories(localHistory, sharedHistory, options = {}) {
+  // A shared snapshot carries each machine's observations. Replace our old shared contribution
+  // with current local observations instead of adding the same edits a second time.
+  const sources = options.machineLabel && Array.isArray(sharedHistory?.contributions)
+    ? [localHistory, ...sharedHistory.contributions.filter((entry) => entry && entry.machine !== options.machineLabel)]
+    : [localHistory, sharedHistory];
   const combined = new Map();
-  for (const source of [localHistory, sharedHistory]) {
+  for (const source of sources) {
     for (const entry of source?.pairs || []) {
       const pair = sanitizePair(entry);
       if (!pair) continue;
@@ -175,7 +194,7 @@ function loadEditHistory(filePath) {
 function mergeSceneEdit(history, input, nowIso) {
   const sceneId = String(input?.sceneId || "");
   if (!sceneId) return sanitizeEditHistory(history);
-  const entries = [...(history?.entries || [])];
+  const entries = (history?.entries || []).map((entry) => ({ ...entry }));
   const existing = entries.find((entry) => entry.scene_id === sceneId);
   if (existing) {
     existing.after = String(input?.after ?? "");
@@ -266,7 +285,7 @@ function recordEditExample(filePath, input, nowIso = new Date().toISOString()) {
  * 開発機の python/tools/eval_edit_learning.py がこの形式を取り込む。
  * runsRoot が無い・edit_historyを持つrunが無い場合も空配列で正常に返す。
  */
-function buildLearningExport({ runsRoot, correctionHistoryPath, machineLabel }) {
+function buildLearningExport({ runsRoot, correctionHistoryPath, machineLabel, editingCorpusPath }) {
   const runs = [];
   let entryCount = 0;
   const runNames =
@@ -279,13 +298,14 @@ function buildLearningExport({ runsRoot, correctionHistoryPath, machineLabel }) 
       : [];
   for (const runName of runNames) {
     const historyPath = path.join(runsRoot, runName, "edit_history.json");
-    if (!fs.existsSync(historyPath)) continue;
     const history = loadEditHistory(historyPath);
-    if (history.entries.length === 0) continue;
+    const editingState = editingCorpusPath !== undefined ? editingLearning.loadState(path.join(runsRoot, runName)) : null;
+    if (history.entries.length === 0 && !editingState) continue;
     entryCount += history.entries.length;
-    runs.push({ run: runName, entries: history.entries });
+    runs.push({ run: runName, entries: history.entries, ...(editingState ? { editingLearning: editingState } : {}) });
   }
   const correctionHistory = loadCorrectionHistory(correctionHistoryPath);
+  const editingCorpus = editingCorpusPath !== undefined ? editingLearning.loadCorpus(editingCorpusPath) : null;
   return {
     version: "1.0.0",
     kind: "catcut-learning-export",
@@ -295,10 +315,46 @@ function buildLearningExport({ runsRoot, correctionHistoryPath, machineLabel }) 
       runs: runs.length,
       editEntries: entryCount,
       correctionPairs: correctionHistory.pairs.length,
+      ...(editingCorpus ? {
+        editingExamples: editingCorpus.projects.reduce((count, project) => count + project.examples.length, 0),
+        confirmedProjects: editingCorpus.projects.length,
+      } : {}),
     },
     runs,
     correctionHistory,
+    ...(editingCorpus ? { editingCorpus } : {}),
   };
+}
+
+/** Human review companion. JSON remains the complete machine-readable source. */
+function formatLearningExportText(data) {
+  const lines = ["Cat-Cut 編集学習データ", `書き出し: ${data.exportedAt || ""}`, `PC: ${data.machine || ""}`, ""];
+  const label = { cut: "カット / 復元", proofreading: "文章校正", scene_boundary: "シーンの区切り", line_break: "改行" };
+  const formatRanges = (ranges) => (ranges || []).map((range) => `${(range.startMs / 1000).toFixed(3)}–${(range.endMs / 1000).toFixed(3)}秒`).join(", ") || "なし";
+  const formatSide = (name, value) => {
+    if (typeof value === "string") { lines.push(`${name}:`, value); return; }
+    lines.push(`${name}:`, String(value?.text ?? ""), `保持区間: ${formatRanges(value?.keepSegments)}`);
+    for (const [index, scene] of (value?.scenes || []).entries()) {
+      lines.push(`  シーン${index + 1} [${(scene.startMs / 1000).toFixed(3)}–${(scene.endMs / 1000).toFixed(3)}秒]`, String(scene.text));
+    }
+  };
+  for (const project of data.editingCorpus?.projects || []) {
+    lines.push(`プロジェクト: ${project.projectId}`, `確定版: ${project.revision}`, `書き出し成功: ${project.confirmedAt}`);
+    if (!project.examples.length) lines.push("基準からの有効な変更例はありません。");
+    for (const example of project.examples || []) {
+      lines.push("", `${label[example.kind] || example.kind} / ${example.exampleId}`, `基準の由来: ${example.context?.baselineProvenance || "不明"}`, "元の文字起こし:", String(example.context?.sourceText || ""));
+      formatSide("AI提案 / 観測した基準", example.before);
+      formatSide("編集者の確定結果", example.after);
+    }
+    lines.push("");
+  }
+  for (const run of data.runs || []) {
+    if (!run.entries?.length) continue;
+    lines.push(`互換用の旧編集記録: ${run.run}（書き出し確定の保証なし）`);
+    for (const entry of run.entries) lines.push(`シーン: ${entry.scene_id}`, "元:", entry.source || "", "変更前:", entry.before || "", "変更後:", entry.after || "", "");
+  }
+  if (!(data.editingCorpus?.projects?.length || data.runs?.some((run) => run.entries?.length))) lines.push("蓄積された編集例はありません。");
+  return `${lines.join("\n")}\n`;
 }
 
 module.exports = {
@@ -314,4 +370,5 @@ module.exports = {
   loadEditExamples,
   recordEditExample,
   buildLearningExport,
+  formatLearningExportText,
 };

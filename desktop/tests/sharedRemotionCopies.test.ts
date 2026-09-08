@@ -10,6 +10,7 @@ import { join } from "node:path";
  */
 
 const SHARED_COPIES = [
+  "telopPosition.ts", // 改善17: 手動配置/矩形クランプ
   "telopLayout.ts", // U1-3: 縦位置(telop_y+y_offset+クランプ)と折返しレイアウト
   "overlayItems.ts", // U1-5: overlays の型・正規化・表示区間判定
   "overlayStyles.ts", // U1-5: オーバーレイ4種+captionの見た目定義(配置・配色・フォント)

@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -157,6 +158,26 @@ test("スキップ判定: ハッシュ一致+composition+全セグメント実�
 
   assert.equal(canSkipStep08(run.runDir, inputHash.hash), true);
   assert.equal(readStoredStep08Hash(run.runDir)?.hash, inputHash.hash);
+});
+
+test("old composition cache rebuilds once for corrected directed timing and colors", () => {
+  const root = makeTempDir();
+  try {
+    const run = makeRun(root);
+    const segments = makeComposition(run.runDir, ["seg_existing.mp4"]);
+    const current = computeStep08InputHash(hashInput(run));
+    const previousComponents = { ...current.components, version: 1 };
+    writeStep08InputHash(run.runDir, {
+      components: previousComponents,
+      hash: createHash("sha1").update(JSON.stringify(previousComponents)).digest("hex"),
+    });
+    assert.equal(canSkipStep08(run.runDir, current.hash), false);
+    assert.ok(segments.every((file) => fs.existsSync(file)));
+    writeStep08InputHash(run.runDir, current);
+    assert.equal(canSkipStep08(run.runDir, current.hash), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("スキップ判定: ハッシュファイル無し(旧run)はfalse=従来どおり実行", () => {

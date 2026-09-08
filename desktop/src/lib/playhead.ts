@@ -1,6 +1,6 @@
 // 実行時(値)importのため、node --experimental-strip-types でテストを直接実行できるよう拡張子を明示する。
 import type { Scene, SceneWord } from "./scenes.ts";
-import { findSceneIndexAtMs } from "./scenes.ts";
+import { findSceneIndexAtEditMs } from "./scenes.ts";
 import { buildWordGroups, findBoundaryGroupIndex, type WordGroup } from "./wordGroups.ts";
 
 /**
@@ -45,7 +45,7 @@ export function findBoundaryWordIndex(words: SceneWord[], ms: number): number {
 
 /** 現在の再生バー位置(ms)から、現在シーン内でのチップ境界カーソルを求める。 */
 export function resolveChipCursor(scenes: Scene[], currentMs: number): ChipCursor | null {
-  const sceneIndex = findSceneIndexAtMs(scenes, currentMs);
+  const sceneIndex = findSceneIndexAtEditMs(scenes, currentMs);
   if (sceneIndex === -1) return null;
   return { sceneIndex, wordIndex: findBoundaryWordIndex(scenes[sceneIndex].words, currentMs) };
 }
@@ -146,7 +146,7 @@ export type GroupChipTarget = {
 
 /** 現在の再生バー位置(ms)から、現在シーン内でのグループ境界カーソルを求める。 */
 export function resolveGroupCursor(scenes: Scene[], currentMs: number): GroupCursor | null {
-  const sceneIndex = findSceneIndexAtMs(scenes, currentMs);
+  const sceneIndex = findSceneIndexAtEditMs(scenes, currentMs);
   if (sceneIndex === -1) return null;
   const groups = buildWordGroups(scenes[sceneIndex]);
   return { sceneIndex, groupIndex: findBoundaryGroupIndex(groups, currentMs) };
@@ -235,7 +235,7 @@ export function resolveMatchingCutMark(
   currentMs: number,
   toleranceMs: number = CUT_MARK_TOLERANCE_MS,
 ): { sceneId: string; ms: number } | null {
-  const sceneIndex = findSceneIndexAtMs(scenes, currentMs);
+  const sceneIndex = findSceneIndexAtEditMs(scenes, currentMs);
   if (sceneIndex === -1) return null;
   const scene = scenes[sceneIndex];
   const match = scene.cutMarks.find((mark) => Math.abs(mark - currentMs) <= toleranceMs);

@@ -13,9 +13,12 @@ import {
   HardDrive,
   KeyRound,
   Loader2,
+  MousePointer2,
   Palette,
   Play,
   Save,
+  Undo2,
+  Redo2,
   Scissors,
   Settings,
   SlidersHorizontal,
@@ -26,6 +29,7 @@ import {
   Video,
 } from "lucide-react";
 import { ApiKeyWizard } from "./components/ApiKeyWizard";
+import "./components/EditorToolControls.css";
 // W12-2: ライセンスモーダル(FEATURES.billing ONのときのみ描画)
 import { LicenseModal } from "./components/LicenseModal";
 // W13-1: キャッシュ管理モーダル(派生キャッシュのサイズ表示・削除)
@@ -38,8 +42,8 @@ import { PreviewPlayer, type PreviewPlayerHandle } from "./components/PreviewPla
 import { SceneNavBar, type NavFlagMarker } from "./components/SceneNavBar";
 // フェーズV1(統合タイムラインView): U9のFilmstripStrip/BgmTrackはタイムラインViewへ統合済み
 import { TimelineView } from "./components/timeline/TimelineView";
-import { type BgmState } from "./components/timeline/BgmTrackV2";
-import { type ImagesState } from "./components/timeline/ImageTrack";
+import { SelectionInspector } from "./components/timeline/SelectionInspector";
+import { stepPrecisionFrame } from "./lib/precisionMedia";
 import { SceneRowList, type ChipSelectionState } from "./components/SceneRowList";
 // フェーズW5-8: 要確認パネルのカードへ本物のSceneRowを埋め込む(編集動作の完全一致)
 import { SceneRow } from "./components/SceneRow";
@@ -62,7 +66,7 @@ import { SuspicionQueuePanel } from "./components/SuspicionQueuePanel";
 import { TelopReplaceModal, occurrenceKey } from "./components/TelopReplaceModal";
 import { UserDictionaryModal } from "./components/UserDictionaryModal";
 // W14-2: 編集前→編集後の修正ペア学習(語レベルdiff抽出と学習済み修正の一覧モーダル)
-import { extractCorrectionPairs, type CorrectionHistory } from "./lib/correctionPairs";
+import type { CorrectionHistory } from "./lib/correctionPairs";
 import { CorrectionHistoryModal } from "./components/CorrectionHistoryModal";
 import { TranscriptEditor } from "./components/TranscriptEditor";
 import { nudgeKeepSegmentBoundary, setKeepSegmentBoundaryMs } from "./lib/boundaryNudge";
@@ -70,9 +74,10 @@ import { computeBoundaryOverrunHighlights, findBoundaryHighlightByWordId } from 
 import { isWordInKeepSegments } from "./lib/keepSegments";
 import {
   attachSuspicionsToScenes,
+  computeSceneKeptSubRanges,
   deriveTelopStyleIds,
   findNextSelectionAfterSceneDelete,
-  findSceneIndexAtMs,
+  findSceneIndexAtEditMs,
   findTelopOccurrencesInOtherScenes,
   initializeScenes,
   type Scene,
@@ -92,6 +97,8 @@ import {
   activeOverlaysAtSourceMs,
   mergeOverlayEdits,
   sanitizeTimelineCutRanges,
+  sourceMsToTimelineEditMs,
+  timelineMsToSourceMs,
   type OverlayTextEdit,
 } from "./lib/previewTimeline";
 import { normalizeOverlays, type OverlayItem } from "./lib/overlayItems";
@@ -226,6 +233,19 @@ import {
 } from "./lib/followAlong";
 import { useKeepSegments } from "./hooks/useKeepSegments";
 import { useScenes } from "./hooks/useScenes";
+import { useProjectAutosave } from "./hooks/useProjectAutosave";
+import { useProjectEditor } from "./hooks/useProjectEditor";
+import { useWorkspaceViewport } from "./hooks/useWorkspaceViewport";
+import { deriveKeepSegments, deriveTelopOverrides } from "./lib/scenes";
+import type { EditorSelection } from "./lib/editorSelection";
+import {
+  shouldIgnoreSceneKeyboard,
+  isSceneToolShortcut,
+  isRepeatedSceneCommand,
+  resolveSceneSpaceAction,
+  SCENE_KEYBOARD_DIALOG_SELECTOR,
+  SCENE_EDITING_BUTTON_SELECTOR,
+} from "./lib/sceneKeyboard";
 
 /**
  * Phase A: 検品ファーストUXへの方針転換に伴う機能フラグ。
@@ -1893,6 +1913,7 @@ export function App() {
   // フェーズV1(統合タイムラインView): 右ペインの「シーン検品｜タイムライン」タブ。
   // 初期はシーン検品(従来フロー維持)。プレビュープレイヤーは両タブ共通で上部に常駐する。
   const [reviewTab, setReviewTab] = useState<"scenes" | "timeline">("scenes");
+  const workspaceViewportRef = useWorkspaceViewport(reviewTab === "timeline");
   const [transcriptState, setTranscriptState] = useState<TranscriptState | null>(null);
   const [transcriptApplying, setTranscriptApplying] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1969,6 +1990,9 @@ export function App() {
   // W19-A3: 再生ヘッドの元動画ms(旧previewCurrentMs)はplayheadStoreへ移行した。
   // Appはstateとして持たず、毎フレーム必要なコンポーネントだけがストアを購読する。
   const [sceneApplying, setSceneApplying] = useState(false);
+  const [editorClosing, setEditorClosing] = useState(false);
+  const editorTransitionBusyRef = useRef(false);
+  editorTransitionBusyRef.current = sceneApplying || editorClosing;
   // W19-C5: 適用(step08セグメント抽出)中の進捗%。取れない段(テロップ生成等)はnull=従来表示
   const [sceneApplyProgress, setSceneApplyProgress] = useState<number | null>(null);
   // --- フェーズU1(プレビュー忠実化) ---
@@ -1983,14 +2007,15 @@ export function App() {
   // U1-6: 効果音のミュートトグル(プレビューのみ。書き出しには影響しない)。
   const [sfxMuted, setSfxMuted] = useState(false);
   // --- フェーズU9(BGMトラック) ---
-  // bgm.json由来のクリップ(配信URLつき)とタイムライン総尺。編集はBgmTrackが保存まで行い、
-  // Appは「プレビュー並走(PreviewPlayer)とトラックUIの共有状態」としてだけ保持する。
-  const [bgmState, setBgmState] = useState<BgmState | null>(null);
+  // 映像・テロップ・画像・BGMは共通履歴。ドラッグ中の表示と保存する確定値を分ける。
+  const project = useProjectEditor();
+  const pendingMediaImportsRef = useRef(new Set<Promise<void>>());
+  const [mediaImporting, setMediaImporting] = useState(false);
+  const bgmState = project.state.document.bgm;
   const [bgmMuted, setBgmMuted] = useState(false);
   // --- フェーズV4(画像挿入トラック) ---
-  // images.json由来のクリップ(配信URLつき)。編集はImageTrack/プレビュードラッグが保存まで行い、
-  // Appは「プレビュー描画とトラックUIの共有状態」としてだけ保持する(BGMと同じ持ち方)。
-  const [imagesState, setImagesState] = useState<ImagesState | null>(null);
+  // 画像プレビューもトラックと同じ選択・履歴・自動保存を使う。
+  const imagesState = project.state.document.images;
   // フェーズW9: 映像フレーミング(変形・クロップ)。run正本 video_framing.json のミラー。
   // null=未読込(identity扱い)。commit時に video-framing:save で保存する。
   const [videoFramingState, setVideoFramingState] = useState<Awaited<
@@ -2008,7 +2033,7 @@ export function App() {
   const [primaryFontProfile, setPrimaryFontProfile] = useState<FontProfile | null>(null);
   // --- 検品UI v2(シーン行UI, Phase 2: キーボード操作体系) ---
   // 改善5-6(ハサミモード): 旧「B=行の余白もスクラブ」は廃止し、Bはハサミモードのトグルになった。
-  // ONの間は波形・チップ列のクリックが即分割になる(右クリック切り込みメニューは廃止)。
+  // 波形は2点クリックで区間カット、発話の外側は1クリックで端までカット。チップ列は境界分割。
   const [scissorsMode, setScissorsMode] = useState(false);
   // 改善5-1(ホバー自動スクロールの抑制): <video>が実際に再生中かどうか(play/pauseイベント由来)。
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
@@ -2034,6 +2059,9 @@ export function App() {
   const [showScrollTopButton, setShowScrollTopButton] = useState(false);
   // W10-9: ドラフト復元完了まで自動保存を抑止する。
   const scenesDraftReadyRef = useRef(false);
+  const [scenesDraftReadyRunDir, setScenesDraftReadyRunDir] = useState<string | null>(null);
+  const [editorLoadError, setEditorLoadError] = useState<string | null>(null);
+  const [editorLoadAttempt, setEditorLoadAttempt] = useState(0);
   // W16-5(自動保存インジケータ): ドラフトdebounce保存の状態(保存中/保存済みHH:MM/失敗)。
   const [draftSaveStatus, setDraftSaveStatus] = useState<{
     state: "idle" | "saving" | "saved" | "error";
@@ -2061,6 +2089,7 @@ export function App() {
   } | null>(null);
   // W14-2: 編集前→編集後の修正ペア学習。correctionHistoryは全run横断(userData)。
   const [correctionHistory, setCorrectionHistory] = useState<CorrectionHistory | null>(null);
+  const [editingLearningSummary, setEditingLearningSummary] = useState<Awaited<ReturnType<typeof window.catcut.getEditingLearningSummary>> | null>(null);
   // W28(2026-08-22 実機フィードバック): 「要確認」カードの確認済みチェック(シーンid集合)。
   // 旧W14-2の「編集したら自動で消える」方式は波形・テキストを触った拍子にカードが一瞬で
   // 消えてしまうため廃止し、ユーザーがチェックを入れたカードだけ消す方式にした。
@@ -2102,8 +2131,6 @@ export function App() {
   const [designThemes, setDesignThemes] = useState<DesignTheme[]>([]);
   const isEditingSceneTelopRef = useRef(false);
   const scenePlayStopAtMsRef = useRef<number | null>(null);
-  /** W10-8c: シーン跨ぎ停止判定の許容(ms)。境界付近のフレーム誤差で早止まりしない。 */
-  const SCENE_PLAY_STOP_TOLERANCE_MS = 50;
   const scenesInitializedRunDirRef = useRef<string | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -2144,7 +2171,7 @@ export function App() {
   const pendingWordCorrections = keepSegmentsHistory.wordCorrections;
   const wordCorrectionHistory = keepSegmentsHistory.correctionOriginals;
   // 検品UI v2(シーン行UI): scenes配列を唯一の編集源として管理する(Phase 1)。
-  const scenesHistory = useScenes([]);
+  const scenesHistory = useScenes([], project.sceneHistory);
 
   /** T-1: テーマ切替は全シーン一括反映・プレビュー即反映。ユーザー既定として設定に永続化する。 */
   function handleTelopThemeChange(nextThemeId: TelopThemeId) {
@@ -2400,7 +2427,8 @@ export function App() {
         // プロジェクトを保存するかの確認ダイアログを出す
         if (event.outputs?.finalVideoExists && event.outputs.finalVideo) {
           window.catcut.revealPath(event.outputs.finalVideo);
-          setExportDoneInfo({ runDir: event.outputs.runDir, finalVideo: event.outputs.finalVideo });
+          setExportDoneInfo({ runDir: event.outputs.runDir, finalVideo: event.outputs.finalVideo, learning: event.outputs.learning });
+          window.catcut.getEditingLearningSummary?.().then(setEditingLearningSummary).catch(() => {});
         }
       }
       if (event.type === "job:error") {
@@ -2613,11 +2641,25 @@ export function App() {
   // ref で「最後に初期化したrunDir」を記憶して再初期化を抑止する。
   // W10-9: scene_edits_draft.json があれば composition より優先して静かに復元する。
   useEffect(() => {
-    if (!transcriptState) return;
+    if (!transcriptState) {
+      scenesInitializedRunDirRef.current = null;
+      scenesDraftReadyRef.current = false;
+      setScenesDraftReadyRunDir(null);
+      project.editor.hydrate(null);
+      setEditorLoadError(null);
+      keepSegmentsHistory.reset({
+        keepSegments: [], manualRemovedWordIds: [], wordCorrections: {}, correctionOriginals: {},
+      });
+      return;
+    }
     const runDir = transcriptState.runDir;
     if (scenesInitializedRunDirRef.current === runDir) return;
     scenesInitializedRunDirRef.current = runDir;
     scenesDraftReadyRef.current = false;
+    setScenesDraftReadyRunDir(null);
+    setEditorLoadError(null);
+    setDraftSaveStatus({ state: "idle" });
+    project.editor.hydrate(null);
 
     const baseScenes = initializeScenes({
       words: transcriptState.words,
@@ -2629,13 +2671,19 @@ export function App() {
     let cancelled = false;
     (async () => {
       try {
-        const draft = electronReady ? await window.catcut.loadSceneEditsDraft(runDir) : null;
-        if (cancelled) return;
-        if (draft?.scenes?.length) {
-          scenesHistory.reset(draft.scenes as Scene[]);
-        } else {
-          scenesHistory.reset(baseScenes);
+        // Save the exact initial UI scenes before draft hydration or export changes the AI artifacts.
+        // Failure to save learning evidence must not prevent opening the editing project.
+        if (electronReady && window.catcut.initializeEditingLearning) {
+          await window.catcut.initializeEditingLearning({ runDir, scenes: baseScenes }).catch(() => undefined);
+          if (cancelled) return;
         }
+        const [draft, images, bgm] = electronReady ? await Promise.all([
+          window.catcut.loadSceneEditsDraft(runDir),
+          window.catcut.listImages({ runDir }),
+          window.catcut.listBgm({ runDir }),
+        ]) : [null, null, null];
+        if (cancelled) return;
+        project.editor.hydrate(runDir, { scenes: draft?.scenes?.length ? draft.scenes as Scene[] : baseScenes, images, bgm });
         // W11-2(適用ボタン廃止): scenes から導出できない編集もドラフトから復元する。
         // 旧ドラフト(1.0.0)は空辞書が返る=従来と同じ初期状態。
         const draftOverlayEdits = draft?.overlayEdits ?? {};
@@ -2644,56 +2692,99 @@ export function App() {
         setSceneCustomStyles(draftCustomStyles);
         // カスタムスタイルはランタイム辞書へ登録しないとプレビューのスタイル解決が既定に落ちる
         if (Object.keys(draftCustomStyles).length > 0) registerRuntimeStyles(draftCustomStyles);
-      } catch {
-        if (!cancelled) scenesHistory.reset(baseScenes);
-      } finally {
-        if (!cancelled) scenesDraftReadyRef.current = true;
+        scenesDraftReadyRef.current = true;
+        setScenesDraftReadyRunDir(runDir);
+      } catch (error) {
+        if (!cancelled) {
+          scenesInitializedRunDirRef.current = null;
+          setEditorLoadError(`編集データを読み込めませんでした。${error instanceof Error ? error.message : String(error)}`);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
+      if (!scenesDraftReadyRef.current && scenesInitializedRunDirRef.current === runDir) {
+        scenesInitializedRunDirRef.current = null;
+      }
     };
-  }, [electronReady, scenesHistory, transcriptState]);
+    // reset is stable. Ordinary edits/rerenders must not cancel an in-flight draft load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [electronReady, transcriptState?.runDir, editorLoadAttempt]);
 
   // W10-9: scenes/keepSegments の変更を debounce 2秒で scene_edits_draft.json へ自動保存する。
   // W11-2(適用ボタン廃止): applySceneEdits の送信内容のうち scenes から導出できない
   // overlayEdits / sceneCustomStyles も保存対象に含める(それ以外の telopOverrides /
   // directedSlots 等は scenes と永続設定から導出できる)。
-  useEffect(() => {
-    if (!electronReady || !transcriptState?.runDir || !scenesDraftReadyRef.current) return;
-    const runDir = transcriptState.runDir;
-    const timer = window.setTimeout(() => {
-      // W16-5: 保存状態をツールバーの小さなインジケータに反映する。
-      setDraftSaveStatus({ state: "saving" });
-      window.catcut
-        .saveSceneEditsDraft({
-          runDir,
-          scenes: scenesHistory.scenes,
-          keepSegments: scenesHistory.keepSegments,
-          overlayEdits,
-          customStyles: sceneCustomStyles,
-        })
-        .then(() => {
-          const now = new Date();
-          const hh = String(now.getHours()).padStart(2, "0");
-          const mm = String(now.getMinutes()).padStart(2, "0");
-          setDraftSaveStatus({ state: "saved", savedAt: `${hh}:${mm}` });
-        })
-        .catch(() => {
-          setDraftSaveStatus({ state: "error" });
-          setInspectionCopyToast("自動保存に失敗しました（ディスク容量等）");
-        });
-    }, 2000);
-    return () => window.clearTimeout(timer);
+  const sceneDraft = useMemo(() => {
+    if (!electronReady || !transcriptState?.runDir || !scenesDraftReadyRef.current ||
+        scenesDraftReadyRunDir !== transcriptState.runDir) return null;
+    return {
+      runDir: transcriptState.runDir,
+      scenes: scenesHistory.scenes,
+      keepSegments: scenesHistory.keepSegments,
+      overlayEdits,
+      customStyles: sceneCustomStyles,
+    };
   }, [
     electronReady,
     overlayEdits,
     sceneCustomStyles,
     scenesHistory.keepSegments,
     scenesHistory.scenes,
+    scenesDraftReadyRunDir,
     transcriptState?.runDir,
   ]);
+  const latestSceneDraftRef = useRef(sceneDraft);
+  latestSceneDraftRef.current = sceneDraft;
+  const projectSaveSnapshot = useMemo(() => sceneDraft ? ({
+    draft: sceneDraft, images: project.state.history.present.images, bgm: project.state.history.present.bgm,
+  }) : null, [sceneDraft, project.state.history.present.images, project.state.history.present.bgm]);
+  const flushProjectSave = useProjectAutosave(projectSaveSnapshot, setDraftSaveStatus, () => {
+    setInspectionCopyToast("自動保存に失敗しました。「再試行」から保存し直せます。");
+  });
+  async function flushSceneDraft(skipImport?: Promise<void>) {
+    if (!sceneDraft) throw new Error("編集データの読み込みが完了していません。");
+    await Promise.all([...pendingMediaImportsRef.current].filter((pending) => pending !== skipImport));
+    const draft = latestSceneDraftRef.current;
+    if (!draft || draft.runDir !== sceneDraft.runDir) throw new Error("プロジェクトの切り替え中です。");
+    project.editor.commitPreview();
+    const latest = project.editor.getSnapshot();
+    if (latest.runDir !== sceneDraft.runDir) throw new Error("プロジェクトの切り替え中です。");
+    const snapshot = {
+      draft: latest.document.scenes === draft.scenes ? draft : {
+        ...draft, scenes: latest.document.scenes, keepSegments: deriveKeepSegments(latest.document.scenes),
+      },
+      images: latest.history.present.images, bgm: latest.history.present.bgm,
+    };
+    await flushProjectSave(snapshot);
+    return snapshot;
+  }
+  async function beginMediaImport(): Promise<() => void> {
+    let complete!: () => void;
+    const pending = new Promise<void>((resolve) => { complete = resolve; });
+    pendingMediaImportsRef.current.add(pending);
+    setMediaImporting(true);
+    const finish = () => {
+      pendingMediaImportsRef.current.delete(pending);
+      complete();
+      setMediaImporting(pendingMediaImportsRef.current.size > 0);
+    };
+    try {
+      // Register before the pre-import save so navigation cannot slip through that wait.
+      await flushSceneDraft(pending);
+      return finish;
+    } catch (error) {
+      finish();
+      throw error;
+    }
+  }
+  function handleEditorSelection(selection: EditorSelection) {
+    telopEditSessionRef.current = null;
+    project.editor.select(selection);
+    setChipSelection(null);
+    setSelectedSceneId(null);
+  }
 
   // W14-2: 全run横断の修正ペア履歴(userData/correction_history.json)を読み込む。
   // 無ければ空履歴=完全従来動作(後方互換)。
@@ -2703,6 +2794,7 @@ export function App() {
       .getCorrectionHistory()
       .then(setCorrectionHistory)
       .catch(() => {});
+    window.catcut.getEditingLearningSummary?.().then(setEditingLearningSummary).catch(() => {});
   }, [electronReady]);
 
   // W16-6(スリープ/バックグラウンドのCPU対策): スリープ・画面ロック(main→power:suspend)と
@@ -2910,22 +3002,16 @@ export function App() {
    * W19-B3: 「AI修正を一括適用」。suggestion付きの全項目(suspect_word / final_check /
    * correction_history / retranscribe)のうち現在本文にsurfaceが実在するものを順に適用する。
    * - Undo履歴は1エントリ(setTelopTextBulkがsetPresentを1回だけ呼ぶ)=Cmd+Zで全件戻る
-   * - 変更シーンごとに修正ペアを学習記録する(単発の[適用]ボタンと同じ扱い=編集済みマーク)
+   * - 学習事例は書き出し成功時に確定する（取り消したAI提案を正解へ混ぜない）
    * - blur経路を通らないためTelopReplaceModal(一括置換ポップアップ)は開かない
    * - 適用できなかった項目は残件としてパネルに残る
    */
   function handleBulkApplyAiFixes() {
     const plan = planBulkApplyAiFixes(reviewHotspots);
     if (!plan.appliedCount) return;
-    const sceneById = new Map(scenesHistory.scenes.map((scene) => [scene.id, scene]));
     sceneActionsRef.current.setTelopTextBulk(
       plan.sceneEdits.map((edit) => ({ sceneId: edit.sceneId, text: edit.afterText })),
     );
-    for (const edit of plan.sceneEdits) {
-      const scene = sceneById.get(edit.sceneId);
-      const source = scene ? scene.words.map((word) => word.text).join("") : "";
-      recordTelopEditForLearning(edit.sceneId, source, edit.beforeText, edit.afterText);
-    }
     setInspectionCopyToast(`AI修正を${plan.appliedCount}件適用しました（Cmd+Zで戻せます）`);
   }
 
@@ -3006,7 +3092,7 @@ export function App() {
       minDurationMs: MIN_SCENE_DURATION_MS,
       chipSnapToleranceMs,
       sourceDurationMs: transcriptState?.originalDurationMs,
-      keepSingleScene: scissorsMode,
+      keepSingleScene: false,
     });
     // カットで対象シーンの単語構成・グループindexが変わるため、古いチップ選択・確定キャレットを
     // 残さない(以降のDelete/Backspaceが別の位置に当たる事故を防ぐ)。
@@ -3021,7 +3107,7 @@ export function App() {
   useEffect(() => {
     const scenes = scenesHistory.scenes;
     const update = () => {
-      const index = findSceneIndexAtMs(scenes, playheadStore.getSourceMs());
+      const index = findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
       setCurrentSceneId(index >= 0 ? scenes[index].id : null);
     };
     update();
@@ -3143,9 +3229,10 @@ export function App() {
     () => shiftTimelineCutRanges(timelineCutRanges, opShiftMs),
     [timelineCutRanges, opShiftMs],
   );
+  const sceneKeepsReady = !!transcriptState && scenesDraftReadyRunDir === transcriptState.runDir;
   const editedTimelineCutRanges = useMemo(
-    () => compactRangesToKeepSegments(shiftedTimelineCutRanges, scenesHistory.keepSegments),
-    [shiftedTimelineCutRanges, scenesHistory.keepSegments],
+    () => compactRangesToKeepSegments(shiftedTimelineCutRanges, scenesHistory.keepSegments, { keepSegmentsReady: sceneKeepsReady }),
+    [shiftedTimelineCutRanges, scenesHistory.keepSegments, sceneKeepsReady],
   );
   // リップル削除で縮んだ分をルーラー総尺にも反映する
   const editedTimelineDurationMs = useMemo(
@@ -3157,6 +3244,9 @@ export function App() {
       ),
     [transcriptState?.timelineDurationMs, opShiftMs, shiftedTimelineCutRanges, editedTimelineCutRanges],
   );
+  const timelineEditingRef = useRef({ ranges: editedTimelineCutRanges, durationMs: editedTimelineDurationMs, fps: transcriptState?.timelineFps ?? 30 });
+  timelineEditingRef.current = { ranges: editedTimelineCutRanges, durationMs: editedTimelineDurationMs, fps: transcriptState?.timelineFps ?? 30 };
+
   // W19-A3: 表示中オーバーレイの解決は再生ヘッド依存のためplayheadStoreを購読し、
   // 「表示すべきアイテムの組が実際に変わった時だけ」setStateする(オーバーレイ境界跨ぎ時のみ
   // App再レンダリング。マージ済みアイテムの参照は効果内で固定なので同一組=同一要素参照)。
@@ -3224,12 +3314,14 @@ export function App() {
 
   function handleScenePreviewTimeUpdate(currentMs: number) {
     maxReachedMsRef.current = Math.max(maxReachedMsRef.current, currentMs);
-    // W19-A3: 毎フレームのsetStateをやめ、playheadStoreへ書く(App全体は再レンダリングされない)。
-    if (!isEditingSceneTelopRef.current) playheadStore.setSourceMs(currentMs);
     const stopAtMs = scenePlayStopAtMsRef.current;
-    if (stopAtMs != null && currentMs >= stopAtMs - SCENE_PLAY_STOP_TOLERANCE_MS) {
+    const reachedRowEnd = stopAtMs != null && currentMs >= stopAtMs;
+    // 行再生のOUT点を先に確定し、次の行を一瞬ハイライトすることを防ぐ。
+    if (!isEditingSceneTelopRef.current) playheadStore.setSourceMs(reachedRowEnd ? stopAtMs : currentMs);
+    if (reachedRowEnd) {
       scenePlayStopAtMsRef.current = null;
       previewPlayerRef.current?.pause();
+      previewPlayerRef.current?.seekTo(stopAtMs);
     }
   }
 
@@ -3250,8 +3342,10 @@ export function App() {
     // 明示している導線(Tab・要確認パネルの▶)だけにする。
     // 予約はseekToの後に設定する(OP静止エントリ離脱のseekToは停止通知を出し、
     // handlePreviewPlayingChangeが停止予約を掃除するため、先に設定すると消える)。
-    player.seekTo(scene.sourceStartMs);
-    scenePlayStopAtMsRef.current = options.stopAtEnd ? scene.sourceEndMs : null;
+    const kept = computeSceneKeptSubRanges(scene);
+    if (!kept.length) return;
+    player.seekTo(kept[0].startMs);
+    scenePlayStopAtMsRef.current = options.stopAtEnd ? kept[kept.length - 1].endMs : null;
     player.play();
   }
 
@@ -3309,6 +3403,10 @@ export function App() {
    * 位置が変わった以上もう有効でない確定キャレットは解除する(←→キー等は解除後に再設定する)。
    */
   function seekScenePlayhead(ms: number) {
+    hoverSeekThrottleRef.current?.cancel();
+    hoverPlayArmedRef.current = false;
+    playheadStore.setSourceMs(ms);
+    playheadStore.setTimelineMs(sourceMsToTimelineEditMs(timelineEditingRef.current.ranges, ms));
     setTranscriptSeekMs(ms);
     deleteAnchorMsRef.current = ms;
     setConfirmedCaret(null);
@@ -3337,6 +3435,47 @@ export function App() {
       }, HOVER_SEEK_THROTTLE_MS);
     }
     hoverSeekThrottleRef.current.request(ms);
+  }
+
+  function handleWaveformGestureStart() {
+    hoverSeekThrottleRef.current?.cancel();
+    hoverPlayArmedRef.current = false;
+    pauseIfPlaying();
+    setPlaybackScrollSuppressed(true);
+  }
+
+  function seekTimelinePlayhead(ms: number) {
+    const { durationMs } = timelineEditingRef.current;
+    const next = Math.max(0, Math.min(durationMs, ms));
+    handleWaveformGestureStart();
+    setChipSelection(null);
+    setConfirmedCaret(null);
+    playheadStore.setTimelineMs(next);
+    setTimelineSeekMs(next);
+  }
+
+  function stepTimelinePlayhead(direction: 1 | -1, frames: number) {
+    const { ranges, fps } = timelineEditingRef.current;
+    const current = playheadStore.getTimelineMs() ?? sourceMsToTimelineEditMs(ranges, playheadStore.getSourceMs()) ?? 0;
+    seekTimelinePlayhead(stepPrecisionFrame(current, direction, fps, frames));
+  }
+
+  function splitTimelineAtPlayhead() {
+    handleWaveformGestureStart();
+    const scenes = sceneActionsRef.current.scenes;
+    const timelineMs = playheadStore.getTimelineMs();
+    const ranges = timelineEditingRef.current.ranges;
+    const endpoint = ranges.find((range) => timelineMs === range.timelineEndMs);
+    const ms = timelineMs == null ? playheadStore.getSourceMs() : timelineMsToSourceMs(ranges, timelineMs) ?? endpoint?.sourceEndMs ?? playheadStore.getSourceMs();
+    const index = findSceneIndexAtEditMs(scenes, ms);
+    const scene = scenes[index];
+    // OPの再生位置は本編の素材時間と重複するため、本編の区間内に限る。
+    if (!scene || (timelineMs != null && !timelineEditingRef.current.ranges.some((range) => timelineMs >= range.timelineStartMs && timelineMs <= range.timelineEndMs))) return;
+    if (ms <= scene.sourceStartMs || ms >= scene.sourceEndMs) return;
+    setChipSelection(null);
+    setConfirmedCaret(null);
+    sceneActionsRef.current.splitAtMs(scene.id, ms, { allowEmptySpeechSide: true });
+    seekScenePlayhead(ms);
   }
 
   // アンマウント時に保留中のtrailingシークを破棄する
@@ -3552,7 +3691,7 @@ export function App() {
    *  無音チップを選択するだけで「無音のところでBを入れても分割できない」原因だった)。
    *  無音チップの選択→Delete削除はチップ列クリック(SceneRowのhandleChipClick)が引き続き担う。 */
   function handleScissorsCutAtMs(sceneId: string, ms: number) {
-    sceneActionsRef.current.splitAtMs(sceneId, ms);
+    sceneActionsRef.current.splitAtMs(sceneId, ms, { allowEmptySpeechSide: true });
     seekScenePlayhead(ms);
   }
 
@@ -3583,36 +3722,24 @@ export function App() {
    * する。これでCmd+Z一発で「編集開始前」まで戻せる(旧実装は1文字=1Undoエントリだった)。
    * セッション中にCmd+Zした場合はセッションを打ち切り、以後の入力は新しいエントリになる。
    */
-  const telopEditSessionRef = useRef<{ sceneId: string; pushed: boolean } | null>(null);
+  const telopEditSessionRef = useRef<{
+    sceneId: string; snapshot: ReturnType<typeof project.editor.getSnapshot>["history"]["present"];
+  } | null>(null);
   function handleTelopChangeLive(sceneId: string, text: string) {
     const session = telopEditSessionRef.current;
-    if (session && session.sceneId === sceneId && session.pushed) {
+    if (session && session.sceneId === sceneId && session.snapshot === project.editor.getSnapshot().history.present) {
       sceneActionsRef.current.replaceTelopText(sceneId, text);
+      session.snapshot = project.editor.getSnapshot().history.present;
       return;
     }
-    telopEditSessionRef.current = { sceneId, pushed: true };
     sceneActionsRef.current.setTelopText(sceneId, text);
+    telopEditSessionRef.current = { sceneId, snapshot: project.editor.getSnapshot().history.present };
   }
 
   /**
    * 改善5-7(一括置換ポップアップ): テロップ編集確定(blur)。フォーカス時点のテキストとの差分から
    * 単語置換(A→B)を検出し、Aが他シーンにも出現する場合だけ確認ポップアップを出す。
    */
-  /**
-   * W14-2: テロップ編集確定を学習として自動記録する(設定・ボタンなしの無操作蓄積)。
-   * run正本 edit_history.json と userData/correction_history.json をmain側で同時更新し、
-   * 応答で「学習済み修正: N件」の表示を最新化する。失敗しても編集自体は妨げない。
-   */
-  function recordTelopEditForLearning(sceneId: string, source: string, before: string, after: string) {
-    const runDir = transcriptState?.runDir;
-    if (!electronReady || !runDir) return;
-    const pairs = extractCorrectionPairs(before, after);
-    window.catcut
-      .recordTelopEditLearning({ runDir, sceneId, source, before, after, pairs })
-      .then((result) => setCorrectionHistory(result.correctionHistory))
-      .catch(() => {});
-  }
-
   function handleTelopBlur(sceneId: string) {
     // W16-5: blurで編集セッションを閉じる(次のfocus→入力は新しいUndoエントリになる)。
     telopEditSessionRef.current = null;
@@ -3623,11 +3750,7 @@ export function App() {
     if (!scene) return;
     const after = scene.telopText;
     if (before === after) return;
-    // W14-2: 編集前→編集後の修正ペアを自動蓄積する(一括置換ポップアップの判定とは独立)。
-    // W15: 元テキスト(そのシーンのSTT生テキスト。削除済みワードも含む)も併せて記録し、
-    // 開発機での再学習・評価(元→表示→編集後の3層比較)に使う。
-    const source = scene.words.map((word) => word.text).join("");
-    recordTelopEditForLearning(sceneId, source, before, after);
+    // The draft preserves this edit. Learning is confirmed from the successful export snapshot.
     const replacement = detectTelopWordReplacement(before, after);
     if (!replacement) return;
     const occurrences = findTelopOccurrencesInOtherScenes(sceneActionsRef.current.scenes, sceneId, replacement.from);
@@ -3725,7 +3848,7 @@ export function App() {
     }
     const nowMs = anchor.ms;
     if (isGroupCursorAtLineStart(scenes, nowMs)) {
-      const sceneIndex = findSceneIndexAtMs(scenes, nowMs);
+      const sceneIndex = findSceneIndexAtEditMs(scenes, nowMs);
       if (sceneIndex > 0) sceneActionsRef.current.mergeWithNext(scenes[sceneIndex - 1].id);
       return;
     }
@@ -3750,18 +3873,10 @@ export function App() {
     if (target) sceneActionsRef.current.setChipGroupDeletedState(target.sceneId, target.wordIds, true);
   }
 
-  /**
-   * V6-2(タイムラインでのシーンDelete): 選択中(=再生ヘッド位置)のシーンを丸ごと削除する。
-   * シーン検品のチップ削除と同じハンドラ(setChipGroupDeletedState=Undo対応)で全単語を
-   * deletedにするため、scenes stateを共有する全トラック(テロップ/映像ブロック)が即時連動する。
-   */
+  /** Delete always acts on the explicitly selected track clip, independent of playback. */
   function handleTimelineSceneDelete() {
-    const scenes = sceneActionsRef.current.scenes;
-    const sceneIndex = findSceneIndexAtMs(scenes, playheadStore.getSourceMs());
-    if (sceneIndex === -1) return;
-    const scene = scenes[sceneIndex];
-    const wordIds = scene.words.filter((word) => !word.deleted).map((word) => word.id);
-    if (wordIds.length) sceneActionsRef.current.setChipGroupDeletedState(scene.id, wordIds, true);
+    telopEditSessionRef.current = null;
+    project.editor.deleteSelected();
   }
 
   /**
@@ -3775,6 +3890,7 @@ export function App() {
    * (選択チップから後ろが新シーンになる)。分割後は下側(新シーン)の先頭へ再生バーを送る。
    */
   function handleSceneEnterSplit() {
+    if (reviewTabRef.current === "timeline") { splitTimelineAtPlayhead(); return; }
     const scenes = sceneActionsRef.current.scenes;
     const selection = chipSelectionRef.current;
     if (selection) {
@@ -3824,7 +3940,7 @@ export function App() {
     const preferredId = preferredSceneId ?? activeSceneIdRef.current;
     const preferredIndex = preferredId ? scenes.findIndex((scene) => scene.id === preferredId) : -1;
     const sceneIndex =
-      preferredIndex !== -1 ? preferredIndex : findSceneIndexAtMs(scenes, playheadStore.getSourceMs());
+      preferredIndex !== -1 ? preferredIndex : findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
     if (sceneIndex !== -1) sceneActionsRef.current.mergeWithNext(scenes[sceneIndex].id);
     // W16-4: 行結合でグループ境界が変わるため確定キャレットは解除する。
     setConfirmedCaret(null);
@@ -3884,7 +4000,7 @@ export function App() {
   function handleSceneAdjacentRow(direction: 1 | -1) {
     const scenes = sceneActionsRef.current.scenes;
     const nowMs = playheadStore.getSourceMs();
-    const sceneIndex = findSceneIndexAtMs(scenes, nowMs);
+    const sceneIndex = findSceneIndexAtEditMs(scenes, nowMs);
     const currentId = sceneIndex !== -1 ? scenes[sceneIndex].id : null;
     const targetId = findAdjacentSceneId(displayedScenesRef.current, currentId, direction);
     if (!targetId) return;
@@ -3895,7 +4011,7 @@ export function App() {
   /** Tab: 現在行だけ再生する(行末で自動停止。既存playSceneを流用)。 */
   function handleScenePlayCurrentRow() {
     const scenes = sceneActionsRef.current.scenes;
-    const sceneIndex = findSceneIndexAtMs(scenes, playheadStore.getSourceMs());
+    const sceneIndex = findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
     if (sceneIndex !== -1) playScene(scenes[sceneIndex], { stopAtEnd: true });
   }
 
@@ -3904,15 +4020,26 @@ export function App() {
     if (reviewStage !== "transcript") return undefined;
 
     const onSceneKeyDown = (event: KeyboardEvent) => {
+      if (editorTransitionBusyRef.current) return;
       // IME変換中のEnter/Spaceなどは一切奪わない。
       if (event.isComposing || event.keyCode === 229) return;
       const target = event.target as HTMLElement | null;
+      if (shouldIgnoreSceneKeyboard({
+        key: event.key, metaKey: event.metaKey, ctrlKey: event.ctrlKey, altKey: event.altKey,
+        isComposing: event.isComposing, keyCode: event.keyCode, defaultPrevented: event.defaultPrevented,
+        hasOpenDialog: Boolean(document.querySelector(SCENE_KEYBOARD_DIALOG_SELECTOR)),
+        tagName: target?.tagName, isContentEditable: target?.isContentEditable,
+        inputType: target instanceof HTMLInputElement ? target.type : undefined,
+        isSceneTelopInput: target?.classList.contains("sceneTelopInput"),
+        isSceneEditingButton: Boolean(target?.closest(SCENE_EDITING_BUTTON_SELECTOR)),
+        isWorkspaceControl: Boolean(target?.closest(".sceneWorkspaceSection")),
+      })) return;
       // テキスト枠(textarea)に入力フォーカスがある間はグローバルキーを一切奪わない。
       // ツールバーのボタン(元に戻す/書き出し等、シーン行の外側)にフォーカスがある場合も
       // ネイティブのクリック操作を優先する。ただしチップ/この行だけ再生ボタンはシーン行内の
       // 主要な操作導線なので除外しない(クリック後にフォーカスが残っても後続のキー操作を妨げない)。
       const isTypingTarget =
-        !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+        !!target && ((target.tagName === "INPUT" && !(target instanceof HTMLInputElement && target.type === "range")) || target.tagName === "TEXTAREA" || target.isContentEditable);
       const isOutsideRowControlTarget =
         !!target && (target.tagName === "BUTTON" || target.tagName === "SELECT") && !target.closest(".sceneRow");
 
@@ -3934,19 +4061,27 @@ export function App() {
         return;
       }
 
-      if (isTypingTarget || isOutsideRowControlTarget) return;
+      if (isTypingTarget) return;
+      const selectedKind = project.editor.getSnapshot().selection?.kind;
+      const selectedMedia = selectedKind === "image" || selectedKind === "bgm";
+      if (isOutsideRowControlTarget && !isSceneToolShortcut(event) && !((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")) return;
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        telopEditSessionRef.current = null;
         event.preventDefault();
         if (event.shiftKey) sceneActionsRef.current.redo();
         else sceneActionsRef.current.undo();
         return;
       }
+      if (selectedMedia && (event.key === "Enter" || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "m"))) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "m") {
         event.preventDefault();
         handleSceneMergeWithNext();
         return;
       }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isRepeatedSceneCommand(event.key, event.repeat)) { event.preventDefault(); return; }
 
       switch (event.key) {
         case " ":
@@ -3954,31 +4089,32 @@ export function App() {
           event.preventDefault();
           const player = previewPlayerRef.current;
           if (!player) return;
+          const hoveredSceneId = hoveredSceneIdRef.current;
+          const scenes = sceneActionsRef.current.scenes;
+          const hoveredScene = scenes.find((scene) => scene.id === hoveredSceneId);
+          const currentIndex = findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
+          const currentSceneIdNow = currentIndex !== -1 ? scenes[currentIndex].id : null;
+          const action = resolveSceneSpaceAction(player.isPaused(), hoverPlayArmedRef.current, Boolean(hoveredScene && hoveredSceneId !== currentSceneIdNow));
+          if (action === "pause") {
+            player.pause();
+            hoverPlayArmedRef.current = false;
+            playheadStore.setSourceMs(player.getCurrentTimeMs());
+            setPlaybackScrollSuppressed(true);
+            return;
+          }
           // 改善5-9(ホバー行からSpace再生): 行に乗せ直した直後(armed)にSpaceを押した場合のみ、
           // その行の先頭から再生する。W21: マウスを置いたままの再生→停止→再生は従来通りの
           // トグル(=停止位置からの再開)にする(前の行へ毎回巻き戻る問題の修正)。
-          const hoveredSceneId = hoveredSceneIdRef.current;
-          if (hoveredSceneId && hoverPlayArmedRef.current) {
-            const scenes = sceneActionsRef.current.scenes;
-            const hoveredScene = scenes.find((item) => item.id === hoveredSceneId);
-            const currentIndex = findSceneIndexAtMs(scenes, playheadStore.getSourceMs());
-            const currentSceneIdNow = currentIndex !== -1 ? scenes[currentIndex].id : null;
-            if (hoveredScene && hoveredSceneId !== currentSceneIdNow) {
+          if (action === "play-hovered") {
+            if (hoveredScene) {
               hoverPlayArmedRef.current = false;
               isEditingSceneTelopRef.current = false;
               playScene(hoveredScene, { suppressAutoScroll: hoveredFromHotspotRef.current });
               return;
             }
           }
-          if (player.isPaused()) {
-            isEditingSceneTelopRef.current = false;
-            player.play();
-          } else {
-            player.pause();
-            playheadStore.setSourceMs(player.getCurrentTimeMs());
-            // W10-8b: 一時停止後の追従スクロールで編集シーンへ飛ばないよう抑制を維持する。
-            setPlaybackScrollSuppressed(true);
-          }
+          isEditingSceneTelopRef.current = false;
+          player.play();
           return;
         }
         case "l":
@@ -4004,6 +4140,12 @@ export function App() {
           return;
         }
         case "Escape": {
+          if (project.editor.getSnapshot().selection || project.editor.getSnapshot().preview) {
+            event.preventDefault();
+            project.editor.cancelPreview();
+            project.editor.select(null);
+            return;
+          }
           if (chipSelectionRef.current) {
             event.preventDefault();
             setChipSelection(null);
@@ -4030,11 +4172,13 @@ export function App() {
         case "ArrowLeft":
           event.preventDefault();
           // W10-2: Shift+←はチップ選択の拡張/縮小(通常の←は従来どおり再生バー移動)。
+          if (reviewTabRef.current === "timeline") { stepTimelinePlayhead(-1, event.shiftKey ? 10 : 1); return; }
           if (event.shiftKey) handleChipSelectionShiftExtend(-1);
           else handleSceneAdjacentChip(-1);
           return;
         case "ArrowRight":
           event.preventDefault();
+          if (reviewTabRef.current === "timeline") { stepTimelinePlayhead(1, event.shiftKey ? 10 : 1); return; }
           if (event.shiftKey) handleChipSelectionShiftExtend(1);
           else handleSceneAdjacentChip(1);
           return;
@@ -4052,7 +4196,7 @@ export function App() {
           // W10-1: シーン選択(行番号チップ)中は丸ごと削除+直前の未削除シーンへ連鎖選択。
           // W16-4: アンカーが解決できない(ホバーで通っただけ等)場合は何も削除しない。
           event.preventDefault();
-          if (reviewTabRef.current === "timeline") {
+          if (reviewTabRef.current === "timeline" || selectedMedia) {
             handleTimelineSceneDelete();
             return;
           }
@@ -4074,7 +4218,7 @@ export function App() {
           // V6-2: タイムラインタブではBackspaceと同じくシーン削除。
           // W10-1: シーン選択中はBackspaceと同じく丸ごと削除+連鎖選択。
           event.preventDefault();
-          if (reviewTabRef.current === "timeline") {
+          if (reviewTabRef.current === "timeline" || selectedMedia) {
             handleTimelineSceneDelete();
             return;
           }
@@ -4109,24 +4253,33 @@ export function App() {
 
   async function applySceneEdits() {
     if (!transcriptState) return null;
+    if (!sceneDraft) {
+      setError("編集データを読み込み中です。読み込み完了後にもう一度お試しください。");
+      return null;
+    }
     setSceneApplying(true);
     setSceneApplyProgress(null);
     setError("");
     try {
+      const saved = await flushSceneDraft();
+      const exportScenes = saved.draft.scenes;
+      const exportKeepSegments = deriveKeepSegments(exportScenes);
+      const sceneTelopPositions = exportScenes.map((scene) => ({ startMs: scene.sourceStartMs, endMs: scene.sourceEndMs, telopPosition: scene.telopPosition }));
       // フェーズT2(directedモード): テーマ×感情(T-5)経路は使わず、シーン編集を
       // directedスロット(文言・スタイルID・強調語・絶対ms範囲)としてmainへ送る。
       // main側が telop_directives.json を差し替えてから step08 を再実行する。
       if (isDirectedTelopMode) {
         const result = await window.catcut.applyTranscriptEdits({
           runDir: transcriptState.runDir,
-          keepSegments: scenesHistory.keepSegments,
+          keepSegments: exportKeepSegments,
+          sceneTelopPositions,
           corrections: [],
-          directedSlots: deriveDirectedSlots(scenesHistory.scenes, telopTypeMapping, activeSpeakerColors),
+          directedSlots: deriveDirectedSlots(exportScenes, telopTypeMapping, activeSpeakerColors),
           // U1-5: プレビューでのオーバーレイ文言編集をdirectives(chapters/overlays)へ書き戻す。
-          overlayEdits: Object.entries(overlayEdits).map(([id, edit]) => ({ id, ...edit })),
+          overlayEdits: Object.entries(saved.draft.overlayEdits).map(([id, edit]) => ({ id, ...edit })),
           // フェーズU6: シーン個別カスタムスタイルの定義(custom_scene_*)。main側が
           // telop_directives.json の custom_styles へマージし step08 が composition へ注入する。
-          customStyles: sceneCustomStyles,
+          customStyles: saved.draft.customStyles,
         });
         // 適用後はcompositionが再生成されるため、ローカルのオーバーレイ上書きはクリアする。
         setOverlayEdits({});
@@ -4145,11 +4298,11 @@ export function App() {
         });
         setTelopText(result.review.telopText);
         setFontDirectives(result.review.fontDirectivesText);
-        return result;
+        return { ...result, learningSnapshot: { scenes: exportScenes, keepSegments: exportKeepSegments } };
       }
       // T-5: scenesから導出したcut単位のスタイルID配列と、実際に使うスタイルの辞書一式を
       // 一緒に送る(main側はtelop.txtへの@styleディレクティブ注入とtelop_style_plan.json書き込みに使う)。
-      const telopStyleIdsByCut = deriveTelopStyleIds(scenesHistory.scenes, telopThemeId);
+      const telopStyleIdsByCut = deriveTelopStyleIds(exportScenes, telopThemeId);
       const telopStylePlan = buildTelopStylePlan(
         telopStyleIdsByCut,
         transcriptState.telopFontSize || 52,
@@ -4157,9 +4310,10 @@ export function App() {
       );
       const result = await window.catcut.applyTranscriptEdits({
         runDir: transcriptState.runDir,
-        keepSegments: scenesHistory.keepSegments,
+        keepSegments: exportKeepSegments,
+        sceneTelopPositions,
         corrections: [],
-        telopOverrides: scenesHistory.telopOverrides,
+        telopOverrides: deriveTelopOverrides(exportScenes),
         telopStyleIdsByCut,
         telopStylePlan,
       });
@@ -4178,7 +4332,7 @@ export function App() {
       });
       setTelopText(result.review.telopText);
       setFontDirectives(result.review.fontDirectivesText);
-      return result;
+      return { ...result, learningSnapshot: { scenes: exportScenes, keepSegments: exportKeepSegments } };
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       return null;
@@ -4207,6 +4361,7 @@ export function App() {
     const exportResult = await window.catcut.startExport({
       runDir: result.transcript.runDir,
       renderFinal: true,
+      learningSnapshot: result.learningSnapshot,
       outputPath: buildExportOutputPath(value.directory, value.fileName, videoPath),
       ...(targetShortSide ? { targetShortSide } : {}),
       // W11-1b: HWエンコードON時は crf 指定不可(Remotionの制約)のため、
@@ -4295,16 +4450,35 @@ export function App() {
     }
   }
 
-  /** 検品画面を閉じてプロジェクト一覧に戻る(W11-2: 編集はドラフトへ自動保存済み) */
-  function closeReviewToProjects() {
+  /** Save the latest edit before leaving; a failed save must keep the editor open. */
+  async function closeReviewToProjects() {
+    if (editorTransitionBusyRef.current) return;
     const ok = window.confirm(
-      "検品画面を閉じてプロジェクト一覧に戻りますか？\n編集はドラフトに自動保存されています(書き出し時に自動で適用されます)。",
+      "編集を保存してプロジェクト一覧に戻りますか？\n保存した編集は書き出し時に自動で適用されます。",
     );
     if (!ok) return;
+    setEditorClosing(true);
+    try {
+      if (!editorLoadError) await flushSceneDraft();
+    } catch (err) {
+      setError(`編集を保存できませんでした。${err instanceof Error ? err.message : String(err)}`);
+      setEditorClosing(false);
+      return;
+    }
     setReviewState(null);
     setTranscriptState(null);
     setOutputs(null);
     setExportProgress(0);
+    scenesInitializedRunDirRef.current = null;
+    scenesDraftReadyRef.current = false;
+    project.editor.hydrate(null);
+    keepSegmentsHistory.reset({
+      keepSegments: [], manualRemovedWordIds: [], wordCorrections: {}, correctionOriginals: {},
+    });
+    setOverlayEdits({});
+    setSceneCustomStyles({});
+    setDraftSaveStatus({ state: "idle" });
+    setEditorClosing(false);
   }
 
   async function handleDeleteProject(project: CatCutProjectSummary) {
@@ -4405,37 +4579,17 @@ export function App() {
     setTelopReplaceCandidate(null);
     setTelopReplaceSelectedKeys(new Set());
     telopFocusTextRef.current.clear();
-    setBgmState(null);
     setBgmMuted(false);
-    setImagesState(null);
     setVideoFramingState(null);
     setReviewTab("scenes");
     setTimelineSeekMs(null);
   }, [transcriptState?.runDir]);
 
-  // フェーズU9(BGMトラック): run読み込み・編集適用(step08再実行)のたびにbgm.jsonと
-  // タイムライン総尺を読み直す(適用で総尺が変わるとBGMトラックの横軸スケールも変わるため)。
+  // フレーミングは適用後の正本を再読込。画像/BGMは共通履歴の最新編集を保持する。
   useEffect(() => {
     const runDir = transcriptState?.runDir;
     if (!runDir) return undefined;
     let cancelled = false;
-    window.catcut
-      .listBgm({ runDir })
-      .then((result) => {
-        if (!cancelled) setBgmState(result);
-      })
-      .catch(() => {
-        if (!cancelled) setBgmState(null);
-      });
-    // フェーズV4: 画像挿入トラック(images.json)もBGMと同じタイミングで読み直す
-    window.catcut
-      .listImages({ runDir })
-      .then((result) => {
-        if (!cancelled) setImagesState(result);
-      })
-      .catch(() => {
-        if (!cancelled) setImagesState(null);
-      });
     // フェーズW9: 映像フレーミング(video_framing.json)。transcript:load 由来の値で初期化し、
     // 念のため run正本を読み直す(無ければ identity が返る)。
     setVideoFramingState(transcriptState?.videoFraming ?? null);
@@ -5932,7 +6086,7 @@ export function App() {
   const uiStage = uiStageFor({ running, hasReview: Boolean(reviewState) });
 
   return (
-    <main className={`appShell${uiStage === "editing" ? " appShellEditing" : ""}`}>
+    <main className={`appShell${uiStage === "editing" ? " appShellEditing" : ""}${uiStage === "editing" && reviewTab === "timeline" ? " appShellTimeline" : ""}`}>
       {uiStage !== "editing" && (
       <section className="leftPane">
         <header className="topBar">
@@ -6321,7 +6475,7 @@ export function App() {
 
         {reviewState && reviewStage === "transcript" && transcriptState && FEATURES.legacyReviewUi && (
           <section className="transcriptWorkspace">
-            <div className="transcriptWorkspaceHeader">
+            <div className="transcriptWorkspaceHeader" {...(sceneApplying || editorClosing ? { inert: "" } : {})}>
               <div className="panelTitle">
                 <FileText size={18} />
                 <span>トランスクリプトエディタ</span>
@@ -6489,8 +6643,8 @@ export function App() {
         )}
 
         {reviewState && reviewStage === "transcript" && transcriptState && !FEATURES.legacyReviewUi && (
-          <section className="transcriptWorkspace sceneWorkspaceSection">
-            <div className="sceneThemeBar">
+          <section className={`transcriptWorkspace sceneWorkspaceSection${reviewTab === "timeline" ? " sceneWorkspaceTimeline" : ""}`}>
+            <div className="sceneThemeBar" {...(sceneApplying || editorClosing ? { inert: "" } : {})}>
               <div className="sceneThemeBarThemes">
                 {isDirectedTelopMode ? (
                   // フェーズT2.5-4(directedモード): テーマ×感情の代わりに
@@ -6528,7 +6682,7 @@ export function App() {
               <div className="sceneThemeBarRight">
                 <button
                   className="secondaryButton sceneProjectsBackButton"
-                  disabled={running || sceneApplying}
+                  disabled={running || sceneApplying || (!sceneDraft && !editorLoadError)}
                   onClick={closeReviewToProjects}
                   title="検品画面を閉じてプロジェクト一覧に戻る"
                   type="button"
@@ -6537,7 +6691,7 @@ export function App() {
                 </button>
                 <button
                   className="primaryButton compactPrimary"
-                  disabled={running || sceneApplying}
+                  disabled={running || sceneApplying || !sceneDraft}
                   onClick={() => setExportSettingsOpen(true)}
                   type="button"
                 >
@@ -6553,12 +6707,12 @@ export function App() {
                 )}
               </div>
             </div>
-            <div className="transcriptWorkspaceHeader">
+            <div className="transcriptWorkspaceHeader" {...(sceneApplying || editorClosing ? { inert: "" } : {})}>
               {/* フェーズV1: シーン検品(従来フロー)とタイムラインViewのタブ切替 */}
               <div className="reviewViewTabs">
                 <button
                   className={reviewTab === "scenes" ? "active" : ""}
-                  onClick={() => setReviewTab("scenes")}
+                  onClick={() => { handleWaveformGestureStart(); project.editor.select(null); setReviewTab("scenes"); }}
                   type="button"
                 >
                   <FileText size={15} />
@@ -6566,13 +6720,24 @@ export function App() {
                 </button>
                 <button
                   className={reviewTab === "timeline" ? "active" : ""}
-                  onClick={() => setReviewTab("timeline")}
+                  onClick={() => { handleWaveformGestureStart(); project.editor.select(null); setReviewTab("timeline"); }}
                   type="button"
                 >
                   <Film size={15} />
                   <span>タイムライン</span>
                 </button>
               </div>
+              <div className="editorToolControls" role="group" aria-label="編集ツール">
+                <button type="button" aria-pressed={!scissorsMode} onClick={() => setScissorsMode(false)} title="選択ツール (A)">
+                  <MousePointer2 size={14} /><span>選択</span><kbd>A</kbd>
+                </button>
+                <button type="button" className="editorCutTool" aria-pressed={scissorsMode} onClick={() => setScissorsMode(true)} title="カットツール (B)。選択に戻すにはA">
+                  <Scissors size={14} /><span>カット</span><kbd>B</kbd>
+                </button>
+              </div>
+              <span className="editorToolHint" role="status">
+                {scissorsMode ? reviewTab === "timeline" ? "映像をクリックして分割 · Aで選択へ" : "波形を2点クリック／ドラッグで範囲カット · Escで取消" : "Spaceで再生／一時停止 · 文字入力を終えるにはEsc"}
+              </span>
               <div className="transcriptWorkspaceActions">
                 {/* フェーズW23(改善2-3): 検品中の適用・書き出し進捗のコンパクトバー。
                     editing では左ペイン(停止ボタン)を隠すため、書き出しの停止導線はここが受け皿 */}
@@ -6617,17 +6782,20 @@ export function App() {
                     {draftSaveStatus.state === "saving"
                       ? "保存中…"
                       : draftSaveStatus.state === "saved"
-                        ? `下書き保存済み ${draftSaveStatus.savedAt}`
+                        ? `保存済み ${draftSaveStatus.savedAt}`
                         : "自動保存に失敗"}
                   </span>
+                )}
+                {draftSaveStatus.state === "error" && (
+                  <button type="button" onClick={() => void flushSceneDraft().catch(() => {})}>再試行</button>
                 )}
                 <button
                   disabled={!scenesHistory.canUndo}
                   onClick={scenesHistory.undo}
-                  title="元に戻す (⌘Z)"
+                  title="元に戻す (⌘Z・直近200操作)"
                   type="button"
                 >
-                  元に戻す
+                  <Undo2 size={15} /><span>元に戻す</span>
                 </button>
                 <button
                   disabled={!scenesHistory.canRedo}
@@ -6635,37 +6803,18 @@ export function App() {
                   title="やり直す (⇧⌘Z)"
                   type="button"
                 >
-                  やり直す
-                </button>
-                {/* W11-2: 「編集を適用」ボタンは廃止。編集はドラフトへ自動保存され、
-                    書き出し時(startExportWithSettings)に自動で適用される。 */}
-                <button
-                  className="primaryButton compactPrimary"
-                  disabled={running || sceneApplying}
-                  onClick={() => setExportSettingsOpen(true)}
-                  type="button"
-                >
-                  <Download size={16} />
-                  {/* W19-C5: セグメント抽出中は進捗%を表示(取れない段は従来の「適用中…」) */}
-                  <span>
-                    {sceneApplying
-                      ? sceneApplyProgress != null
-                        ? `適用中… ${sceneApplyProgress}%`
-                        : "適用中…"
-                      : "書き出し"}
-                  </span>
+                  <Redo2 size={15} /><span>やり直す</span>
                 </button>
               </div>
             </div>
             {reviewTab === "scenes" && (
-            <div className="transcriptGuide">
-              チップをクリックするとその位置へ再生バーを確定します。チップを右クリック(または削除済みチップをクリック)するとカット/復元を切り替えられます。
-              チップ列をドラッグすると範囲選択でき、Deleteでまとめて削除できます。
-              下のテキスト枠は自由に書き換えられます(動画のタイミングには影響しません。書き換えると青字になります。クリックでそのシーンの先頭から再生します)。
-              波形の左右端のつまみをドラッグすると動画の幅を微調整できます(🔗マークの行は隣と連動して伸縮します)。
-              上部の要確認パネルでAIが疑わしいと判断した箇所を確認してください(クリックでそのシーンへジャンプ)。
-              確認できたら「書き出し」へ進んでください(編集は自動保存され、書き出し時に自動で適用されます)。
-            </div>
+            <details className="transcriptGuide sceneEditingGuide">
+              <summary><span>B：2点クリック／ドラッグでカット · 両端をドラッグしてトリム</span><span>操作ガイド</span></summary>
+              <p>チップをクリックして位置を決め、ドラッグで複数選択、Deleteで削除。右クリックでカット／復元を切り替えられます。
+              テキスト枠では映像の長さを変えずにテロップを書き換えられます。
+              波形の選択範囲はマウスを離すと確定、Escで取消。Optionで単語への吸着を解除します。
+              編集は自動保存され、書き出し時に反映されます。</p>
+            </details>
             )}
             {reviewTab === "scenes" && (
             <div className="sceneTabs">
@@ -6688,10 +6837,10 @@ export function App() {
                 <button
                   className="sceneLearnedCorrectionsButton"
                   onClick={() => setCorrectionHistoryOpen(true)}
-                  title="テロップ編集から自動で学習した修正ペアです。次回以降のAI校正・要確認に活用されます(クリックで一覧・削除・学習データ書き出し)"
+                  title="書き出しで確定した校正・カット・シーン区切り・改行の事例です。クリックで内容確認・除外・共有できます"
                   type="button"
                 >
-                  学習済み修正: {correctionHistory.pairs.length}件
+                  {editingLearningSummary ? `編集学習: ${editingLearningSummary.examples}件` : `学習済み修正: ${correctionHistory.pairs.length}件`}
                 </button>
               ) : null}
               {/* W16-2: ユーザー辞書一覧・手動追加の常設入口(従来は一括置換ポップアップ内のリンクのみ) */}
@@ -6727,18 +6876,25 @@ export function App() {
               </button>
             </div>
             )}
-            <div className={`sceneMainArea${reviewTab === "timeline" ? " sceneMainAreaTimeline" : ""}`}>
+            <div ref={workspaceViewportRef} className={`sceneMainArea${reviewTab === "timeline" ? " sceneMainAreaTimeline" : ""}${reviewTab === "timeline" && (transcriptState.canvasHeight ?? 0) > (transcriptState.canvasWidth ?? Infinity) ? " sceneMainAreaTimelineVertical" : ""}`} {...(sceneApplying || editorClosing ? { inert: "" } : {})} aria-busy={sceneApplying || editorClosing}>
+              <div className="editorPreviewDock">
               <div className="scenePreviewColumn">
                 <PreviewPlayer
+                  key={transcriptState.runDir}
                   keepSegments={scenesHistory.keepSegments}
+                  keepSegmentsReady={sceneKeepsReady}
                   onActiveWordChange={setActiveTranscriptWordId}
                   onPlayingChange={handlePreviewPlayingChange}
                   onSeekConsumed={() => setTranscriptSeekMs(null)}
                   onTimeUpdate={handleScenePreviewTimeUpdate}
                   playbackRate={playbackRate}
+                  onPlaybackRateChange={(rate) => setPlaybackRate(rate as PlaybackRate)}
                   ref={previewPlayerRef}
                   seekMs={transcriptSeekMs}
                   telopText={currentScene?.telopText || ""}
+                  telopPosition={currentScene?.telopPosition}
+                  onTelopPositionChange={currentSceneId ? (position) => scenesHistory.setTelopPosition(currentSceneId, position) : undefined}
+                  onAllTelopPositionsChange={(position) => scenesHistory.setAllTelopPositions(position)}
                   telopStyle={currentSceneTelopStyle}
                   telopFontSize={transcriptState.telopFontSize}
                   telopBaseWidth={transcriptState.telopBaseWidth}
@@ -6777,18 +6933,11 @@ export function App() {
                   bgmClips={bgmState?.clips ?? []}
                   bgmMuted={bgmMuted}
                   imageClips={imagesState?.clips ?? []}
-                  onImageClipsChange={(clips, commit) => {
-                    // ドラッグ中はライブ反映のみ、操作確定(commit)で images.json へ保存する
-                    setImagesState((current) => (current ? { ...current, clips } : current));
-                    if (commit && transcriptState) {
-                      void window.catcut
-                        .saveImages({
-                          runDir: transcriptState.runDir,
-                          clips: clips.map(({ url: _url, ...data }) => data),
-                        })
-                        .then(setImagesState)
-                        .catch(() => {});
-                    }
+                  selectedImageClipId={project.selection?.kind === "image" ? project.selection.id : null}
+                  onImageSelect={(id) => handleEditorSelection(id ? { kind: "image", id } : null)}
+                  onImageClipsChange={mediaImporting ? undefined : (clips, commit) => {
+                    const current = project.editor.getSnapshot().document.images;
+                    if (current) project.editor.changeMedia("images", { ...current, clips }, commit ? "commit" : "preview");
                   }}
                   timelineCutRanges={editedTimelineCutRanges}
                   videoEffects={previewVideoEffects}
@@ -6861,7 +7010,7 @@ export function App() {
                 <div className="sceneKeyGuide">
                   <div className="sceneKeyGuideRow">
                     <kbd>Space</kbd>
-                    <span>再生/停止(別の行に乗せ直すとその行の先頭から)</span>
+                    <span>再生／一時停止（再生中は必ず停止）</span>
                   </div>
                   <div className="sceneKeyGuideRow">
                     <kbd>L</kbd>
@@ -6887,7 +7036,7 @@ export function App() {
                   </div>
                   <div className="sceneKeyGuideRow">
                     <kbd>⌘M</kbd>
-                    <span>下の行と結合(テキスト編集中も可。間の削除済み行はまたぐ)</span>
+                    <span>下の行と結合（カットは保持。テキスト編集中も可）</span>
                   </div>
                   <div className="sceneKeyGuideRow">
                     <kbd>Tab</kbd>
@@ -6896,7 +7045,7 @@ export function App() {
                   <div className="sceneKeyGuideRow">
                     <kbd className={scissorsMode ? "active" : ""}>B</kbd>
                     <span>
-                      ハサミ(波形をドラッグして範囲カット。離すとカット。前後は1つの枠のまま)
+                      波形カット（2点クリック／ドラッグ。端の無音は1クリック、Escで取消）
                       {scissorsMode ? ": ON" : ""}
                     </span>
                   </div>
@@ -6907,13 +7056,65 @@ export function App() {
                 </div>
                 )}
               </div>
-              {reviewTab === "timeline" ? (
+              {reviewTab === "timeline" && sceneDraft && (
+                <SelectionInspector
+                  selection={project.selection}
+                  scenes={scenesHistory.scenes}
+                  timelineCutRanges={editedTimelineCutRanges}
+                  timelineDurationMs={editedTimelineDurationMs}
+                  bgmState={bgmState}
+                  imagesState={imagesState}
+                  fps={transcriptState.timelineFps}
+                  disabled={mediaImporting || sceneApplying || editorClosing}
+                  getBgmState={() => project.editor.getSnapshot().document.bgm}
+                  getImagesState={() => project.editor.getSnapshot().document.images}
+                  onBgmStateChange={(state, phase) => {
+                    if (project.editor.getSnapshot().runDir === transcriptState.runDir) project.editor.changeMedia("bgm", state, phase);
+                  }}
+                  onImagesStateChange={(state, phase) => {
+                    if (project.editor.getSnapshot().runDir === transcriptState.runDir) project.editor.changeMedia("images", state, phase);
+                  }}
+                  onSeekTimeline={seekTimelinePlayhead}
+                  onSetSceneSpeed={scenesHistory.setSceneSpeed}
+                  onEditSceneStyle={isDirectedTelopMode ? openStyleEditorForScene : undefined}
+                  onSetAllScenesSpeed={scenesHistory.setAllScenesSpeed}
+                  onDeleteSelection={handleTimelineSceneDelete}
+                />
+              )}
+              </div>
+              {!sceneDraft ? (
+                <div className="editorLoadStatus" role={editorLoadError ? "alert" : "status"}>
+                  <p>{editorLoadError ?? "編集データを読み込み中…"}</p>
+                  {editorLoadError && <button type="button" onClick={() => setEditorLoadAttempt((attempt) => attempt + 1)}>再試行</button>}
+                </div>
+              ) : reviewTab === "timeline" ? (
                 <TimelineView
+                  scissorsMode={scissorsMode}
+                  onBladeCut={(sceneId, ms) => {
+                    handleWaveformGestureStart();
+                    sceneActionsRef.current.splitAtMs(sceneId, ms, { allowEmptySpeechSide: true });
+                    seekScenePlayhead(ms);
+                  }}
+                  fps={transcriptState.timelineFps}
+                  getBgmState={() => project.editor.getSnapshot().document.bgm}
+                  getImagesState={() => project.editor.getSnapshot().document.images}
+                  onSplitAtPlayhead={splitTimelineAtPlayhead}
                   bgmState={bgmState}
                   currentSceneId={currentSceneId}
                   imagesState={imagesState}
-                  onBgmStateChange={setBgmState}
-                  onImagesStateChange={setImagesState}
+                  selection={project.selection}
+                  onSelectionChange={handleEditorSelection}
+                  mediaImporting={mediaImporting}
+                  onBeforeMediaAdd={beginMediaImport}
+                  onMediaAddError={(message) => {
+                    if (project.editor.getSnapshot().runDir === transcriptState.runDir) setError(message);
+                  }}
+                  onBgmStateChange={(state, phase) => {
+                    if (project.editor.getSnapshot().runDir === transcriptState.runDir) project.editor.changeMedia("bgm", state, phase);
+                  }}
+                  onImagesStateChange={(state, phase) => {
+                    if (project.editor.getSnapshot().runDir === transcriptState.runDir) project.editor.changeMedia("images", state, phase);
+                  }}
                   onSetAllScenesSpeed={scenesHistory.setAllScenesSpeed}
                   onSetSceneSpeed={scenesHistory.setSceneSpeed}
                   onEditSceneStyle={isDirectedTelopMode ? openStyleEditorForScene : undefined}
@@ -6922,9 +7123,9 @@ export function App() {
                     () => setOpEditorOpen(true)
                   }
                   // W11-3: プレイヘッドを掴んだら再生中でも一時停止してスクラブ
-                  onScrubStart={pauseIfPlaying}
+                  onScrubStart={handleWaveformGestureStart}
                   onSeekSource={seekScenePlayhead}
-                  onSeekTimeline={(ms) => setTimelineSeekMs(ms)}
+                  onSeekTimeline={seekTimelinePlayhead}
                   resolveSceneStyle={resolveSceneStyleForTimeline}
                   runDir={transcriptState.runDir}
                   runOpConfig={runOpConfig}
@@ -6937,6 +7138,8 @@ export function App() {
               <div
                 className="sceneRowListPane"
                 ref={sceneListPaneRef}
+                onPointerDownCapture={() => project.editor.select(null)}
+                onFocusCapture={() => project.editor.select(null)}
                 onScroll={(event) => setShowScrollTopButton(event.currentTarget.scrollTop > 320)}
                 onMouseLeave={() => {
                   hoveredSceneIdRef.current = null;
@@ -7043,6 +7246,8 @@ export function App() {
                         }
                         onScissorsCutMs={(ms) => handleScissorsCutAtMs(scene.id, ms)}
                         onScissorsSplitChip={(groupIndex) => handleScissorsSplitChip(scene.id, groupIndex)}
+                        onEdgeDragCancel={() => setEdgeDrag(null)}
+                        onWaveformGestureStart={handleWaveformGestureStart}
                         onSeek={seekScenePlayhead}
                         onSetDirectedAnimation={(animationId) =>
                           scenesHistory.setDirectedAnimation(scene.id, animationId)
@@ -7126,6 +7331,8 @@ export function App() {
                   editingRef={isEditingSceneTelopRef}
                   onEdgeDragEnd={handleSceneEdgeDragEnd}
                   onEdgeDragMove={handleSceneEdgeDragMove}
+                  onEdgeDragCancel={() => setEdgeDrag(null)}
+                  onWaveformGestureStart={handleWaveformGestureStart}
                   onRangeCut={handleSceneRangeCut}
                   onHoverSeek={handleSceneHoverSeek}
                   onScissorsCutMs={handleScissorsCutAtMs}
@@ -7192,7 +7399,7 @@ export function App() {
                 flagMarkers={sceneNavFlagMarkers}
                 onSeek={seekScenePlayhead}
                 // W11-3: ドラッグスクラブ開始で再生中なら一時停止
-                onScrubStart={pauseIfPlaying}
+                onScrubStart={handleWaveformGestureStart}
                 peaks={waveform?.peaks || []}
               />
             </div>
@@ -7820,6 +8027,11 @@ export function App() {
         <UserDictionaryModal onClose={() => setUserDictionaryOpen(false)} open={userDictionaryOpen} />
         {/* W14-2: 学習済み修正の一覧・個別削除(誤learningの解除手段) */}
         <CorrectionHistoryModal
+          editingSummary={editingLearningSummary}
+          onExcludeExample={async (exampleId) => {
+            const summary = await window.catcut.excludeEditingLearningExample({ exampleId });
+            setEditingLearningSummary(summary);
+          }}
           onClose={() => setCorrectionHistoryOpen(false)}
           onDelete={async (pair) => {
             try {

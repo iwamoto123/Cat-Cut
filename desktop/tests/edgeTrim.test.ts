@@ -300,3 +300,16 @@ test("EDGE_SNAP_MS/MIN_SCENE_DURATION_MSは仕様書通りの既定値", () => {
   assert.equal(EDGE_SNAP_MS, 20);
   assert.equal(MIN_SCENE_DURATION_MS, 200);
 });
+
+
+test("applyEdgeTrim: 同じ境界に吸着/クランプされた操作はUndo履歴を増やさない", () => {
+  const words = [{ id: "w", text: "声", startMs: 0, endMs: 1000, deleted: false }];
+  const first: Scene = { id: "a", sourceStartMs: 0, sourceEndMs: 1000, words, telopText: "声", telopEdited: false, cutMarks: [] };
+  const second: Scene = { ...first, id: "b", sourceStartMs: 1000, sourceEndMs: 2000, words: [{ ...words[0], id: "w2", startMs: 1000, endMs: 2000 }] };
+  const linked = [first, second];
+  assert.equal(applyEdgeTrim(linked, 0, "end", 1005).scenes, linked);
+  assert.equal(applyEdgeTrim(linked, 1, "start", 995).scenes, linked);
+  const independent = [first];
+  assert.equal(applyEdgeTrim(independent, 0, "start", -100).scenes, independent);
+  assert.equal(applyEdgeTrim(independent, 0, "end", 2000, { sourceDurationMs: 1000 }).scenes, independent);
+});

@@ -79,6 +79,7 @@ interface Cut {
 
 interface VoiceCut {
   id: string;
+  telop_position_ranges?: Array<{ start: number; end: number; position: { x: number; y: number } | null }>;
   narration: string;
   voice: {
     duration_ms: number;
@@ -92,6 +93,7 @@ interface VoiceCut {
   };
   telops: Array<{
     id: string;
+    telop_position?: { x: number; y: number };
     text: string;
     word_indices: number[];
     start?: number;
@@ -391,6 +393,7 @@ export const CatCutComposition: React.FC<CatCutCompositionProps> = ({
                 <AbsoluteFill style={{ zIndex: TELOP_LAYER_Z }}>
                   <Telop
                     telops={voiceCut.telops}
+                    positionRanges={voiceCut.telop_position_ranges}
                     words={voiceCut.voice.words}
                     cutStartFrame={startFrame}
                     fps={fps}

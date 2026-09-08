@@ -6,6 +6,8 @@ import { type TelopThemeId, resolveEffectiveStyleId } from "./telopThemes.ts";
 import { normalizeTelopDisplayText } from "./telopTextNormalize.ts";
 import { isTrivialUtteranceText } from "./trivialUtterance.ts";
 import type { VideoEffectOverride } from "./videoEffectCatalog.ts";
+import { highlightMaskFromWords, highlightWordsFromMask, rebaseHighlightWords } from "./telopHighlightEdit.ts";
+import { normalizeTelopPosition, type TelopPosition } from "./telopPosition.ts";
 
 /**
  * シーン行UI（検品UI v2 Phase 1）のデータモデル。
@@ -43,10 +45,18 @@ export type SceneWord = {
 
 export type Scene = {
   id: string;
+  /** 手動指定のテロップ中心位置。未指定は顔回避/スタイルの既定位置。 */
+  telopPosition?: TelopPosition;
   /** 元動画上のIN点(ms)。 */
   sourceStartMs: number;
   /** 元動画上のOUT点(ms)。 */
   sourceEndMs: number;
+  /**
+   * 編集後に残す元動画区間。指定時は映像・音声の唯一のタイミング源とし、単語の再配置や
+   * テロップ結合から再計算しない。[] は全域カット。未指定の旧ドラフトは単語から導出する。
+   * 結合/分割は現状の区間を維持し、端を広げる明示操作だけが新しい区間を追加できる。
+   */
+  sourceKeepRanges?: Array<{ startMs: number; endMs: number }>;
   words: SceneWord[];
   /** 表示層。初期値はwordsの連結だが自由に書き換え可能(タイミングに影響しない)。 */
   telopText: string;
@@ -129,6 +139,7 @@ export type SourceSentence = {
 export type TelopPageBoundary = {
   startMs: number;
   endMs: number;
+  telopPosition?: TelopPosition;
   /** 改善10-B-3: パイプライン適用済みのページ本文(句読点ルール済み)。未指定時はwords連結+正規化。 */
   text?: string;
   /** フェーズT2(directedモード): ディレクティブのスタイルID(fact_yellow等)。fullモードでは未指定。 */
@@ -224,6 +235,7 @@ function buildScene(
   sourceEndMs: number,
   telopTextOverride?: string,
   directedFields?: {
+    telopPosition?: TelopPosition;
     styleId?: string;
     typeId?: string;
     styleOverridden?: boolean;
@@ -259,6 +271,8 @@ function buildScene(
     emotionTag: detectEmotionTag(telopText),
     styleOverrideId: null,
   };
+  const position = normalizeTelopPosition(directedFields?.telopPosition);
+  if (position) scene.telopPosition = position;
   // フェーズT2(directedモード): ページ境界がディレクティブ由来の場合のみ付与する
   // (fullモードのSceneには余計なフィールドを増やさない)。
   // フェーズT2.5-4: typeがあるシーンのスタイルは type×マッピング で解決するため、
@@ -276,6 +290,15 @@ function buildScene(
     // フェーズW1: スロットの話者ID(話者カラー発動時のスタイル解決に使う)
     if (directedFields.speaker) scene.speaker = directedFields.speaker;
   }
+  return scene;
+}
+
+/** 発話のないkeep範囲も映像として保持し、削除・分割できる無音チップにする。 */
+function buildSilenceScene(startMs: number, endMs: number): Scene {
+  const scene = buildScene([], startMs, endMs);
+  scene.words = [{
+    id: `sil_${scene.id}`, text: "", startMs, endMs, deleted: false, silence: true,
+  }];
   return scene;
 }
 
@@ -534,7 +557,10 @@ function initializeScenesFromPageBoundaries(
     const segmentWords = wordsWithSentenceId
       .filter((word) => word.startMs < segment.endMs && word.endMs > segment.startMs)
       .sort((a, b) => a.startMs - b.startMs);
-    if (!segmentWords.length) continue;
+    if (!segmentWords.length) {
+      scenes.push(buildSilenceScene(segment.startMs, segment.endMs));
+      continue;
+    }
 
     const pagesInSegment = sortedPages.filter(
       (page) => page.startMs < segment.endMs && page.endMs > segment.startMs,
@@ -553,8 +579,9 @@ function initializeScenesFromPageBoundaries(
       const sceneWords = segmentWords.filter((word) => word.startMs < endMs && word.endMs > startMs);
       const pageText = typeof page.text === "string" && page.text.trim() ? page.text.trim() : undefined;
       const directedFields =
-        page.styleId || page.typeId || page.videoEffectOverride
+        page.styleId || page.typeId || page.videoEffectOverride || page.telopPosition
           ? {
+              telopPosition: page.telopPosition,
               styleId: page.styleId,
               typeId: page.typeId,
               styleOverridden: page.styleOverridden,
@@ -564,7 +591,10 @@ function initializeScenesFromPageBoundaries(
               speaker: page.speaker,
             }
           : undefined;
-      if (sceneWords.length) scenes.push(buildScene(sceneWords, startMs, endMs, pageText, directedFields));
+      if (endMs <= startMs) return;
+      scenes.push(sceneWords.length
+        ? buildScene(sceneWords, startMs, endMs, pageText, directedFields)
+        : buildSilenceScene(startMs, endMs));
     });
   }
   return scenes;
@@ -589,7 +619,9 @@ function initializeScenesFromPageBoundaries(
  * 併合(3)も含めkeep_segmentをまたぐ結合は行わない。
  */
 export function initializeScenes(input: InitializeScenesInput): Scene[] {
-  const sortedSegments = [...input.keepSegments].sort((a, b) => a.startMs - b.startMs);
+  const sortedSegments = input.keepSegments
+    .filter((segment) => Number.isFinite(segment.startMs) && Number.isFinite(segment.endMs) && segment.endMs > segment.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
   const sentenceIdByWordId = new Map<string, string>();
   for (const sentence of input.sentences || []) {
     for (const wordId of sentence.wordIds) sentenceIdByWordId.set(wordId, sentence.id);
@@ -609,7 +641,10 @@ export function initializeScenes(input: InitializeScenesInput): Scene[] {
     const segmentWords = wordsWithSentenceId
       .filter((word) => word.startMs < segment.endMs && word.endMs > segment.startMs)
       .sort((a, b) => a.startMs - b.startMs);
-    if (!segmentWords.length) continue;
+    if (!segmentWords.length) {
+      scenes.push(buildSilenceScene(segment.startMs, segment.endMs));
+      continue;
+    }
     scenes.push(...heuristicScenesForSegment(segmentWords, segment.startMs, segment.endMs));
   }
   return scenes;
@@ -623,6 +658,62 @@ export function initializeScenes(input: InitializeScenesInput): Scene[] {
  * シーン丸ごと削除(全単語deleted)でも単語間ポーズ・シーン端の余白が数百msの無音断片として
  * keep_segmentsに残り、タイムラインのスキマ・再生/書き出しの無音区間になる。 */
 export function computeSceneKeptSubRanges(scene: Scene): Array<{ startMs: number; endMs: number }> {
+  const explicit = normalizeSceneSourceKeepRanges(scene.sourceKeepRanges, scene.sourceStartMs, scene.sourceEndMs);
+  return explicit ?? computeLegacySceneKeptSubRanges(scene);
+}
+
+/** A transcript restore cannot restore this completely removed word; Undo/edge stretch can. */
+export function isSceneWordCutLocked(scene: Scene, word: SceneWord): boolean {
+  return Array.isArray(scene.sourceKeepRanges) && word.deleted &&
+    !computeSceneKeptSubRanges(scene).some((range) => range.startMs < word.endMs && range.endMs > word.startMs);
+}
+
+/** 保存データと編集プリミティブ共通の正規化。未指定/未知の形式は旧形式へフォールバック。 */
+export function normalizeSceneSourceKeepRanges(
+  value: unknown,
+  sourceStartMs: number,
+  sourceEndMs: number,
+): Array<{ startMs: number; endMs: number }> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const ranges = value.flatMap((item: unknown) => {
+    if (!item || typeof item !== "object") return [];
+    const { startMs, endMs } = item as { startMs?: unknown; endMs?: unknown };
+    if (typeof startMs !== "number" || typeof endMs !== "number" || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return [];
+    const start = Math.max(sourceStartMs, startMs);
+    const end = Math.min(sourceEndMs, endMs);
+    return end > start ? [{ startMs: start, endMs: end }] : [];
+  }).sort((a, b) => a.startMs - b.startMs);
+  const merged: Array<{ startMs: number; endMs: number }> = [];
+  for (const range of ranges) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.startMs <= previous.endMs) previous.endMs = Math.max(previous.endMs, range.endMs);
+    else merged.push({ ...range });
+  }
+  return merged;
+}
+
+/** Sorted, disjoint source intervals. Used by cut and word deletion without quantizing time. */
+export function subtractSourceRanges(
+  ranges: Array<{ startMs: number; endMs: number }>,
+  removed: Array<{ startMs: number; endMs: number }>,
+): Array<{ startMs: number; endMs: number }> {
+  const result: Array<{ startMs: number; endMs: number }> = [];
+  let removedIndex = 0;
+  for (const range of ranges) {
+    let cursor = range.startMs;
+    while (removedIndex < removed.length && removed[removedIndex].endMs <= cursor) removedIndex += 1;
+    for (let index = removedIndex; index < removed.length && removed[index].startMs < range.endMs; index += 1) {
+      const cut = removed[index];
+      if (cut.startMs > cursor) result.push({ startMs: cursor, endMs: Math.min(cut.startMs, range.endMs) });
+      cursor = Math.max(cursor, cut.endMs);
+      if (cursor >= range.endMs) break;
+    }
+    if (cursor < range.endMs) result.push({ startMs: cursor, endMs: range.endMs });
+  }
+  return result;
+}
+
+function computeLegacySceneKeptSubRanges(scene: Scene): Array<{ startMs: number; endMs: number }> {
   // 単語配列の並び順(=チップ表示順・時系列)で、連続する削除単語をランへまとめる
   const deletedRanges: Array<{ startMs: number; endMs: number }> = [];
   let runStartIndex = -1;
@@ -769,6 +860,21 @@ export function setSceneStyleOverride(scenes: Scene[], sceneId: string, styleId:
   return scenes.map((scene) => (scene.id === sceneId ? { ...scene, styleOverrideId: styleId } : scene));
 }
 
+/** One commit updates one or all scenes; absent/invalid positions restore automatic placement. */
+export function setSceneTelopPosition(scenes: Scene[], sceneId: string | null, position: TelopPosition | null): Scene[] {
+  const normalized = normalizeTelopPosition(position);
+  let changed = false;
+  const updated = scenes.map((scene) => {
+    if (sceneId !== null && scene.id !== sceneId) return scene;
+    const current = normalizeTelopPosition(scene.telopPosition);
+    if (current?.x === normalized?.x && current?.y === normalized?.y) return scene;
+    changed = true;
+    const { telopPosition: _position, ...rest } = scene;
+    return normalized ? { ...rest, telopPosition: normalized } : rest;
+  });
+  return changed ? updated : scenes;
+}
+
 /**
  * フェーズT2(directedモード): スタイルバッジからdirectedスタイルIDを個別上書きする
  * (T2.5-4以降は「type→presetマッピングより優先される個別上書き」の意味。null=上書き解除)。
@@ -843,18 +949,7 @@ export function applyStyleOverrideToEmotionGroup(scenes: Scene[], sceneId: strin
  * 手動操作なので autoTrimmed フラグは常にfalseへ戻す(端トリムによる自動復活の対象から外す)。
  */
 export function setChipDeleted(scenes: Scene[], sceneId: string, wordId: string, deleted: boolean): Scene[] {
-  return scenes.map((scene) => {
-    if (scene.id !== sceneId) return scene;
-    let changed = false;
-    const words = scene.words.map((word) => {
-      if (word.id !== wordId || (word.deleted === deleted && !word.autoTrimmed)) return word;
-      changed = true;
-      return { ...word, deleted, autoTrimmed: false };
-    });
-    if (!changed) return scene;
-    const telopText = scene.telopEdited ? scene.telopText : autoTelopTextFromWords(words);
-    return { ...scene, words, telopText };
-  });
+  return setChipsDeleted(scenes, sceneId, [wordId], deleted);
 }
 
 /** チップの削除/復元をトグルする(現在の状態を見て反転させる)。 */
@@ -873,18 +968,32 @@ export function toggleChipDeleted(scenes: Scene[], sceneId: string, wordId: stri
  */
 export function setChipsDeleted(scenes: Scene[], sceneId: string, wordIds: string[], deleted: boolean): Scene[] {
   const wordIdSet = new Set(wordIds);
-  return scenes.map((scene) => {
+  const next = scenes.map((scene) => {
     if (scene.id !== sceneId) return scene;
+    const explicit = normalizeSceneSourceKeepRanges(scene.sourceKeepRanges, scene.sourceStartMs, scene.sourceEndMs);
     let changed = false;
     const words = scene.words.map((word) => {
       if (!wordIdSet.has(word.id) || (word.deleted === deleted && !word.autoTrimmed)) return word;
+      // A transcript restore cannot bring a waveform cut back. Keep its chip visibly deleted
+      // unless some audio belonging to that word still remains in the established media range.
+      if (!deleted && explicit && !explicit.some((range) => range.startMs < word.endMs && range.endMs > word.startMs)) return word;
       changed = true;
       return { ...word, deleted, autoTrimmed: false };
     });
-    if (!changed) return scene;
+    const deleteAll = deleted && scene.words.length > 0 && scene.words.every((word) => wordIdSet.has(word.id));
+    if (!changed && !(deleteAll && explicit?.length)) return scene;
     const telopText = scene.telopEdited ? scene.telopText : autoTelopTextFromWords(words);
-    return { ...scene, words, telopText };
+    // Established cuts are independent of transcript restoration. Only newly deleted timing is
+    // subtracted; concatenated historical deleted-word runs must not trim additional video.
+    const newlyDeleted = deleted && explicit
+      ? subtractSourceRanges(computeLegacySceneKeptSubRanges(scene), computeLegacySceneKeptSubRanges({ ...scene, words }))
+      : [];
+    const sourceKeepRanges = explicit
+      ? (deleteAll ? [] : subtractSourceRanges(explicit, newlyDeleted))
+      : undefined;
+    return { ...scene, words, telopText, ...(explicit ? { sourceKeepRanges } : {}) };
   });
+  return next.some((scene, index) => scene !== scenes[index]) ? next : scenes;
 }
 
 /**
@@ -904,9 +1013,7 @@ export function setSceneTelopText(scenes: Scene[], sceneId: string, text: string
   return scenes.map((scene) => {
     if (scene.id !== sceneId) return scene;
     const autoText = autoTelopTextFromWords(scene.words);
-    const directedHighlightWords = (scene.directedHighlightWords || []).filter(
-      (word) => Boolean(word) && text.includes(word),
-    );
+    const directedHighlightWords = rebaseHighlightWords(scene.telopText, text, scene.directedHighlightWords);
     return {
       ...scene,
       telopText: text,
@@ -924,8 +1031,8 @@ export function setSceneDirectedHighlightWords(
 ): Scene[] {
   return scenes.map((scene) => {
     if (scene.id !== sceneId) return scene;
-    const directedHighlightWords = (words || []).filter(
-      (word) => Boolean(word) && scene.telopText.includes(word),
+    const directedHighlightWords = highlightWordsFromMask(
+      scene.telopText, highlightMaskFromWords(scene.telopText, words),
     );
     return {
       ...scene,
@@ -1040,6 +1147,7 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
   const firstWords = scene.words.slice(0, wordIndex);
   const secondWords = scene.words.slice(wordIndex);
   const boundaryMs = Math.round((firstWords[firstWords.length - 1].endMs + secondWords[0].startMs) / 2);
+  if (!Number.isFinite(boundaryMs) || boundaryMs <= scene.sourceStartMs || boundaryMs >= scene.sourceEndMs) return scenes;
 
   const editedParts = scene.telopEdited ? splitEditedTelopText(scene.telopText, firstWords, secondWords) : null;
   const firstTelopText = editedParts ? editedParts.first : autoTelopTextFromWords(firstWords);
@@ -1048,6 +1156,7 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     id: `${scene.id}L`,
     sourceStartMs: scene.sourceStartMs,
     sourceEndMs: boundaryMs,
+    sourceKeepRanges: normalizeSceneSourceKeepRanges(computeSceneKeptSubRanges(scene), scene.sourceStartMs, boundaryMs),
     words: firstWords,
     telopText: firstTelopText,
     telopEdited: scene.telopEdited,
@@ -1062,6 +1171,7 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     directedHighlightWords: scene.directedHighlightWords,
     directedAnimationIn: scene.directedAnimationIn,
     videoEffectOverride: scene.videoEffectOverride,
+    telopPosition: scene.telopPosition,
     speaker: scene.speaker,
     speed: scene.speed,
   };
@@ -1069,6 +1179,7 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     id: `${scene.id}R`,
     sourceStartMs: boundaryMs,
     sourceEndMs: scene.sourceEndMs,
+    sourceKeepRanges: normalizeSceneSourceKeepRanges(computeSceneKeptSubRanges(scene), boundaryMs, scene.sourceEndMs),
     words: secondWords,
     telopText: secondTelopText,
     // W10-4: 編集済みシーンの分割では後半もtelopEdited=trueを維持する(自動全文への巻き戻り防止)。
@@ -1081,6 +1192,7 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
     directedHighlightWords: scene.directedHighlightWords,
     directedAnimationIn: scene.directedAnimationIn,
     videoEffectOverride: scene.videoEffectOverride,
+    telopPosition: scene.telopPosition,
     speaker: scene.speaker,
     speed: scene.speed,
   };
@@ -1096,11 +1208,16 @@ export function splitSceneAtWord(scenes: Scene[], sceneId: string, secondFirstWo
  * ms がシーンの範囲外([sourceStartMs, sourceEndMs])にあるか、範囲の両端と一致する場合は
  * (どちらか一方が空シーンになってしまうため)分割せずそのまま返す。
  */
-export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Scene[] {
+export function splitSceneAtMs(
+  scenes: Scene[],
+  sceneId: string,
+  ms: number,
+  options: { allowEmptySpeechSide?: boolean } = {},
+): Scene[] {
   const sceneIndex = scenes.findIndex((scene) => scene.id === sceneId);
   if (sceneIndex === -1) return scenes;
   const scene = scenes[sceneIndex];
-  if (ms <= scene.sourceStartMs || ms >= scene.sourceEndMs) return scenes;
+  if (!Number.isFinite(ms) || ms <= scene.sourceStartMs || ms >= scene.sourceEndMs) return scenes;
 
   const firstWords: SceneWord[] = [];
   const secondWords: SceneWord[] = [];
@@ -1123,7 +1240,10 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     const insideSpeechWord = scene.words.some(
       (word) => !word.silence && word.startMs < ms && word.endMs > ms,
     );
-    if (insideSpeechWord) return scenes;
+    // 精密な映像分割/範囲カットでは、1語の途中でも映像と音声をmsどおり分割する。
+    // 語は中点側だけへ渡し、空側は文言のないタイミングチップで尺を保持する。
+    // 従来のチップ/切り込み経路は既定のガードを維持する。
+    if (insideSpeechWord && !options.allowEmptySpeechSide) return scenes;
     if (!firstWords.length) {
       firstWords.push({
         id: `sil_edge_${scene.id}L`,
@@ -1155,6 +1275,7 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     id: `${scene.id}L`,
     sourceStartMs: scene.sourceStartMs,
     sourceEndMs: ms,
+    sourceKeepRanges: normalizeSceneSourceKeepRanges(computeSceneKeptSubRanges(scene), scene.sourceStartMs, ms),
     words: firstWords,
     telopText: firstTelopText,
     telopEdited: scene.telopEdited,
@@ -1166,6 +1287,7 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     directedHighlightWords: scene.directedHighlightWords,
     directedAnimationIn: scene.directedAnimationIn,
     videoEffectOverride: scene.videoEffectOverride,
+    telopPosition: scene.telopPosition,
     speaker: scene.speaker,
     speed: scene.speed,
   };
@@ -1173,6 +1295,7 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     id: `${scene.id}R`,
     sourceStartMs: ms,
     sourceEndMs: scene.sourceEndMs,
+    sourceKeepRanges: normalizeSceneSourceKeepRanges(computeSceneKeptSubRanges(scene), ms, scene.sourceEndMs),
     words: secondWords,
     telopText: secondTelopText,
     // W10-4: 編集済みシーンの分割では後半もtelopEdited=trueを維持する。
@@ -1185,6 +1308,7 @@ export function splitSceneAtMs(scenes: Scene[], sceneId: string, ms: number): Sc
     directedHighlightWords: scene.directedHighlightWords,
     directedAnimationIn: scene.directedAnimationIn,
     videoEffectOverride: scene.videoEffectOverride,
+    telopPosition: scene.telopPosition,
     speaker: scene.speaker,
     speed: scene.speed,
   };
@@ -1279,6 +1403,7 @@ export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
     id: `${first.id}_${second.id}`,
     sourceStartMs: first.sourceStartMs,
     sourceEndMs: second.sourceEndMs,
+    sourceKeepRanges: normalizeSceneSourceKeepRanges(span.flatMap(computeSceneKeptSubRanges), first.sourceStartMs, second.sourceEndMs),
     words,
     telopText,
     telopEdited,
@@ -1291,6 +1416,7 @@ export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
     directedType: first.directedType,
     directedAnimationIn: first.directedAnimationIn,
     videoEffectOverride: first.videoEffectOverride,
+    telopPosition: first.telopPosition,
     speaker: first.speaker ?? second.speaker,
     speed: first.speed,
     directedHighlightWords: highlightSources.length
@@ -1301,11 +1427,14 @@ export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
 }
 
 /**
- * W10-1(シーン単位の削除・復元): シーンが「丸ごと削除済み」(全単語deleted)かどうか。
+ * W10-1(シーン単位の削除・復元): シーンが「丸ごと削除済み」かどうか。
  * SceneRowListのスタブ行(「シーンN を削除しました」)への畳み込み判定と、
- * Delete連打時の連鎖選択(削除済みシーンをスキップ)に使う。単語ゼロのシーンは対象外。
+ * Delete連打時の連鎖選択(削除済みシーンをスキップ)に使う。明示区間がある場合は映像の
+ * 残存状態を優先する。旧形式だけ全単語deletedで判定し、単語ゼロのシーンは対象外。
  */
 export function isSceneFullyDeleted(scene: Scene): boolean {
+  const explicit = normalizeSceneSourceKeepRanges(scene.sourceKeepRanges, scene.sourceStartMs, scene.sourceEndMs);
+  if (explicit) return explicit.length === 0;
   return scene.words.length > 0 && scene.words.every((word) => word.deleted);
 }
 
@@ -1332,6 +1461,28 @@ export function findSceneIndexAtMs(scenes: Scene[], ms: number): number {
     if (ms >= scene.sourceStartMs && ms < scene.sourceEndMs) return index;
   }
   return -1;
+}
+
+/**
+ * 編集カーソル用。隣接境界は次の生存シーンを優先し、出力の最終終端だけ最後の生存
+ * シーンへ解決する。再生・字幕表示用の半開区間判定はfindSceneIndexAtMsのまま保つ。
+ * 削除された末尾シーンや区間の隙間へ、近いという理由だけで選択を移さない。
+ */
+export function findSceneIndexAtEditMs(scenes: Scene[], ms: number): number {
+  if (!Number.isFinite(ms)) return -1;
+  const index = findSceneIndexAtMs(scenes, ms);
+  if (index >= 0 && !isSceneFullyDeleted(scenes[index])) return index;
+  let finalEndMs = -Infinity;
+  let finalIndex = -1;
+  scenes.forEach((scene, sceneIndex) => {
+    for (const range of computeSceneKeptSubRanges(scene)) {
+      if (range.endMs > finalEndMs) {
+        finalEndMs = range.endMs;
+        finalIndex = sceneIndex;
+      }
+    }
+  });
+  return Math.abs(ms - finalEndMs) < 0.001 ? finalIndex : -1;
 }
 
 /**

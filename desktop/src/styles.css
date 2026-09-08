@@ -9886,3 +9886,240 @@ input[type="range"]::-moz-range-thumb {
 .exportDoneDeleteButton:hover {
   background: var(--danger-bg);
 }
+
+/* Keep the selected edit target separate from the scene under the playhead. */
+.timelineToolbar {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.timelineToolbarTitle,
+.timelineToolbarDuration {
+  white-space: nowrap;
+}
+
+.timelineSelectionBar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 38px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.timelineSelectionName {
+  min-width: 0;
+  max-width: min(100%, 340px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineSelectionName.active {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.timelineSelectionHint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.timelineSelectionHint kbd {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  padding: 1px 4px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.timelineBgmVolumeControl {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.timelineSelectionBar .timelineBgmVolumeControl input[type="number"] {
+  flex: 0 0 64px;
+  width: 64px;
+  height: 26px;
+  padding: 2px 5px;
+  border: 1px solid #d9a047;
+  border-radius: 5px;
+  background: #fff;
+  font: inherit;
+  color: #78350f;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.timelineBgmVolumeControl input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.timelineMediaError {
+  padding: 8px 12px;
+  border-bottom: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.tlVideoBlock.current:not(.selected),
+.tlTelopBlock.current:not(.selected) {
+  box-shadow: inset 0 -3px 0 #94a3b8;
+}
+
+.tlImageClip.selected,
+.tlBgmClip.selected {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.tlTelopBlockText.empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.timelineCanvas:focus,
+.previewImageClip:focus {
+  outline: none;
+}
+/* Precision workspace: preview and controls remain visible above all four tracks. */
+.sceneWorkspaceSection { --editor-line: #dbe1e9; --editor-ink: #253247; }
+
+/* 精密編集: プレビュー・調整欄・全トラックを同じ作業面に収める。 */
+.sceneWorkspaceSection { gap: 10px; }
+.sceneWorkspaceSection .sceneThemeBar { padding: 7px 10px; border-color: var(--editor-line); border-radius: 8px; box-shadow: none; }
+.sceneWorkspaceSection .sceneThemeOpenButton { min-height: 34px; padding: 4px 9px; border-radius: 6px; }
+.sceneWorkspaceSection .transcriptWorkspaceHeader { gap: 12px; }
+.sceneWorkspaceSection .transcriptWorkspaceActions { gap: 6px; }
+.sceneWorkspaceSection .transcriptWorkspaceActions > button {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 30px;
+  padding: 5px 9px; font-size: 11px; border: 1px solid var(--editor-line);
+  border-radius: 5px; background: #fff; color: var(--editor-ink);
+}
+.sceneWorkspaceSection .transcriptWorkspaceActions > button:disabled { opacity: .4; }
+.sceneWorkspaceSection .reviewViewTabs { padding: 3px; border-radius: 7px; }
+.sceneWorkspaceSection .reviewViewTabs button { padding: 6px 13px; border-radius: 5px; }
+.sceneWorkspaceSection .sceneThemeBarProgress { font-variant-numeric: tabular-nums; }
+.editorPreviewDock { display: contents; }
+.sceneMainAreaTimeline { --dock-height: clamp(210px, 26vh, 300px); height: var(--workspace-height, calc(100dvh - 183px)); min-height: 0; gap: 10px; }
+.sceneMainAreaTimeline .editorPreviewDock {
+  display: grid; grid-template-columns: minmax(260px, .85fr) minmax(400px, 1.4fr);
+  align-items: stretch; gap: 12px; flex: 0 0 var(--dock-height);
+  min-height: 0; overflow: hidden;
+}
+.sceneMainAreaTimeline .editorPreviewDock .scenePreviewColumn {
+  position: static; width: 100%; max-width: none; min-width: 0; min-height: 0;
+  margin: 0; gap: 5px; overflow: hidden;
+}
+.sceneMainAreaTimeline .editorPreviewDock .transcriptPreviewPanel {
+  display: flex; flex-direction: column; align-self: stretch;
+  width: 100%; min-height: 0; flex: 1 1 0; margin: 0;
+}
+.sceneMainAreaTimeline .editorPreviewDock .previewViewport {
+  display: flex; justify-content: center; flex: 1 1 0; min-height: 0; overflow: hidden;
+}
+.sceneMainAreaTimeline .editorPreviewDock .previewCanvasArea {
+  height: 100%; min-height: 0; width: 100%; max-width: none; margin: 0;
+}
+.sceneMainAreaTimeline .editorPreviewDock .previewCanvasAreaVertical {
+  flex: 0 1 auto; width: auto; max-width: 100%;
+}
+.sceneMainAreaTimeline .previewEffectClip,
+.sceneMainAreaTimeline .previewEffectTransform { height: 100%; }
+.sceneMainAreaTimeline .editorPreviewDock .transcriptPreviewStage {
+  width: 100%; height: 100%; min-height: 0; max-height: none;
+}
+.sceneMainAreaTimeline .previewTransportBar { flex: 0 0 auto; }
+.sceneMainAreaTimeline .previewFidelityToolbar { flex: 0 0 auto; flex-wrap: wrap; margin-top: 0; }
+.sceneWorkspaceSection .sceneRowListPane { padding-bottom: 72px; scroll-padding: 14px 0 72px; scrollbar-gutter: stable; }
+.sceneWorkspaceSection .sceneRow { border-radius: 7px; }
+.sceneWorkspaceSection .transcriptGuide { font-size: 11px; line-height: 1.7; }
+.sceneWorkspaceSection .sceneKeyGuide { font-size: 11px; }
+@media (max-height: 760px) {
+  .sceneMainAreaTimeline { min-height: 0; }
+  .sceneMainAreaTimeline { --dock-height: 210px; }
+}
+@media (max-width: 1050px) {
+  .sceneMainAreaTimeline .editorPreviewDock { grid-template-columns: minmax(240px, .8fr) minmax(370px, 1.2fr); gap: 10px; }
+  .sceneWorkspaceSection .sceneThemeBarLabel { display: none; }
+}
+
+.sceneWorkspaceSection .sceneEditingGuide { padding: 8px 11px; background: #f7f9fc; border: 1px solid var(--editor-line); color: #627187; border-radius: 6px; }
+.sceneEditingGuide summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; cursor: pointer; font-size: 11px; }
+.sceneEditingGuide summary::-webkit-details-marker { display: none; }
+.sceneEditingGuide summary > span:last-child { color: #4c73a2; white-space: nowrap; }
+.sceneEditingGuide summary > span:last-child::after { content: " ＋"; }
+.sceneEditingGuide[open] summary > span:last-child::after { content: " −"; }
+.sceneEditingGuide p { margin: 10px 0 0; line-height: 1.8; }
+.sceneWorkspaceSection .scenePreviewColumn { min-width: 0; }
+.sceneWorkspaceSection .transcriptPreviewPanel { max-width: 100%; box-sizing: border-box; }
+.sceneWorkspaceSection .previewTransportBar { gap: 6px; padding-inline: 7px; }
+.sceneWorkspaceSection .previewTransportSeek { min-width: 24px; }
+.sceneWorkspaceSection .previewTransportTime { font-size: 10px; }
+.sceneWorkspaceSection .sceneTabs button { border-radius: 6px; font-size: 11px; padding: 5px 9px; }
+/* 映像確認中は編集ボタンを控え、触れた時・キーボード操作時に表示する。 */
+.sceneWorkspaceSection .previewFramingModeButtons { opacity: 0; transition: opacity 120ms ease; }
+.sceneWorkspaceSection .transcriptPreviewPanel:hover .previewFramingModeButtons,
+.sceneWorkspaceSection .transcriptPreviewPanel:focus-within .previewFramingModeButtons,
+.sceneWorkspaceSection .previewFramingModeButtons:has(.isActive) { opacity: 1; }
+
+/* 再生位置は全幅、その下に再生・時刻・速度・音量を配置して縦型でも隠さない。 */
+.sceneWorkspaceSection .previewTransportBarWithRate {
+  display: grid; grid-template-columns: 26px auto minmax(54px, 1fr) 26px 48px;
+  grid-template-areas: "seek seek seek seek seek" "play time rate mute volume";
+  gap: 4px 6px;
+}
+.previewTransportBarWithRate .previewTransportButton:first-of-type { grid-area: play; }
+.previewTransportBarWithRate .previewTransportButton:last-of-type { grid-area: mute; }
+.previewTransportBarWithRate .previewTransportTime { grid-area: time; }
+.previewTransportBarWithRate .previewTransportSeek { grid-area: seek; width: 100%; margin: 0; }
+.previewTransportBarWithRate .previewTransportVolume { grid-area: volume; width: 100%; min-width: 0; margin: 0; }
+.previewTransportRate { grid-area: rate; display: flex; justify-self: end; align-items: center; gap: 3px; margin: 0; color: #b9c5d7; font-size: 10px; }
+.sceneWorkspaceSection .previewTransportRate select {
+  width: auto; min-width: 0; height: 26px; padding: 2px 4px;
+  border: 1px solid #425066; border-radius: 4px; background: #202c3e; color: #e5e7eb; font: inherit;
+}
+
+/* 縦型はプレビューを左の全高に置き、細長い映像と直下の操作をまとめて確保する。 */
+.sceneMainAreaTimeline.sceneMainAreaTimelineVertical {
+  display: grid;
+  grid-template-columns: clamp(260px, 26vw, 340px) minmax(0, 1fr);
+  grid-template-rows: minmax(160px, min(210px, 38%)) minmax(0, 1fr);
+  gap: 10px 12px;
+}
+.sceneMainAreaTimelineVertical .editorPreviewDock { display: contents; }
+.sceneMainAreaTimelineVertical .editorPreviewDock .scenePreviewColumn {
+  grid-column: 1; grid-row: 1 / -1; height: 100%;
+}
+.sceneMainAreaTimelineVertical .selectionInspector { grid-column: 2; grid-row: 1; }
+.sceneMainAreaTimelineVertical > .timelineView,
+.sceneMainAreaTimelineVertical > .editorLoadStatus { grid-column: 2; grid-row: 2; }
+.sceneMainAreaTimelineVertical .timelineToolbar { flex-wrap: wrap; gap: 6px 8px; }
+.sceneMainAreaTimelineVertical .timelineToolbarTitle { display: none; }
+.sceneMainAreaTimelineVertical .timelineZoomControl input[type="range"] { width: 65px; }
+.sceneMainAreaTimelineVertical .precisionTimelineHint { font-size: 9px; }
+@media (max-width: 1050px) {
+  .sceneMainAreaTimeline.sceneMainAreaTimelineVertical { grid-template-columns: 250px minmax(0, 1fr); }
+  .sceneMainAreaTimelineVertical .previewTransportRate > span { display: none; }
+}
+@media (max-width: 1050px) {
+  .sceneMainAreaTimelineVertical .previewTransportBarWithRate {
+    grid-template-columns: 24px auto minmax(44px, 1fr) 24px 36px;
+    column-gap: 4px;
+  }
+}

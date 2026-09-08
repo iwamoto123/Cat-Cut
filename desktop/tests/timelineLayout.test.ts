@@ -198,6 +198,53 @@ test("sceneTimelineBlocks: words未指定・空配列のシーンは従来どお
   assert.equal(blocks.length, 1);
 });
 
+test("sceneTimelineBlocks: 明示した全カットは単語が未削除でもブロックを表示しない", () => {
+  const blocks = sceneTimelineBlocks(
+    [{ id: "s1", sourceStartMs: 1000, sourceEndMs: 5000, telopText: "映像は削除済み", sourceKeepRanges: [], words: [{ deleted: false }] }],
+    RANGES,
+  );
+  assert.deepEqual(blocks, []);
+});
+
+test("sceneTimelineBlocks: 単語が全削除でも端で復元した映像区間を表示し先頭の残存フレームを使う", () => {
+  const blocks = sceneTimelineBlocks(
+    [{
+      id: "s1", sourceStartMs: 1000, sourceEndMs: 16000, telopText: "",
+      words: [{ deleted: true }],
+      sourceKeepRanges: [{ startMs: 2500, endMs: 3500 }, { startMs: 11000, endMs: 12000 }],
+    }],
+    RANGES,
+  );
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].timelineStartMs, 5500);
+  assert.equal(blocks[0].timelineEndMs, 10000);
+  assert.equal(blocks[0].sourceStartMs, 2500);
+});
+
+test("sceneTimelineBlocks: 明示した残存区間とカット対応表が重ならなければ表示しない", () => {
+  const blocks = sceneTimelineBlocks(
+    [{
+      id: "s1", sourceStartMs: 1000, sourceEndMs: 16000, telopText: "残存映像は対応表の外",
+      sourceKeepRanges: [{ startMs: 6000, endMs: 9000 }],
+    }],
+    RANGES,
+  );
+  assert.deepEqual(blocks, []);
+});
+
+test("sceneTimelineBlocks: サムネイル位置は対応表と重なる最初の残存位置に限定する", () => {
+  const blocks = sceneTimelineBlocks(
+    [{
+      id: "s1", sourceStartMs: 0, sourceEndMs: 20000, telopText: "先頭をカット",
+      sourceKeepRanges: [{ startMs: 7000, endMs: 11500 }],
+    }],
+    RANGES,
+  );
+  assert.equal(blocks[0].sourceStartMs, 10000);
+  assert.equal(blocks[0].timelineStartMs, 8000);
+  assert.equal(blocks[0].timelineEndMs, 9500);
+});
+
 test("sceneTimelineBlocks: speed=2の出力ブロック幅は元素材尺の半分", () => {
   const blocks = sceneTimelineBlocks(
     [{ id: "s1", sourceStartMs: 0, sourceEndMs: 4000, telopText: "倍速", speed: 2 }],

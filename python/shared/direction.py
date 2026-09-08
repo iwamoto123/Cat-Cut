@@ -18,6 +18,7 @@ step08 は毎回「現在のkeep_segments×絶対msアンカー」からカッ�
 from __future__ import annotations
 
 import re
+import math
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -459,9 +460,10 @@ def sanitize_highlight_words(highlight_words: Any, text: str, max_words: int = 3
     if not isinstance(highlight_words, list):
         return []
     result: List[str] = []
+    searchable_text = text.replace("\r", "").replace("\n", "")
     for word in highlight_words:
-        candidate = str(word or "").strip()
-        if candidate and candidate in text and candidate not in result:
+        candidate = str(word or "").strip().replace("\r", "").replace("\n", "")
+        if candidate and candidate in searchable_text and candidate not in result:
             result.append(candidate)
         if len(result) >= max_words:
             break
@@ -1046,7 +1048,12 @@ def build_directed_cut_content(
         raw_highlights = slot.get("highlight_words")
         if isinstance(raw_highlights, list):
             raw_highlights = [normalize_directed_display_text(str(w or "")) for w in raw_highlights]
-        highlight_words = sanitize_highlight_words(raw_highlights, text)
+        # AI responses are capped when sanitized. A saved human selection can contain
+        # more ranges and must survive rendering without silently losing colors.
+        highlight_words = sanitize_highlight_words(
+            raw_highlights, text,
+            max_words=max(3, len(raw_highlights)) if isinstance(raw_highlights, list) else 3,
+        )
         # フェーズU6: 定義付きカスタムスタイルID(directives/テーマ由来)はsanitizeで許可する
         style = effective_slot_style(
             slot, type_mapping, allowed_custom=allowed_custom_styles, speaker_colors=speaker_colors,
@@ -1087,6 +1094,14 @@ def build_directed_cut_content(
             "end": round(end_ms / 1000.0, 3),
             "style": style,
         }
+        position = slot.get("telop_position")
+        if isinstance(position, dict) and all(
+            isinstance(position.get(axis), (int, float)) and not isinstance(position[axis], bool)
+            and math.isfinite(position[axis]) for axis in ("x", "y")
+        ):
+            normalized_position = {axis: round(max(0, min(1, position[axis])), 4) for axis in ("x", "y")}
+            page["telop_position"] = normalized_position
+            telop["telop_position"] = normalized_position
         if semantic_type:
             telop["type"] = semantic_type
         if speaker:

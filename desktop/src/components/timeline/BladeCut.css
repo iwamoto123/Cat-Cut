@@ -1,0 +1,4 @@
+.tlVideoLane.isBladeMode .tlVideoBlock { cursor: crosshair; }
+.tlVideoBlade { position: absolute; inset-block: 8px; width: 1px; background: #ffe59a; z-index: 3; pointer-events: none; box-shadow: 0 0 0 1px #26262666; }
+.tlVideoBlade > span { position: absolute; top: 3px; left: 5px; padding: 3px 6px; border-radius: 4px; background: #222832ee; color: #fff0c2; white-space: nowrap; font-size: 10px; font-variant-numeric: tabular-nums; }
+.tlVideoBlade.isRight > span { left: auto; right: 5px; }

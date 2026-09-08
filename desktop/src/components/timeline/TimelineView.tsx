@@ -3,20 +3,21 @@ import {
   Film,
   Image as ImageIcon,
   Maximize2,
+  Magnet,
+  Scissors,
   Music,
   Plus,
   Type,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { normalizeSceneSpeed, SCENE_SPEEDS, type Scene } from "../../lib/scenes";
+import { findSceneIndexAtEditMs, isSceneFullyDeleted, type Scene } from "../../lib/scenes";
 import type { TimelineCutRange } from "../../lib/previewTimeline";
-import { sourceMsToTimelineMs } from "../../lib/previewTimeline";
+import { sourceMsToTimelineEditMs } from "../../lib/previewTimeline";
 import { playheadStore, usePlayheadSourceMs, usePlayheadTimelineMs } from "../../lib/playheadStore";
 import { telopStyleSwatchColors, type TelopStyleDef } from "../../lib/telopThemes";
 import {
   clampZoomFactor,
-  formatTimelineMs,
   maxZoomFactor,
   resolveTimelineTotalMs,
   sceneTimelineBlocks,
@@ -33,6 +34,9 @@ import {
   dropTimelineMs,
   type DropMediaKind,
 } from "../../lib/timelineDrop";
+import type { EditorSelection, MediaEditPhase } from "../../lib/editorSelection";
+import { formatPrecisionTime } from "../../lib/precisionMedia";
+import "./precisionTimeline.css";
 import { nextBgmClipStartMs } from "../../lib/bgmClips";
 import { effectiveTimelineOpInfo, type RunOpConfig } from "../../lib/opEditor";
 import { TimelineRuler } from "./TimelineRuler";
@@ -47,8 +51,10 @@ const TELOP_LANE_HEIGHT = 52;
 /** V6-5: 画像・BGMは1クリップ=1レーンの段積み。値は「1レーンあたり」の高さ。 */
 const IMAGE_LANE_HEIGHT = 40;
 const VIDEO_LANE_HEIGHT = 76;
-const BGM_LANE_HEIGHT = 56;
-const TRACK_LABEL_WIDTH = 96;
+const BGM_LANE_HEIGHT = 68;
+const TRACK_LABEL_WIDTH = 124;
+/** Keep final trim handles and the OUT label reachable even at fit zoom. */
+const TRACK_END_PADDING_PX = 48;
 
 /** ⌘スクロール/ピンチ1単位あたりのズーム感度(deltaY→倍率の指数係数)。 */
 const WHEEL_ZOOM_SENSITIVITY = 0.005;
@@ -77,7 +83,7 @@ function resolvePlayheadTimelineMs(
   sourceMs: number,
   timelineCutRanges: TimelineCutRange[],
 ): number | null {
-  return timelineMs !== null ? timelineMs : sourceMsToTimelineMs(timelineCutRanges, sourceMs);
+  return timelineMs !== null ? timelineMs : sourceMsToTimelineEditMs(timelineCutRanges, sourceMs);
 }
 
 /**
@@ -121,10 +127,36 @@ function TimelinePlayhead({
   );
 }
 
+function TimelineSplitButton({ scenes, ranges, onSplit, disabled }: { scenes: Scene[]; ranges: TimelineCutRange[]; onSplit: () => void; disabled: boolean }) {
+  const sourceMs = usePlayheadSourceMs();
+  const timelineMs = usePlayheadTimelineMs();
+  const inMainVideo = timelineMs === null || ranges.some((range) => timelineMs >= range.timelineStartMs && timelineMs <= range.timelineEndMs);
+  const index = findSceneIndexAtEditMs(scenes, sourceMs);
+  const scene = index >= 0 ? scenes[index] : null;
+  const canSplit = inMainVideo && scene && !isSceneFullyDeleted(scene) && sourceMs > scene.sourceStartMs && sourceMs < scene.sourceEndMs;
+  return <button type="button" className="precisionTimelineButton" disabled={disabled || !canSplit} onClick={onSplit} title="再生ヘッドの位置で映像を分割（Enter）"><Scissors size={13} />分割<span className="precisionButtonKey">Enter</span></button>;
+}
+
+function TimelineClock({ ranges }: { ranges: TimelineCutRange[] }) {
+  const sourceMs = usePlayheadSourceMs();
+  const timelineMs = usePlayheadTimelineMs();
+  return <span className="precisionTimelineClock" title="再生ヘッドの仕上がり時刻">{formatPrecisionTime(resolvePlayheadTimelineMs(timelineMs, sourceMs, ranges) ?? 0)}</span>;
+}
+
 type Props = {
+  scissorsMode?: boolean;
+  onBladeCut?: (sceneId: string, sourceMs: number) => void;
+  fps?: number;
+  getBgmState?: () => BgmState | null;
+  getImagesState?: () => ImagesState | null;
+  onSplitAtPlayhead?: () => void;
+  canSplitAtPlayhead?: boolean;
   runDir: string;
+  mediaImporting: boolean;
   scenes: Scene[];
   currentSceneId: string | null;
+  selection: EditorSelection;
+  onSelectionChange: (selection: EditorSelection) => void;
   timelineCutRanges: TimelineCutRange[];
   /** composition timeline.total_duration_ms(OP含む)。未生成は0。 */
   timelineDurationMs: number;
@@ -149,10 +181,13 @@ type Props = {
   /** テーマ調整モーダルのオープニングセクションへ誘導する(directedモードのみ)。 */
   onOpenOpSettings?: () => void;
   bgmState: BgmState | null;
-  onBgmStateChange: (state: BgmState) => void;
+  onBgmStateChange: (state: BgmState, phase?: MediaEditPhase) => void;
   /** フェーズV4: 画像挿入トラックの状態(images.json由来。プレビュー反映のためAppが保持する)。 */
   imagesState: ImagesState | null;
-  onImagesStateChange: (state: ImagesState) => void;
+  onImagesStateChange: (state: ImagesState, phase?: MediaEditPhase) => void;
+  /** Flush current edits and register an import; always call the returned completion callback. */
+  onBeforeMediaAdd: () => Promise<() => void>;
+  onMediaAddError?: (message: string) => void;
   /** W11-3: プレイヘッドのドラッグスクラブ開始時に呼ぶ(再生中なら親が一時停止する)。 */
   onScrubStart?: () => void;
   onSetSceneSpeed: (sceneId: string, speed: number) => void;
@@ -172,9 +207,19 @@ type Props = {
  * - 座標計算は lib/timelineLayout.ts の純関数に集約
  */
 export function TimelineView({
+  scissorsMode = false,
+  onBladeCut,
+  fps = 30,
+  getBgmState,
+  getImagesState,
+  onSplitAtPlayhead,
+  canSplitAtPlayhead = true,
   runDir,
+  mediaImporting,
   scenes,
   currentSceneId,
+  selection,
+  onSelectionChange,
   timelineCutRanges,
   timelineDurationMs,
   timelineOp,
@@ -188,10 +233,34 @@ export function TimelineView({
   onBgmStateChange,
   imagesState,
   onImagesStateChange,
+  onBeforeMediaAdd,
+  onMediaAddError,
   onScrubStart,
   onSetSceneSpeed,
   onSetAllScenesSpeed,
 }: Props) {
+  const latestBgmStateRef = useRef(bgmState);
+  latestBgmStateRef.current = bgmState;
+  function changeBgmState(state: BgmState, phase?: MediaEditPhase) {
+    latestBgmStateRef.current = state;
+    onBgmStateChange(state, phase);
+  }
+  const latestImagesStateRef = useRef(imagesState);
+  latestImagesStateRef.current = imagesState;
+  function changeImagesState(state: ImagesState, phase?: MediaEditPhase) {
+    latestImagesStateRef.current = state;
+    onImagesStateChange(state, phase);
+  }
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [altPressed, setAltPressed] = useState(false);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => setAltPressed(event.altKey);
+    const onBlur = () => setAltPressed(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    window.addEventListener("blur", onBlur);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("keyup", onKey); window.removeEventListener("blur", onBlur); };
+  }, []);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -204,6 +273,19 @@ export function TimelineView({
   const [frames, setFrames] = useState<Array<{ ms: number; url: string }>>([]);
   const [addingBgm, setAddingBgm] = useState(false);
   const [addingImage, setAddingImage] = useState(false);
+  const mediaBusy = mediaImporting || addingBgm || addingImage;
+  const mediaAddBusyRef = useRef(false);
+  const activeRunDirRef = useRef<string | null>(runDir);
+  activeRunDirRef.current = runDir;
+  const [mediaAddError, setMediaAddError] = useState<string | null>(null);
+  useEffect(() => {
+    activeRunDirRef.current = runDir;
+    mediaAddBusyRef.current = false;
+    setAddingBgm(false);
+    setAddingImage(false);
+    setMediaAddError(null);
+    return () => { activeRunDirRef.current = null; };
+  }, [runDir]);
   // ズーム後にscrollLeftを適用するための保留値(コンテンツ幅が更新された後に反映)
   const pendingScrollLeftRef = useRef<number | null>(null);
   // V6-4: D&D中のドロップ先インジケータ。ネストしたdragenter/leaveの誤消去を深さカウントで防ぐ
@@ -222,13 +304,14 @@ export function TimelineView({
       resolveTimelineTotalMs(
         timelineDurationMs,
         timelineCutRanges,
-        (bgmState?.clips ?? []).map((clip) => clip.end_ms),
+        [...(bgmState?.clips ?? []), ...(imagesState?.clips ?? [])].map((clip) => clip.end_ms),
       ),
-    [timelineDurationMs, timelineCutRanges, bgmState],
+    [timelineDurationMs, timelineCutRanges, bgmState, imagesState],
   );
   const blocks = useMemo(() => sceneTimelineBlocks(scenes, timelineCutRanges), [scenes, timelineCutRanges]);
-  const selectedScene = scenes.find((scene) => scene.id === currentSceneId) ?? null;
-  const selectedSpeed = normalizeSceneSpeed(selectedScene?.speed);
+  const sceneSnapPoints = useMemo(() => [0, totalMs, ...blocks.flatMap((block) => [block.timelineStartMs, block.timelineEndMs])], [blocks, totalMs]);
+  const imageSnapPoints = useMemo(() => [...sceneSnapPoints, ...(bgmState?.clips ?? []).flatMap((clip) => [clip.start_ms, clip.end_ms])], [sceneSnapPoints, bgmState]);
+  const bgmSnapPoints = useMemo(() => [...sceneSnapPoints, ...(imagesState?.clips ?? []).flatMap((clip) => [clip.start_ms, clip.end_ms])], [sceneSnapPoints, imagesState]);
   const colorBySceneId = useMemo(() => {
     const map = new Map<string, string>();
     for (const scene of scenes) {
@@ -243,7 +326,7 @@ export function TimelineView({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const updateWidth = (width: number) => setViewportWidth(Math.max(0, width - TRACK_LABEL_WIDTH));
+    const updateWidth = (width: number) => setViewportWidth(Math.max(0, width - TRACK_LABEL_WIDTH - TRACK_END_PADDING_PX));
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) updateWidth(entry.contentRect.width);
@@ -278,7 +361,7 @@ export function TimelineView({
   viewportWidthRef.current = viewportWidth;
 
   const pxPerMs = zoomFactorToPxPerMs(zoomFactor, totalMs, viewportWidth);
-  const contentPx = Math.max(viewportWidth, totalMs * pxPerMs);
+  const contentPx = Math.max(viewportWidth, totalMs * pxPerMs) + TRACK_END_PADDING_PX;
   const maxFactor = maxZoomFactor(totalMs, viewportWidth);
   const zoomRatio = zoomSliderRatio(clampZoomFactor(zoomFactor, totalMs, viewportWidth), maxFactor);
 
@@ -368,6 +451,8 @@ export function TimelineView({
    */
   function handleCanvasClick(event: React.MouseEvent<HTMLDivElement>) {
     const canvas = canvasRef.current;
+    canvas?.focus({ preventScroll: true });
+    onSelectionChange(null);
     if (!canvas || pxPerMs <= 0) return;
     const rect = canvas.getBoundingClientRect();
     const timelineMs = (event.clientX - rect.left) / pxPerMs;
@@ -424,26 +509,40 @@ export function TimelineView({
 
   /** V6-5: 「+ BGM」の追加開始位置=既存クリップ最後尾の終端(1本目は0)。 */
   async function handleAddBgm() {
-    if (addingBgm) return;
+    if (mediaImporting || mediaAddBusyRef.current) return;
+    mediaAddBusyRef.current = true;
+    setMediaAddError(null);
     setAddingBgm(true);
+    let finishImport: (() => void) | undefined;
     try {
+      finishImport = await onBeforeMediaAdd();
       const next = await window.catcut.addBgm({
         runDir,
         startMs: nextBgmClipStartMs(bgmState?.clips ?? []),
       });
-      if (next) onBgmStateChange(next);
-    } catch {
-      // ダイアログ失敗・コピー失敗時は現状維持(致命的ではない)
+      if (next) onBgmStateChange(next, "import");
+    } catch (error) {
+      const message = `追加できませんでした: ${error instanceof Error ? error.message : String(error)}`;
+      onMediaAddError?.(message);
+      if (activeRunDirRef.current === runDir) setMediaAddError(message);
     } finally {
-      setAddingBgm(false);
+      finishImport?.();
+      if (activeRunDirRef.current === runDir) {
+        mediaAddBusyRef.current = false;
+        setAddingBgm(false);
+      }
     }
   }
 
   /** フェーズV4: 画像追加。既定の配置位置=現在の再生ヘッド位置から4秒間。 */
   async function handleAddImage() {
-    if (addingImage) return;
+    if (mediaImporting || mediaAddBusyRef.current) return;
+    mediaAddBusyRef.current = true;
+    setMediaAddError(null);
     setAddingImage(true);
+    let finishImport: (() => void) | undefined;
     try {
+      finishImport = await onBeforeMediaAdd();
       // W19-A3: クリック時点の再生ヘッド位置はストアから直接読む(描画用の購読とは独立)。
       const playheadTimelineMs = resolvePlayheadTimelineMs(
         playheadStore.getTimelineMs(),
@@ -454,11 +553,17 @@ export function TimelineView({
         runDir,
         startMs: Math.max(0, Math.round(playheadTimelineMs ?? 0)),
       });
-      if (next) onImagesStateChange(next);
-    } catch {
-      // ダイアログ失敗・コピー失敗時は現状維持(致命的ではない)
+      if (next) onImagesStateChange(next, "import");
+    } catch (error) {
+      const message = `追加できませんでした: ${error instanceof Error ? error.message : String(error)}`;
+      onMediaAddError?.(message);
+      if (activeRunDirRef.current === runDir) setMediaAddError(message);
     } finally {
-      setAddingImage(false);
+      finishImport?.();
+      if (activeRunDirRef.current === runDir) {
+        mediaAddBusyRef.current = false;
+        setAddingImage(false);
+      }
     }
   }
 
@@ -527,18 +632,34 @@ export function TimelineView({
       return;
     }
     setDropIndicator(null);
+    if (mediaImporting || mediaAddBusyRef.current) return;
+    mediaAddBusyRef.current = true;
+    setMediaAddError(null);
+    if (kind === "image") setAddingImage(true);
+    else setAddingBgm(true);
+    let finishImport: (() => void) | undefined;
     try {
+      finishImport = await onBeforeMediaAdd();
       // Electron 32+はFile.pathが取れないため、preload経由のwebUtils.getPathForFileで解決する
       const filePath = window.catcut.getPathForFile(file);
       if (kind === "image") {
         const next = await window.catcut.addImageFile({ runDir, filePath, startMs });
-        if (next) onImagesStateChange(next);
+        if (next) onImagesStateChange(next, "import");
       } else {
         const next = await window.catcut.addBgmFile({ runDir, filePath, startMs });
-        if (next) onBgmStateChange(next);
+        if (next) onBgmStateChange(next, "import");
       }
-    } catch {
-      // main側の形式チェック落ち・コピー失敗時は現状維持(致命的ではない)
+    } catch (error) {
+      const message = `追加できませんでした: ${error instanceof Error ? error.message : String(error)}`;
+      onMediaAddError?.(message);
+      if (activeRunDirRef.current === runDir) setMediaAddError(message);
+    } finally {
+      finishImport?.();
+      if (activeRunDirRef.current === runDir) {
+        mediaAddBusyRef.current = false;
+        setAddingImage(false);
+        setAddingBgm(false);
+      }
     }
   }
 
@@ -562,33 +683,15 @@ export function TimelineView({
   }
 
   return (
-    <div className="timelineView" ref={rootRef}>
+    <div className="timelineView precisionTimeline" ref={rootRef}>
       <div className="timelineToolbar">
-        <span className="timelineToolbarTitle">タイムライン（書き出し後の時間軸）</span>
-        <span className="timelineToolbarDuration">総尺 {formatTimelineMs(totalMs)}</span>
-        {selectedScene && (
-          <div className="timelineSpeedControl" aria-label="素材速度">
-            <span>速度</span>
-            {SCENE_SPEEDS.map((speed) => (
-              <button
-                className={selectedSpeed === speed ? "active" : ""}
-                key={speed}
-                onClick={() => onSetSceneSpeed(selectedScene.id, speed)}
-                type="button"
-              >
-                {speed}x
-              </button>
-            ))}
-            <button
-              className="timelineSpeedApplyAll"
-              onClick={() => onSetAllScenesSpeed(selectedSpeed)}
-              type="button"
-            >
-              全体をこの速度に
-            </button>
-          </div>
-        )}
+        <span className="timelineToolbarTitle" title="書き出した動画の時間軸です">タイムライン</span>
+        <TimelineClock ranges={timelineCutRanges} />
+        <span className="timelineToolbarDuration">/ {formatPrecisionTime(totalMs)}</span>
+        {onSplitAtPlayhead && <TimelineSplitButton scenes={scenes} ranges={timelineCutRanges} onSplit={onSplitAtPlayhead} disabled={mediaBusy || !canSplitAtPlayhead} />}
+        <button type="button" className={`precisionTimelineButton${snapEnabled && !altPressed ? " active" : ""}`} aria-pressed={snapEnabled} onClick={() => setSnapEnabled((value) => !value)} title="クリップ端を近くの境界に合わせる。Altを押している間は一時解除"><Magnet size={13} />{snapEnabled && !altPressed ? "スナップ ON" : altPressed && snapEnabled ? "一時解除" : "スナップ OFF"}</button>
         <div className="timelineZoomControl">
+          <span className="precisionZoomValue" title="全体表示を基準にした拡大率">{zoomFactor.toFixed(1)}×</span>
           <button
             className="timelineZoomButton"
             disabled={zoomRatio <= 0}
@@ -599,6 +702,7 @@ export function TimelineView({
             <ZoomOut size={13} />
           </button>
           <input
+            aria-label="タイムラインのズーム"
             max={100}
             min={0}
             onChange={(event) =>
@@ -628,19 +732,20 @@ export function TimelineView({
           </button>
         </div>
       </div>
+      {mediaAddError && <div className="timelineMediaError" role="alert">{mediaAddError}</div>}
       <div className="timelineBody" ref={scrollRef}>
-        <div className="timelineLabels">
+        <div className="timelineLabels" style={{ flexBasis: TRACK_LABEL_WIDTH, minWidth: TRACK_LABEL_WIDTH, maxWidth: TRACK_LABEL_WIDTH }}>
           <div className="timelineLabelCell" style={{ height: RULER_HEIGHT }} />
-          <div className="timelineLabelCell" style={{ height: TELOP_LANE_HEIGHT }}>
+          <div className="timelineLabelCell timelineLabelTelop" style={{ height: TELOP_LANE_HEIGHT }}>
             <Type size={14} />
             <span>テロップ</span>
           </div>
-          <div className="timelineLabelCell" style={{ height: imageTrackHeight }}>
+          <div className="timelineLabelCell timelineLabelImage" style={{ height: imageTrackHeight }}>
             <ImageIcon size={14} />
             <span>画像</span>
             <button
               className="timelineBgmAddButton"
-              disabled={addingImage}
+              disabled={mediaBusy || !imagesState || !bgmState}
               onClick={() => void handleAddImage()}
               title="動画に重ねる画像を追加（png/jpg/webp/gif）。再生ヘッド位置から4秒間で配置します。ファイルを直接ドラッグ&ドロップでも追加できます"
               type="button"
@@ -649,16 +754,16 @@ export function TimelineView({
               画像
             </button>
           </div>
-          <div className="timelineLabelCell" style={{ height: VIDEO_LANE_HEIGHT }}>
+          <div className="timelineLabelCell timelineLabelVideo" style={{ height: VIDEO_LANE_HEIGHT }}>
             <Film size={14} />
             <span>映像</span>
           </div>
-          <div className="timelineLabelCell" style={{ height: bgmTrackHeight }}>
+          <div className="timelineLabelCell timelineLabelBgm" style={{ height: bgmTrackHeight }}>
             <Music size={14} />
             <span>BGM</span>
             <button
               className="timelineBgmAddButton"
-              disabled={addingBgm}
+              disabled={mediaBusy || !imagesState || !bgmState}
               onClick={() => void handleAddBgm()}
               title="BGMファイルを追加（mp3/wav/m4a/aac）。既存BGMの後ろに続けて配置します。ファイルを直接ドラッグ&ドロップでも追加できます"
               type="button"
@@ -680,6 +785,7 @@ export function TimelineView({
             className="timelineCanvas"
             onClick={handleCanvasClick}
             ref={canvasRef}
+            tabIndex={-1}
             style={{ width: `${contentPx}px` }}
           >
             <TimelineRuler pxPerMs={pxPerMs} totalMs={totalMs} />
@@ -688,43 +794,71 @@ export function TimelineView({
                 blocks={blocks}
                 colorBySceneId={colorBySceneId}
                 currentSceneId={currentSceneId}
+                selection={selection}
                 onEdit={onEditSceneStyle}
-                onSelect={(block) => onSeekSource(block.sourceStartMs)}
+                onSelect={(block) => {
+                  onSelectionChange({ kind: "telop", id: block.sceneId });
+                  onSeekSource(block.sourceStartMs);
+                }}
                 pxPerMs={pxPerMs}
               />
             </div>
             <div style={{ height: imageTrackHeight, position: "relative" }}>
               <ImageTrack
+                key={runDir}
+                disabled={mediaBusy}
                 laneHeightPx={IMAGE_LANE_HEIGHT}
-                onStateChange={onImagesStateChange}
+                onStateChange={changeImagesState}
+                getState={getImagesState ?? (() => latestImagesStateRef.current)}
+                timelineDurationMs={totalMs}
+                snapEnabled={snapEnabled}
+                snapPointsMs={imageSnapPoints}
                 pxPerMs={pxPerMs}
-                runDir={runDir}
+                selection={selection}
+                onSelectionChange={onSelectionChange}
                 state={imagesState}
               />
               {renderDropPlus("image")}
             </div>
             <div style={{ height: VIDEO_LANE_HEIGHT, position: "relative" }}>
               <VideoTrack
+                scissorsMode={scissorsMode}
+                onBladeCut={onBladeCut}
+                fps={fps}
+                timelineCutRanges={timelineCutRanges}
                 blocks={blocks}
                 currentSceneId={currentSceneId}
+                selection={selection}
                 frames={frames}
-                onOpClick={onOpenOpSettings}
-                onOpSeek={onSeekTimeline}
-                onSelect={(block) => onSeekSource(block.sourceStartMs)}
+                onOpClick={onOpenOpSettings ? () => { onSelectionChange(null); onOpenOpSettings(); } : undefined}
+                onOpSeek={onSeekTimeline ? (ms) => { onSelectionChange(null); onSeekTimeline(ms); } : undefined}
+                onSelect={(block) => {
+                  onSelectionChange({ kind: "video", id: block.sceneId });
+                  onSeekSource(block.sourceStartMs);
+                }}
                 op={opInfo}
                 pxPerMs={pxPerMs}
               />
             </div>
             <div style={{ height: bgmTrackHeight, position: "relative" }}>
               <BgmTrackV2
-                laneHeightPx={BGM_LANE_HEIGHT}
-                onStateChange={onBgmStateChange}
-                pxPerMs={pxPerMs}
+                key={runDir}
                 runDir={runDir}
+                disabled={mediaBusy}
+                laneHeightPx={BGM_LANE_HEIGHT}
+                onStateChange={changeBgmState}
+                getState={getBgmState ?? (() => latestBgmStateRef.current)}
+                timelineDurationMs={totalMs}
+                snapEnabled={snapEnabled}
+                snapPointsMs={bgmSnapPoints}
+                pxPerMs={pxPerMs}
+                selection={selection}
+                onSelectionChange={onSelectionChange}
                 state={bgmState}
               />
               {renderDropPlus("bgm")}
             </div>
+            <div className="timelineEndPadding" style={{ left: `${totalMs * pxPerMs}px`, width: TRACK_END_PADDING_PX }} aria-hidden="true" />
             <TimelinePlayhead
               onPointerDown={handlePlayheadPointerDown}
               onPointerMove={handlePlayheadPointerMove}
@@ -736,6 +870,7 @@ export function TimelineView({
           </div>
         </div>
       </div>
+      <div className="precisionTimelineHint"><span>{selection?.kind === "bgm" ? "帯: 移動 / 上端: 長さ / 線: 音量 / つまみ: フェード" : "本文をドラッグ: 移動 / 両端: 長さ"}</span><span><kbd>← →</kbd> 1フレーム <kbd>Shift</kbd> 10フレーム</span><span className="precisionSnapHint"><kbd>Alt</kbd> スナップ一時解除 · {fps} fps</span></div>
       {dropIndicator?.kind === "unsupported" && (
         <div className="tlDropUnsupported">
           非対応の形式です（画像: png/jpg/jpeg/webp/gif ／ 音声: mp3/wav/m4a/aac）

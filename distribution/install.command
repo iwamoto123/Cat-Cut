@@ -63,11 +63,13 @@ fi
 [ -x "$PYTHON_BIN" ] || fail "python3.11 が見つかりません"
 bold "[2/5] ツール OK (ffmpeg / node / python3.11)"
 
-# --- 3. アプリ本体のコピー（runs/ .venv/ node_modules/ は保持） ---
+# --- 3. アプリ本体のコピー（編集データ・ローカル設定・依存環境は保持） ---
 bold "[3/5] アプリ本体を $TARGET へコピーします"
 mkdir -p "$TARGET"
 rsync -a --delete \
   --exclude "runs/" \
+  --exclude "learning_data/" \
+  --exclude ".env" \
   --exclude ".venv/" \
   --exclude "node_modules/" \
   "$APP_SRC/" "$TARGET/" || fail "ファイルのコピーに失敗しました"

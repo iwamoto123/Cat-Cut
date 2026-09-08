@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 import type { ContainedBox } from "../lib/telopPreviewSize";
 import type { ImageClipData } from "../lib/imageOverlay";
 import { imageClipZIndex, imageOverlayStyle } from "../lib/imageOverlay";
@@ -22,17 +22,19 @@ import {
 export type PreviewImageClip = ImageClipData & { url: string };
 
 type DragState = {
+  captureTarget: HTMLElement;
+  pointerId: number;
   clipId: string;
   mode: "move" | "scale";
   /** scaleモード時: ハンドルが画像の右側(+1)か左側(-1)か(外向きドラッグ=拡大の符号)。 */
   horizontalSign: 1 | -1;
   /** scaleモード時: ハンドルが画像の下側(+1)か上側(-1)か(縦・斜めドラッグでも拡縮を効かせる)。 */
   verticalSign: 1 | -1;
-  /** pointerdown時点で既に選択済みだったか(動かさず離した=クリックの選択解除トグル判定)。 */
-  wasSelected: boolean;
   startClientX: number;
   startClientY: number;
   snapshot: PreviewImageClip;
+  initialClips: PreviewImageClip[];
+  latestClips: PreviewImageClip[];
 };
 
 type Props = {
@@ -45,6 +47,10 @@ type Props = {
    * commit=true が操作確定(親がimages.jsonへ保存する)。未指定なら表示のみ(操作不可)。
    */
   onClipsChange?: (clips: PreviewImageClip[], commit: boolean) => void;
+  selectedClipId?: string | null;
+  onSelect?: (id: string | null) => void;
+  /** Other preview tools retain images visually while routing pointers to their own handles. */
+  interactive?: boolean;
 };
 
 /** 四隅ハンドルの配置定義。left側はhorizontalSign=-1、top側はverticalSign=-1(外へ引く=拡大)。 */
@@ -55,22 +61,14 @@ const SCALE_HANDLES: Array<{ corner: string; hSign: 1 | -1; vSign: 1 | -1; style
   { corner: "se", hSign: 1, vSign: 1, style: { right: -7, bottom: -7, cursor: "nwse-resize" } },
 ];
 
-export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange }: Props) {
+export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange, selectedClipId = null, onSelect, interactive = true }: Props) {
   const dragRef = useRef<DragState | null>(null);
   const draggedRef = useRef(false);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
 
   const activeClips = activeImageClipsAtTimelineMs(clips, timelineMs);
 
-  // 表示区間外へ出た(再生が進んだ等)クリップの選択は解除する
-  useEffect(() => {
-    if (selectedClipId && !activeClips.some((clip) => clip.id === selectedClipId)) {
-      setSelectedClipId(null);
-    }
-  }, [selectedClipId, activeClips]);
-
   if (!activeClips.length || box.width <= 0 || box.height <= 0) return null;
-  const editable = Boolean(onClipsChange);
+  const editable = interactive && Boolean(onClipsChange);
 
   function handlePointerDown(
     event: React.PointerEvent<HTMLElement>,
@@ -79,31 +77,38 @@ export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange }: Pro
     horizontalSign: 1 | -1 = 1,
     verticalSign: 1 | -1 = 1,
   ) {
-    if (!editable) return;
+    if (!editable || event.button !== 0) return;
     event.stopPropagation();
     event.preventDefault();
     dragRef.current = {
+      captureTarget: event.currentTarget,
+      pointerId: event.pointerId,
       clipId: clip.id,
       mode,
       horizontalSign,
       verticalSign,
-      wasSelected: selectedClipId === clip.id,
       startClientX: event.clientX,
       startClientY: event.clientY,
       snapshot: clip,
+      initialClips: clips,
+      latestClips: clips,
     };
     draggedRef.current = false;
     // 押した瞬間に選択してハンドルを出す(「クリック→離す→ハンドル」の1手を省き直感的にする)
-    setSelectedClipId(clip.id);
+    event.currentTarget.closest<HTMLElement>(".previewImageClip")?.focus({ preventScroll: true });
+    onSelect?.(clip.id);
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLElement>) {
     const drag = dragRef.current;
     if (!drag || !onClipsChange) return;
+    event.stopPropagation();
+    const clips = drag.latestClips;
     const deltaXPx = event.clientX - drag.startClientX;
     const deltaYPx = event.clientY - drag.startClientY;
     if (Math.abs(deltaXPx) > 2 || Math.abs(deltaYPx) > 2) draggedRef.current = true;
+    if (!draggedRef.current) return;
     const updated =
       drag.mode === "move"
         ? dragImagePosition(
@@ -126,27 +131,44 @@ export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange }: Pro
           );
     const current = clips.find((clip) => clip.id === drag.clipId);
     if (!current) return;
-    onClipsChange(replaceImageClip(clips, { ...current, ...updated }) as PreviewImageClip[], false);
+    drag.latestClips = replaceImageClip(clips, { ...current, ...updated }) as PreviewImageClip[];
+    onClipsChange(drag.latestClips, false);
   }
 
-  function handlePointerUp(event: React.PointerEvent<HTMLElement>) {
+  function finishGesture(event: React.PointerEvent<HTMLElement>, cancelled = false) {
     const drag = dragRef.current;
     dragRef.current = null;
     if (!drag) return;
-    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
-    if (draggedRef.current) {
-      onClipsChange?.(clips, true);
-      setSelectedClipId(drag.clipId);
-    } else if (drag.mode === "move" && drag.wasSelected) {
-      // 選択済みの画像本体を動かさずクリック=選択解除(ハンドルを隠す)。
-      // 未選択だった場合はpointerdownで選択済みなのでそのまま(ワンクリックでハンドルが出る)
-      setSelectedClipId(null);
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    if (draggedRef.current) onClipsChange?.(cancelled ? drag.initialClips : drag.latestClips, true);
+  }
+
+  function handlePointerUp(event: React.PointerEvent<HTMLElement>) {
+    finishGesture(event);
+  }
+
+  function handlePointerCancel(event: React.PointerEvent<HTMLElement>) {
+    finishGesture(event, true);
+  }
+
+  function handleGestureKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (event.key !== "Escape" && !((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = null;
+    if (drag.captureTarget.hasPointerCapture?.(drag.pointerId)) drag.captureTarget.releasePointerCapture(drag.pointerId);
+    if (draggedRef.current) onClipsChange?.(drag.initialClips, true);
   }
 
   return (
     <div
       className="previewImageLayer"
+      onKeyDown={handleGestureKeyDown}
       style={{
         position: "absolute",
         left: `${box.offsetX}px`,
@@ -155,10 +177,12 @@ export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange }: Pro
         height: `${box.height}px`,
         overflow: "hidden",
         pointerEvents: "none",
+        // Child z-indices order images only. Keep this layer below later caption/overlay layers.
+        isolation: "isolate",
       }}
     >
       {activeClips.map((clip) => {
-        const selected = selectedClipId === clip.id;
+        const selected = interactive && selectedClipId === clip.id;
         // V6-5: 画像同士の前後関係は元配列(images.json)のindex基準のzIndexで明示する
         // (Remotionの imageClipZIndex と同一計算=プレビューと書き出しの重なりが一致する)
         const arrayIndex = clips.findIndex((candidate) => candidate.id === clip.id);
@@ -166,10 +190,17 @@ export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange }: Pro
           <div
             className={`previewImageClip${selected ? " selected" : ""}${editable ? " editable" : ""}`}
             key={clip.id}
+            tabIndex={editable ? -1 : undefined}
+            role={editable ? "button" : undefined}
+            aria-label={`画像 ${clip.file}`}
+            aria-pressed={editable ? selected : undefined}
+            onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => handlePointerDown(event, clip, "move")}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            style={{ ...imageOverlayStyle(clip), zIndex: imageClipZIndex(arrayIndex) } as CSSProperties}
+            onPointerCancel={handlePointerCancel}
+            onLostPointerCapture={handlePointerCancel}
+            style={{ ...imageOverlayStyle(clip), zIndex: imageClipZIndex(arrayIndex), ...(!interactive ? { pointerEvents: "none" } : {}) } as CSSProperties}
             title={editable ? "ドラッグで位置を移動（選択で四隅ハンドル=大きさ変更）" : undefined}
           >
             <img alt={clip.file} draggable={false} src={clip.url} />
@@ -182,6 +213,8 @@ export function PreviewImageLayer({ box, clips, timelineMs, onClipsChange }: Pro
                   onPointerDown={(event) => handlePointerDown(event, clip, "scale", handle.hSign, handle.vSign)}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                  onLostPointerCapture={handlePointerCancel}
                   style={handle.style}
                   title="ドラッグで大きさを変更（縦・斜めのドラッグでも効きます）"
                 />

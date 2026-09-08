@@ -1,0 +1,20 @@
+.editorToolControls { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; padding: 3px; border: 1px solid #d7dce4; border-radius: 7px; background: #f2f4f7; }
+.editorToolControls button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 4px 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #596579; cursor: pointer; font-size: 11px; white-space: nowrap; }
+.editorToolControls button[aria-pressed="true"] { background: #fff; color: #1f4d83; border-color: #bfd0e5; box-shadow: 0 1px 2px #172b4d14; }
+.editorToolControls button[aria-pressed="true"].editorCutTool { background: #fff8eb; color: #8a5310; border-color: #dcb675; }
+.editorToolControls kbd { font: inherit; opacity: .7; padding-left: 3px; }
+.editorToolControls button:focus-visible { outline: 2px solid #387de0; outline-offset: 1px; }
+.editorToolHint { color: #667085; font-size: 11px; line-height: 1.5; }
+.transcriptWorkspaceHeader > .editorToolHint { flex: 1 1 180px; }
+.sceneWorkspaceSection .transcriptWorkspaceHeader { flex-wrap: wrap; }
+.sceneWorkspaceSection .reviewViewTabs,
+.sceneWorkspaceSection .transcriptWorkspaceActions { flex: 0 0 auto; }
+.sceneWorkspaceSection .transcriptWorkspaceActions { margin-left: auto; }
+.sceneWorkspaceSection .reviewViewTabs button,
+.sceneWorkspaceSection .transcriptWorkspaceActions button { flex: 0 0 auto; white-space: nowrap; }
+.sceneWorkspaceTimeline .editorToolControls { background: #1d1e21; border-color: #484b51; }
+.sceneWorkspaceTimeline .editorToolControls button { color: #b9c1cd; }
+.sceneWorkspaceTimeline .editorToolControls button[aria-pressed="true"] { background: #354e6b; color: #e2efff; border-color: #6086b0; }
+.sceneWorkspaceTimeline .editorToolControls button[aria-pressed="true"].editorCutTool { background: #594824; color: #ffe1a1; border-color: #ac8743; }
+.sceneWorkspaceTimeline .editorToolHint { color: #a7b1c0; }
+@media (max-width: 1120px) { .transcriptWorkspaceHeader > .editorToolHint { flex-basis: 100%; order: 3; } }

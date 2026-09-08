@@ -49,6 +49,7 @@ CONTEXT_SENTENCES = 5
 
 # W14-2: プロンプトへ注入する「ユーザーが過去に確定した修正例」の既定件数(頻度上位)。
 CORRECTION_EXAMPLES_LIMIT = 30
+from shared.editing_learning import build_editing_examples_section, load_prompt_examples
 
 
 def build_correction_examples_section(correction_examples: Optional[list[dict[str, Any]]]) -> str:
@@ -191,10 +192,14 @@ def build_prompt(
     context_payload: Optional[list[dict[str, Any]]] = None,
     filler_candidates: Optional[list[dict[str, Any]]] = None,
     correction_examples: Optional[list[dict[str, Any]]] = None,
+    editing_examples: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     sentences_json = json.dumps(sentences_payload, ensure_ascii=False, indent=2)
     # W14-2: ユーザーが過去に確定した修正例(全run横断の correction_history 由来)
     correction_examples_section = build_correction_examples_section(correction_examples)
+    correction_examples_section += build_editing_examples_section(
+        editing_examples, {"cut", "proofreading"}, " ".join(str(item.get("text") or "") for item in sentences_payload),
+    )
     context_section = ""
     if context_payload:
         context_json = json.dumps(context_payload, ensure_ascii=False, indent=2)
@@ -638,6 +643,7 @@ def run_step(
         print(f"  correction examples: {len(correction_examples)} pairs")
 
     successful_responses: list[dict[str, Any]] = []
+    editing_examples = load_prompt_examples(run_dir)
     failed_chunks = 0
     error_kinds: list[str] = []
     error_details: list[str] = []
@@ -648,6 +654,7 @@ def run_step(
             context_payload=build_sentences_payload(context) if context else None,
             filler_candidates=filler_candidates if chunk_index == 0 else None,
             correction_examples=correction_examples or None,
+            editing_examples=editing_examples,
         )
         try:
             response = call_llm_json(

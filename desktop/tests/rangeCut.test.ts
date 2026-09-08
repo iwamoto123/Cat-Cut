@@ -139,33 +139,34 @@ test("cutSceneRangeMs: 範囲がシーン末尾に接する場合はendエッジ
   assert.equal(result.appliedEndMs, 2000, "実際のカット範囲はシーン末尾まで");
 });
 
-test("cutSceneRangeMs: 先頭側に単語が残っても最小シーン長(200ms)未満なら先頭側ごとカットされる(縮退)", () => {
+test("cutSceneRangeMs: 200ms未満の先頭断片も明示選択の外なら保持する", () => {
   const scenes = [
     scene("s1", 0, 2000, [word("w1", "あ", 0, 150), word("w2", "い", 150, 1000), word("w3", "う", 1000, 2000)]),
   ];
-  // 先頭側に単語あ(中点75ms)は残るが、先頭側の長さ160msが最小長200ms未満のため縮退する。
+  // 先頭160msは選択していないため、発話と映像を残す。
   const result = cutSceneRangeMs(scenes, "s1", 160, 1000);
-  assert.equal(result.mode, "trimStart");
-  assert.equal(result.scenes[0].sourceStartMs, 1000, "先頭0〜160msの断片も残さない");
+  assert.equal(result.mode, "split");
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 160 }, { startMs: 1000, endMs: 2000 }]);
+  assert.equal(result.scenes[0].words[0].deleted, false);
 });
 
-test("cutSceneRangeMs: 末尾側に単語が残っても最小シーン長未満なら末尾側ごとカットされる(縮退)", () => {
+test("cutSceneRangeMs: 200ms未満の末尾断片も明示選択の外なら保持する", () => {
   const scenes = [
     scene("s1", 0, 2000, [word("w1", "あ", 0, 1000), word("w2", "い", 1000, 1850), word("w3", "う", 1850, 2000)]),
   ];
-  // 末尾側に単語う(中点1925ms)は残るが、末尾側の長さ100msが最小長200ms未満のため縮退する。
+  // 末尾100msは選択していないため、発話と映像を残す。
   const result = cutSceneRangeMs(scenes, "s1", 1000, 1900);
-  assert.equal(result.mode, "trimEnd");
-  assert.equal(result.scenes[0].sourceEndMs, 1000);
+  assert.equal(result.mode, "split");
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 1000 }, { startMs: 1900, endMs: 2000 }]);
 });
 
-test("cutSceneRangeMs: 先頭側に中点を持つ単語が無ければ分割せずstartトリムに縮退する", () => {
+test("cutSceneRangeMs: 単語のない先頭余白も選択範囲外は保持する", () => {
   const scenes = [
     scene("s1", 0, 2000, [word("w1", "い", 1000, 1500), word("w2", "え", 1500, 2000)]),
   ];
   const result = cutSceneRangeMs(scenes, "s1", 400, 1000);
-  assert.equal(result.mode, "trimStart");
-  assert.equal(result.scenes[0].sourceStartMs, 1000);
+  assert.equal(result.mode, "split");
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 400 }, { startMs: 1000, endMs: 2000 }]);
 });
 
 test("cutSceneRangeMs: 範囲がシーン全域を覆うと全単語deleted化(スタブ行+復元と同じ状態)", () => {
@@ -183,11 +184,11 @@ test("cutSceneRangeMs: 範囲がシーン全域を覆うと全単語deleted化(�
   assert.deepEqual(deriveKeepSegments(result.scenes), []);
 });
 
-test("cutSceneRangeMs: 両側とも最小長を確保できない短いシーンは全削除に縮退する", () => {
+test("cutSceneRangeMs: 短いシーンの両端も選択した中央区間の外なら保持する", () => {
   const scenes = [scene("s1", 0, 400, [word("w1", "あ", 0, 200), word("w2", "い", 200, 400)])];
   const result = cutSceneRangeMs(scenes, "s1", 100, 300);
-  assert.equal(result.mode, "deleteAll");
-  assert.equal(isSceneFullyDeleted(result.scenes[0]), true);
+  assert.equal(result.mode, "split");
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 100 }, { startMs: 300, endMs: 400 }]);
 });
 
 test("cutSceneRangeMs: 既に全単語deleted済みのシーンへの全域カットは変更なし", () => {
@@ -274,4 +275,83 @@ test("rangeSelectionFromPx: 左端より外はシーン先頭msにクランプ�
   assert.equal(range.startPx, 0);
   assert.equal(range.startMs, 1000);
   assert.equal(range.endMs, 2000);
+});
+
+
+test("cutSceneRangeMs: 語尾後の無音を部分カットしても、その先の末尾映像を残す", () => {
+  const original = scene("tail", 0, 5000, [word("speech", "最後です", 0, 1500)]);
+  const result = cutSceneRangeMs([original], "tail", 2500, 3500);
+  assert.equal(result.mode, "split");
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 2500 }, { startMs: 3500, endMs: 5000 }]);
+  assert.equal(result.scenes[1].words.some((item) => !item.deleted && item.silence), true);
+});
+
+test("cutSceneRangeMs: 最後の発話を含めてカットしても選択外の末尾余白を失わない", () => {
+  const original = scene("tail", 0, 5000, [word("first", "始め", 0, 1000), word("last", "終わり", 2500, 3500)]);
+  const result = cutSceneRangeMs([original], "tail", 1000, 4000);
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 1000 }, { startMs: 4000, endMs: 5000 }]);
+  assert.equal(isSceneFullyDeleted(result.scenes[1]), false, "発話が全て削除済みでも末尾の映像は残る");
+  assert.equal(result.scenes[1].telopText, "");
+});
+
+test("cutSceneRangeMs: 長い1語の途中を正確にカットし、残る音声の両側を保持する", () => {
+  const original = scene("word", 0, 4000, [word("long", "こんにちは", 0, 4000)]);
+  for (const [start, end] of [[800, 1400], [2600, 3200], [1500, 2500]]) {
+    const result = cutSceneRangeMs([original], "word", start, end);
+    assert.equal(result.mode, "split");
+    assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: start }, { startMs: end, endMs: 4000 }]);
+    assert.equal(result.scenes.flatMap((part) => part.words).filter((item) => item.id === "long").length, 1);
+  }
+});
+
+test("cutSceneRangeMs: 手動削除済みの末尾を余白保持で復活させない", () => {
+  const original = scene("deleted-tail", 0, 5000, [word("first", "始め", 0, 1000), word("last", "終わり", 2500, 3500, true)]);
+  const result = cutSceneRangeMs([original], "deleted-tail", 1000, 4000);
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 0, endMs: 1000 }]);
+});
+
+test("cutSceneRangeMs: トリム後も残す無音だけの範囲を削除済み発話が巻き込まない", () => {
+  const original = scene("trim-to-silence", 0, 5000, [word("first", "発話", 0, 1000)]);
+  const result = cutSceneRangeMs([original], "trim-to-silence", 0, 3000);
+  assert.equal(result.mode, "trimStart");
+  assert.deepEqual(deriveKeepSegments(result.scenes), [{ startMs: 3000, endMs: 5000 }]);
+  assert.equal(isSceneFullyDeleted(result.scenes[0]), false);
+});
+
+test("cutSceneRangeMs: 既存の単語削除と任意カットの組み合わせで選択外の映像を失わず復活させない", () => {
+  const bounds = [[300, 800], [1100, 1600], [1800, 2200], [2800, 3200], [3900, 4300]];
+  for (let mask = 0; mask < 32; mask += 1) {
+    const original = scene("mixed", 0, 5000, bounds.map(([start, end], index) => word(`w${index}`, "声", start, end, !!(mask & (1 << index)))));
+    const before = deriveKeepSegments([original]);
+    for (let start = 0; start <= 4800; start += 200) {
+      for (let end = start + 200; end <= 5000; end += 400) {
+        const result = cutSceneRangeMs([original], "mixed", start, end);
+        if (result.mode === "none") continue;
+        const expected = before.flatMap((range) => [
+          { startMs: range.startMs, endMs: Math.min(range.endMs, result.appliedStartMs) },
+          { startMs: Math.max(range.startMs, result.appliedEndMs), endMs: range.endMs },
+        ].filter((range) => range.endMs > range.startMs));
+        assert.deepEqual(deriveKeepSegments(result.scenes), expected, `deleted mask=${mask}, cut=${start}..${end}`);
+      }
+    }
+  }
+});
+
+
+test("cutSceneRangeMs: short fragments and prior cut masks never extend the snapped selection in either direction", () => {
+  for (const mask of [undefined, [{ startMs: 0, endMs: 360 }, { startMs: 520, endMs: 2000 }]]) {
+    const original = { ...fourWordScene(), sourceKeepRanges: mask };
+    const before = deriveKeepSegments([original]);
+    for (const [start, end] of [[20, 180], [160, 1000], [1000, 1900], [100, 1900]]) {
+      for (const [a, b] of [[start, end], [end, start]]) {
+        const result = cutSceneRangeMs([original], original.id, a, b, { minDurationMs: 200 });
+        assert.deepEqual([result.appliedStartMs, result.appliedEndMs], [start, end]);
+        const expected = before.flatMap(range => [
+          { startMs: range.startMs, endMs: Math.min(range.endMs, start) },
+          { startMs: Math.max(range.startMs, end), endMs: range.endMs },
+        ].filter(range => range.endMs > range.startMs));
+        assert.deepEqual(deriveKeepSegments(result.scenes), expected);
+      }
+    }
+  }
 });

@@ -49,6 +49,7 @@ CORRECTION_EXAMPLES_LIMIT = 30
 
 ISSUE_SURFACE_MAX_CHARS = 30
 MAX_ISSUES = 50
+from shared.editing_learning import build_editing_examples_section, load_prompt_examples
 
 
 def load_scenes(input_path: Path) -> list[dict[str, str]]:
@@ -94,9 +95,13 @@ def build_correction_examples_section(correction_examples: Optional[list[dict[st
 def build_prompt(
     scenes: list[dict[str, str]],
     correction_examples: Optional[list[dict[str, Any]]] = None,
+    editing_examples: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     scenes_json = json.dumps(scenes, ensure_ascii=False, indent=2)
     correction_examples_section = build_correction_examples_section(correction_examples)
+    correction_examples_section += build_editing_examples_section(
+        editing_examples, {"proofreading"}, " ".join(scene["text"] for scene in scenes),
+    )
     return f"""あなたは日本語トーク動画のテロップ校正者です。以下は編集済み動画の全シーンの
 表示テキスト(テロップ)です。動画全体の文脈を踏まえて最終チェックを行い、
 問題のある箇所を列挙してください。本文は書き換えないでください。
@@ -221,7 +226,9 @@ def run_step(
     if correction_examples:
         print(f"  correction examples: {len(correction_examples)} pairs")
 
-    prompt = build_prompt(scenes, correction_examples=correction_examples or None)
+    prompt = build_prompt(scenes, correction_examples=correction_examples or None,
+                          editing_examples=load_prompt_examples(
+                              input_file.parent.parent if input_file.parent.name == "step06d_final_check" else input_file.parent))
     try:
         response = call_llm_json(
             resolved_provider, resolved_key, resolved_model, prompt,

@@ -162,6 +162,17 @@ def run_pipeline(
 
     ensure_placeholder_steps(run_dir)
 
+    # Match desktop's contextual retake pass. Confirmed cut examples are loaded
+    # locally by step05; the ordinary no-key fallback remains available.
+    run_cmd([
+        "python/step05_ai_retake.py", str(rel_run),
+        "--stt", str(corrected_stt),
+        "--fillers", str(rel_run / "step04_filler_detect" / "fillers.json"),
+        "--retakes-output", str(rel_run / "step05_retake_detect" / "retakes.json"),
+        "--review-output", str(rel_run / "step05_ai_retake" / "ai_review.json"),
+        "--correction-history", str(default_correction_history_path()),
+    ], env=env)
+
     run_cmd(
         [
             "python/step07_cut_proposal.py",

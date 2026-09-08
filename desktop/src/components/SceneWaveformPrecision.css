@@ -1,0 +1,98 @@
+.sceneWaveformPrecision {
+  border-radius: 6px;
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+  isolation: isolate;
+}
+
+.sceneWaveformPrecision .sceneWaveformCanvas { border-radius: 6px; }
+.sceneWaveformPrecision .sceneEdgeHandle { width: 10px; border-radius: 3px; background: #b4c7e3; }
+.sceneWaveformPrecision .sceneEdgeHandle::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 11px;
+  bottom: 11px;
+  border-left: 2px solid #fff;
+}
+.sceneWaveformPrecision .sceneEdgeHandle.visible,
+.sceneWaveformPrecision .sceneEdgeHandle.dragging { background: #386bcc; }
+.sceneWaveformPrecision .sceneEdgeHandle.linkedHighlight { background: #ba7f2c; }
+.sceneWaveformPrecision .sceneRangeCutOverlay { background: #da484b24; border-color: #d1444b; }
+.sceneWaveformPrecision .sceneRangeCutOverlay.invalid { background: #64748b18; border-color: #94a3b8; }
+
+.sceneWaveformTimeRange {
+  position: absolute;
+  top: 2px;
+  left: 15px;
+  right: 15px;
+  display: flex;
+  justify-content: space-between;
+  color: #475569;
+  font: 10px/16px ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  z-index: 4;
+}
+.sceneWaveformTimeRange span { padding: 0 3px; background: #f8fafcdd; border-radius: 3px; }
+
+.sceneWaveformGestureReadout,
+.sceneWaveformPrecision .sceneEdgeTooltip {
+  position: absolute;
+  top: auto;
+  bottom: 2px;
+  left: 16px;
+  right: auto;
+  max-width: calc(100% - 32px);
+  transform: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 8px;
+  padding: 3px 6px;
+  border: 1px solid #c7d6eb;
+  border-radius: 4px;
+  color: #24416a;
+  background: #fffffff0;
+  box-shadow: 0 1px 4px #0f172a14;
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  pointer-events: none;
+  z-index: 8;
+}
+.sceneWaveformGestureReadout strong,
+.sceneWaveformPrecision .sceneEdgeTooltip strong { font-weight: 650; }
+.sceneWaveformGestureReadout span,
+.sceneWaveformPrecision .sceneEdgeTooltip span { color: #64748b; font-size: 9px; font-weight: 400; }
+.sceneWaveformPrecision .sceneEdgeTooltip.end { left: auto; right: 16px; }
+
+.sceneClickCutAnchor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: #d1444b;
+  pointer-events: none;
+  z-index: 6;
+}
+.sceneClickCutAnchor span {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 3px;
+  border-radius: 0 0 3px 3px;
+  color: #fff;
+  background: #b82d37;
+  font: 650 10px/13px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.sceneWaveformPrecision .sceneClickCutOverlay {
+  background: repeating-linear-gradient(135deg, #d1444b30 0 3px, #d1444b18 3px 7px);
+}
+.sceneClickCutReadout { border-color: #e7bbc0; color: #92323d; }
+.sceneMergeNextButton { gap: 5px; }
+.sceneMergePreserveHint { font-size: 10px; color: #627c72; white-space: nowrap; }
+.sceneMergeNextButton:disabled { opacity: .45; cursor: default; }

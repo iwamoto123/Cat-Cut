@@ -591,6 +591,14 @@ test("compactRangesToKeepSegments: range内部の部分削除(チップ削除)�
 
 test("compactRangesToKeepSegments: keepSegmentsが空(初期化前)は何もしない", () => {
   assert.equal(compactRangesToKeepSegments(RIPPLE_RANGES, []), RIPPLE_RANGES);
+  assert.equal(compactRangesToKeepSegments(RIPPLE_RANGES, [], { keepSegmentsReady: false }), RIPPLE_RANGES);
+});
+
+test("compactRangesToKeepSegments: 初期化後の全カットは本編を除きOP尺だけ残す", () => {
+  const result = compactRangesToKeepSegments(RIPPLE_RANGES, [], { keepSegmentsReady: true });
+  assert.deepEqual(result, []);
+  assert.deepEqual(buildPreviewPlaylist(result, null), []);
+  assert.equal(compactedTimelineDurationMs(12000, RIPPLE_RANGES, result), 5000);
 });
 
 test("compactRangesToKeepSegments: cut単位telop_y(W24 Phase A-2)は分裂後の断片へも引き継ぐ", () => {

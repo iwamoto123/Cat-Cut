@@ -18,6 +18,7 @@ import {
   setSceneStyleOverride,
   setSceneSpeed as setSceneSpeedValue,
   setSceneTelopText,
+  setSceneTelopPosition,
   setSceneVideoEffectOverride,
   setAllSceneSpeeds,
   splitSceneAtMs,
@@ -30,14 +31,16 @@ import type { EmotionTag } from "../lib/emotionTag";
 import { applyEdgeTrim, type EdgeTrimEdge, type EdgeTrimOptions } from "../lib/edgeTrim";
 import { cutSceneRangeMs, type RangeCutOptions } from "../lib/rangeCut";
 import type { VideoEffectOverride } from "../lib/videoEffectCatalog";
+import type { TelopPosition } from "../lib/telopPosition";
 
 /**
  * scenes配列を唯一の編集源として管理するフック(検品UI v2 Phase 1)。
  * useEditHistoryをそのまま利用してUndo/Redoスタックに乗せる(useKeepSegmentsと同じ構成)。
  * keep_segmentsとテロップ上書きは、都度scenesから純関数で導出する(再計算による巻き戻りを防ぐ)。
  */
-export function useScenes(initialScenes: Scene[] = []) {
-  const history = useEditHistory<Scene[]>(initialScenes);
+export function useScenes(initialScenes: Scene[] = [], externalHistory?: ReturnType<typeof useEditHistory<Scene[]>>) {
+  const localHistory = useEditHistory<Scene[]>(initialScenes);
+  const history = externalHistory ?? localHistory;
 
   const keepSegments = useMemo(() => deriveKeepSegments(history.present), [history.present]);
   const telopOverrides = useMemo(() => deriveTelopOverrides(history.present), [history.present]);
@@ -62,6 +65,12 @@ export function useScenes(initialScenes: Scene[] = []) {
 
   const setTelopText = (sceneId: string, text: string) => {
     history.setPresent((current) => setSceneTelopText(current, sceneId, text));
+  };
+  const setTelopPosition = (sceneId: string, position: TelopPosition | null) => {
+    history.setPresent((current) => setSceneTelopPosition(current, sceneId, position));
+  };
+  const setAllTelopPositions = (position: TelopPosition | null) => {
+    history.setPresent((current) => setSceneTelopPosition(current, null, position));
   };
 
   /**
@@ -144,8 +153,8 @@ export function useScenes(initialScenes: Scene[] = []) {
   };
 
   /** Phase 2: 切り込み(cutMark)位置での任意ms分割(Enterキー)。 */
-  const splitAtMs = (sceneId: string, ms: number) => {
-    history.setPresent((current) => splitSceneAtMs(current, sceneId, ms));
+  const splitAtMs = (sceneId: string, ms: number, options?: { allowEmptySpeechSide?: boolean }) => {
+    history.setPresent((current) => splitSceneAtMs(current, sceneId, ms, options));
   };
 
   const mergeWithNext = (sceneId: string) => {
@@ -190,6 +199,8 @@ export function useScenes(initialScenes: Scene[] = []) {
     toggleChipGroup,
     setChipGroupDeletedState,
     setTelopText,
+    setTelopPosition,
+    setAllTelopPositions,
     setTelopTextBulk,
     replaceTelopText,
     setEmotionTag,

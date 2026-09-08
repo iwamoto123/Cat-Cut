@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import { Check, Focus, Link2, Moon } from "lucide-react";
 import { TelopHighlightInput } from "./TelopHighlightInput";
 import type { Scene } from "../lib/scenes";
-import { highestSeveritySuspicion } from "../lib/scenes";
+import { highestSeveritySuspicion, normalizeSceneSourceKeepRanges } from "../lib/scenes";
 import {
   anchorChipIndexFromBoundary,
   buildWordGroups,
@@ -15,7 +15,7 @@ import {
 } from "../lib/wordGroups";
 import type { SuspicionItem } from "../lib/suspicionQueue";
 import { chipCaretPositionChanged, type ChipCaretPosition } from "../lib/chipCaret";
-import { playheadStore } from "../lib/playheadStore";
+import { inactivePlayheadSubscription, playheadStore } from "../lib/playheadStore";
 import type { EdgeTrimEdge } from "../lib/edgeTrim";
 import type { ActiveSpeakerColors } from "../lib/speakerColors";
 import { SceneWaveformStrip, type EdgeDragTooltip } from "./SceneWaveformStrip";
@@ -154,6 +154,8 @@ type Props = {
   /** Phase 3: 行端の長押しスライド。次の行と時間的に連続している(連動対象)場合true。 */
   linkedNext?: boolean;
   onEdgeDragStart?: (edge: EdgeTrimEdge) => void;
+  onEdgeDragCancel?: () => void;
+  onWaveformGestureStart?: () => void;
   onEdgeDragMove?: (edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   onEdgeDragEnd?: (edge: EdgeTrimEdge, rawTargetMs: number, chipSnapToleranceMs: number) => void;
   /** この行が現在ドラッグ中の場合のツールチップ表示内容。 */
@@ -194,9 +196,6 @@ type Props = {
   onOpenApiSettings?: () => void;
 };
 
-/** 非current行のスナップショット(常にnull=ストア更新で再レンダリングされない)。 */
-const nullPlayheadSnapshot = () => null;
-
 /**
  * W19-A3: React.memo化。再生中の毎フレーム値(playheadMs)はpropで受け取らず、
  * current行だけがplayheadStoreを購読する(他の行はストア通知で再レンダリングされない)。
@@ -236,6 +235,8 @@ export const SceneRow = memo(function SceneRow({
   onScissorsCutMs,
   linkedNext,
   onEdgeDragStart,
+  onEdgeDragCancel,
+  onWaveformGestureStart,
   onEdgeDragMove,
   onEdgeDragEnd,
   dragTooltip,
@@ -257,11 +258,11 @@ export const SceneRow = memo(function SceneRow({
   onEditDesign,
   onOpenApiSettings,
 }: Props) {
-  // W19-A3: 再生ヘッド位置はcurrent行のときだけ購読する。非current行はスナップショットが
-  // 常にnullなのでストア更新(毎フレーム)では再レンダリングされない。
+  // 再生ヘッド位置はcurrent行だけ購読する。非current行は通知そのものを受け取らない。
+  // currentへ切り替わるとuseSyncExternalStoreがその時点の最新位置を読み直す。
   const playheadMs = useSyncExternalStore(
-    playheadStore.subscribe,
-    isCurrent ? playheadStore.getSourceMs : nullPlayheadSnapshot,
+    isCurrent ? playheadStore.subscribe : inactivePlayheadSubscription.subscribe,
+    isCurrent ? playheadStore.getSourceMs : inactivePlayheadSubscription.getSnapshot,
   );
   const rowRef = useRef<HTMLDivElement | null>(null);
   const chipsRef = useRef<HTMLDivElement | null>(null);
@@ -294,7 +295,7 @@ export const SceneRow = memo(function SceneRow({
         const entry = entries[0];
         if (entry) setVisible(entry.isIntersecting);
       },
-      { root: el.closest(".sceneRowList"), rootMargin: "300px 0px" },
+      { root: el.closest(".sceneRowListPane"), rootMargin: "300px 0px" },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -378,6 +379,23 @@ export const SceneRow = memo(function SceneRow({
   // buildWordGroups自体がシーン参照をキーにメモ化しているため、ここでのuseMemoは
   // 依存配列([scene])に対する呼び出し回数の削減(同一レンダー内での再呼び出し防止)が目的。
   const groups = useMemo(() => buildWordGroups(scene), [scene]);
+  const lockedCutGroupIds = useMemo(() => {
+    const kept = normalizeSceneSourceKeepRanges(scene.sourceKeepRanges, scene.sourceStartMs, scene.sourceEndMs);
+    if (!kept) return new Set<string>();
+    const lockedWordIds = new Set<string>();
+    for (const word of scene.words) {
+      if (!word.deleted) continue;
+      let lo = 0;
+      let hi = kept.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (kept[mid].endMs <= word.startMs) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo === kept.length || kept[lo].startMs >= word.endMs) lockedWordIds.add(word.id);
+    }
+    return new Set(groups.filter((group) => group.deleted && group.wordIds.every((id) => lockedWordIds.has(id))).map((group) => group.id));
+  }, [scene, groups]);
   const flaggedGroupIds = useMemo(() => {
     const ids = new Set<string>();
     for (const group of groups) {
@@ -449,8 +467,9 @@ export const SceneRow = memo(function SceneRow({
    * 改善5-2(チップのドラッグ複数選択): チップのmousedownでドラッグ選択の起点を記録する。
    * テロップ編集中(textareaフォーカス中)は発動しない(仕様書「テキスト編集中は発動しない」)。
    */
-  function handleChipMouseDown(groupIndex: number) {
-    if (editingRef?.current) return;
+  function handleChipMouseDown(event: React.MouseEvent<HTMLButtonElement>, groupIndex: number) {
+    if (event.button !== 0 || editingRef?.current) return;
+    justDraggedRef.current = false;
     chipDragRef.current = { anchorIndex: groupIndex, active: false };
   }
 
@@ -509,11 +528,13 @@ export const SceneRow = memo(function SceneRow({
     const offsetX = event.clientX - buttonRect.left;
     const boundaryIndex = nearestGroupBoundaryIndex(groupIndex, offsetX, buttonRect.width);
     if (scissorsMode) {
-      if (group.deleted) return;
+      if (group.deleted || event.detail > 1) return;
+      onWaveformGestureStart?.();
       onScissorsSplitChip?.(boundaryIndex);
       return;
     }
     if (group.deleted) {
+      if (lockedCutGroupIds.has(group.id)) return;
       onToggleChip(group.wordIds);
       return;
     }
@@ -596,12 +617,17 @@ export const SceneRow = memo(function SceneRow({
                 onClick={(event) => handleChipClick(event, group, index)}
                 onContextMenu={(event) => {
                   event.preventDefault();
+                  event.stopPropagation();
+                  onSceneActivate?.();
+                  onWaveformGestureStart?.();
                   onToggleChip(group.wordIds);
                 }}
-                onMouseDown={() => handleChipMouseDown(index)}
+                onMouseDown={(event) => handleChipMouseDown(event, index)}
                 onMouseMove={(event) => handleChipHover(event, index)}
                 title={
-                  group.silence
+                  lockedCutGroupIds.has(group.id)
+                    ? "カット済み。映像の端を伸ばすか、⌘Zで取り消せます"
+                    : group.silence
                     ? group.deleted
                       ? "カット済みの無音区間。クリックで復活"
                       : "無音区間。クリックで選択し、Deleteでカットできます(右クリックでも削除)"
@@ -910,12 +936,14 @@ export const SceneRow = memo(function SceneRow({
             暗転
           </button>
           <button
-            className="sceneTelopToolButton"
+            className="sceneTelopToolButton sceneMergeNextButton"
+            disabled={!onMergeWithNext}
             onClick={() => onMergeWithNext?.()}
-            title="下の行と結合します(⌘M)。間の削除済み行はまたぎます"
+            title={onMergeWithNext ? "次のテロップと結合します(⌘M)。カット済み区間・無音除去を保持し、1回の⌘Zで結合を戻せます" : "結合できる次のテロップはありません"}
             type="button"
           >
-            下と結合
+            <Link2 size={12} />次と結合
+            {onMergeWithNext && <span className="sceneMergePreserveHint">カット保持 · ⌘M</span>}
           </button>
         </div>
         </div>
@@ -972,6 +1000,11 @@ export const SceneRow = memo(function SceneRow({
             onEdgeDragEnd={onEdgeDragEnd}
             onEdgeDragMove={onEdgeDragMove}
             onEdgeDragStart={onEdgeDragStart}
+            onEdgeDragCancel={onEdgeDragCancel}
+            onWaveformGestureStart={() => {
+              onSceneActivate?.();
+              onWaveformGestureStart?.();
+            }}
             onHoverSeek={onHoverSeek}
             onRangeCut={onRangeCutMs}
             onScissorsCut={onScissorsCutMs}

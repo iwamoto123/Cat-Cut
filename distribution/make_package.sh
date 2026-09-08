@@ -9,9 +9,24 @@ set -eu
 
 EDITOR_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d)"
-WORK="$(mktemp -d)/CatCut-setup"
 OUT="$HOME/Desktop/CatCut-haifu-$STAMP.zip"
 PUBLISH_DIR="${CATCUT_PUBLISH_DIR:-$HOME/Desktop/NextCloud/CatCut-haifu}"
+WORK_ROOT=""
+ARCHIVE_DIR=""
+cleanup() {
+  # Both paths are created by this process; never remove the published/archive outputs.
+  [ -z "$WORK_ROOT" ] || rm -rf "$WORK_ROOT"
+  [ -z "$ARCHIVE_DIR" ] || rm -rf "$ARCHIVE_DIR"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+WORK_ROOT="$(mktemp -d)"
+WORK="$WORK_ROOT/CatCut-setup"
+mkdir -p "$(dirname "$OUT")"
+# A new archive on the destination filesystem prevents stale entries and permits atomic replacement.
+ARCHIVE_DIR="$(mktemp -d "$(dirname "$OUT")/.CatCut-package.XXXXXX")"
+TEMP_ARCHIVE="$ARCHIVE_DIR/CatCut-haifu.zip"
 
 echo "配布パッケージを作成します: $OUT"
 mkdir -p "$WORK/app"
@@ -34,6 +49,7 @@ rsync -a \
   --exclude "distribution/" \
   --exclude "remotion/build/" \
   --exclude "remotion/public/segments" \
+  --exclude "remotion/public/composition*.json" \
   --exclude "desktop/dist/" \
   --exclude "node_modules/.cache/" \
   "$EDITOR_DIR/" "$WORK/app/"
@@ -43,7 +59,18 @@ cp "$EDITOR_DIR/distribution/install.command" "$WORK/"
 cp "$EDITOR_DIR/distribution/check_network.command" "$WORK/"
 cp "$EDITOR_DIR/distribution/VERSION" "$WORK/app/VERSION.txt"
 cp "$EDITOR_DIR/distribution/SETUP_GUIDE.md" "$WORK/はじめにお読みください.md"
+NOTES_GUIDANCE=""
+if [ -f "$EDITOR_DIR/distribution/RELEASE_NOTES.md" ]; then
+  cp "$EDITOR_DIR/distribution/RELEASE_NOTES.md" "$WORK/社員用更新内容.md"
+  NOTES_GUIDANCE="今回の更新内容: zip内の「社員用更新内容.md」を参照してください。"
+fi
 chmod +x "$WORK/install.command" "$WORK/check_network.command"
+
+# Studio's default preview must not contain the developer's source paths or transcripts.
+mkdir -p "$WORK/app/remotion/public"
+cat > "$WORK/app/remotion/public/composition-v2.json" <<'EOF'
+{"timeline":{"version":"1.0.0","total_duration_ms":1000,"video_fit":"cover","fps":30,"cuts":[]},"voice_data":{"version":"1.0.0","cuts":[]},"meta":{"display_width":1280,"display_height":720}}
+EOF
 
 # .env が紛れ込んでいないか最終チェック
 if find "$WORK" -name ".env" | grep -q .; then
@@ -51,8 +78,9 @@ if find "$WORK" -name ".env" | grep -q .; then
 fi
 
 # -y: シンボリックリンクを実体化せずリンクのまま格納（runへのリンク等の巻き込み防止）
-(cd "$(dirname "$WORK")" && zip -ryq "$OUT" "$(basename "$WORK")")
-rm -rf "$(dirname "$WORK")"
+(cd "$WORK_ROOT" && zip -ryq "$TEMP_ARCHIVE" "$(basename "$WORK")")
+unzip -tq "$TEMP_ARCHIVE"
+mv -f "$TEMP_ARCHIVE" "$OUT"
 echo "完了: $OUT"
 du -sh "$OUT"
 
@@ -79,6 +107,7 @@ Cat-Cut 最新版の配布フォルダ
 - いま入っているバージョンは ~/CatCut/VERSION.txt で確認できます
 
 現在のバージョン: VERSION.txt を参照（$(date +%Y-%m-%d) 更新）
+$NOTES_GUIDANCE
 EOF
   echo "NextCloudへ公開しました: $PUBLISH_DIR/CatCut-latest.zip（バージョン: $(cat "$EDITOR_DIR/distribution/VERSION")）"
 else

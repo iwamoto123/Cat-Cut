@@ -15,6 +15,7 @@
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 
 import { DEFAULT_HIGHLIGHT_COLOR } from "../lib/telopHighlight";
+import { clampTelopPosition, resolveTelopPositionAt, type TelopPosition, type TelopPositionRange } from "../lib/telopPosition";
 import {
   clampTelopYPercent,
   computeTelopBlockLayout,
@@ -24,7 +25,7 @@ import {
   VERTICAL_TELOP_MIN_FONT_SCALE,
 } from "../lib/telopLayout";
 import {
-  buildHighlightMask,
+  buildHighlightMasksForLines,
   DEFAULT_LATIN_FONT_FAMILY,
   DEFAULT_PARTICLE_SCALE,
   splitStyledRuns,
@@ -156,6 +157,7 @@ export interface TelopStyle {
 
 interface TelopData {
   id: string;
+  telop_position?: TelopPosition;
   text: string;
   word_indices: number[];
   segments: TelopSegment[];
@@ -181,6 +183,7 @@ interface TelopData {
 
 interface TelopProps {
   telops: TelopData[];
+  positionRanges?: TelopPositionRange[];
   words: VoiceWord[];
   cutStartFrame: number;
   fps: number;
@@ -592,8 +595,9 @@ const TelopLayer = ({
 
   // フェーズT1-2(部分ハイライト): 塗り潰しレイヤーはタイポグラフィ+ハイライト色を合成する。
   const highlightColor = style.highlight_color ?? DEFAULT_HIGHLIGHT_COLOR;
-  const renderFillLine = (lineText: string, lineStart = 0): React.ReactNode => {
-    const runs = splitStyledRuns(lineText, buildHighlightMask(lineText, highlightWords));
+  const lineHighlightMasks = buildHighlightMasksForLines(lineTexts, highlightWords);
+  const renderFillLine = (lineText: string, lineStart = 0, lineIndex = 0): React.ReactNode => {
+    const runs = splitStyledRuns(lineText, lineHighlightMasks[lineIndex]);
     if (!typewriterActive && runs.every((run) => run.kind === "normal" && !run.highlight)) {
       return lineText;
     }
@@ -767,7 +771,7 @@ const TelopLayer = ({
               inset: 0,
             }}
           >
-            {renderFillLine(lineText, lineStartOffsets?.[lineIdx] ?? 0)}
+            {renderFillLine(lineText, lineStartOffsets?.[lineIdx] ?? 0, lineIdx)}
           </div>
         </div>
       ))}
@@ -781,6 +785,7 @@ const TelopLayer = ({
 
 export const Telop = ({
   telops,
+  positionRanges,
   words,
   fps,
   animationIn,
@@ -879,7 +884,7 @@ export const Telop = ({
 
         // 縦方向: y_position_offset 適用後もブロック全体が上下セーフエリア内に収まるようクランプする
         // (縦書きは1列の文字数ぶんの高さを行数×行高として近似する)
-        const yPercent = clampTelopYPercent({
+        const automaticYPercent = clampTelopYPercent({
           telopY,
           yOffset: style.y_position_offset ?? 0,
           lineCount: isVerticalWriting ? layout.lineTexts[0].length : layout.lineTexts.length,
@@ -889,6 +894,18 @@ export const Telop = ({
           lineGapPx: blockBackground || isVerticalWriting ? 0 : TELOP_LINE_GAP_PX,
           blockPaddingY: blockBackground ? (blockBackground.padding_y ?? 0) : 0,
         });
+        const manualPosition = resolveTelopPositionAt(positionRanges, frame / fps, telop.telop_position);
+        const position = manualPosition ? clampTelopPosition(manualPosition, {
+          lineTexts: layout.lineTexts, fontSize: layout.fontSize,
+          lineHeight: style.line_height ?? 1.4, letterSpacingEm,
+          videoWidth, videoHeight,
+          paddingX: blockBackground?.padding_x ?? (style.background ? layout.fontSize * 0.5 : 0),
+          paddingY: blockBackground?.padding_y ?? (style.background ? layout.fontSize * 0.15 : 0),
+          lineGapPx: blockBackground ? 0 : TELOP_LINE_GAP_PX,
+          strokePx: Math.max(style.inner_stroke?.width ?? 0, style.outer_stroke?.width ?? 0, style.outer_stroke2?.width ?? 0) * layout.fontSize / 52,
+          rotateDeg: style.rotate ?? 0, verticalWriting: isVerticalWriting,
+        }) : { x: 0.5, y: automaticYPercent / 100 };
+        const yPercent = position.y * 100;
 
         // フェーズT3: アニメの解決(telop個別 > プリセット既定 > timeline既定 > none)
         const anim = resolveTelopAnimation({
@@ -928,8 +945,8 @@ export const Telop = ({
             style={{
               position: "absolute",
               top: `${yPercent}%`,
-              left: 0,
-              right: 0,
+              left: `${(position.x - 0.5) * 100}%`,
+              width: "100%",
               transform: "translateY(-50%)",
               display: "flex",
               flexDirection: "column",

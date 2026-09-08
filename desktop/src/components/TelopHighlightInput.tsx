@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { splitHighlightRuns } from "../lib/telopHighlight";
-import { isRangeHighlighted, setHighlightRange } from "../lib/telopHighlightEdit";
+import { isRangeHighlighted, rebaseHighlightWords, setHighlightRange } from "../lib/telopHighlightEdit";
 
 type Props = {
   value: string;
@@ -15,19 +15,27 @@ type Props = {
   onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 };
 
-function renderHighlightBackdrop(text: string, highlightWords?: string[]) {
+function renderHighlightBackdrop(text: string, highlightWords?: string[], compositionRange?: { start: number; end: number }) {
   if (!text) return "\u00a0";
-  const lines = text.split("\n");
-  return lines.map((line, lineIndex) => (
-    <span key={`line-${lineIndex}`}>
-      {lineIndex > 0 ? "\n" : null}
-      {splitHighlightRuns(line || " ", highlightWords).map((run, runIndex) => (
-        <span className={run.highlight ? "telopHlYellow" : undefined} key={`run-${lineIndex}-${runIndex}`}>
-          {run.text}
-        </span>
-      ))}
-    </span>
-  ));
+  let offset = 0;
+  const spans = splitHighlightRuns(text, highlightWords).flatMap((run, runIndex) => {
+    const start = offset;
+    offset += run.text.length;
+    const cuts = [...new Set([start, offset, ...(compositionRange
+      ? [compositionRange.start, compositionRange.end].filter((point) => point > start && point < offset) : [])])].sort((a, b) => a - b);
+    return cuts.slice(0, -1).map((from, index) => (
+      <span
+        className={run.highlight ? "telopHlYellow" : undefined}
+        key={`${runIndex}-${index}`}
+        style={compositionRange && from >= compositionRange.start && from < compositionRange.end
+          ? { textDecoration: "underline", textUnderlineOffset: "3px" } : undefined}
+      >
+        {text.slice(from, cuts[index + 1])}
+      </span>
+    ));
+  });
+  // The textarea reserves a final empty line too; keep both scroll surfaces aligned.
+  return <>{spans}{text.endsWith("\n") ? "\u00a0" : null}</>;
 }
 
 export function TelopHighlightInput({
@@ -44,7 +52,10 @@ export function TelopHighlightInput({
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
-  const [composing, setComposing] = useState(false);
+  const compositionRef = useRef<{ text: string; words?: string[]; start: number } | null>(null);
+  const committedValueRef = useRef(value);
+  committedValueRef.current = value;
+  const [compositionDraft, setCompositionDraft] = useState<{ text: string; end: number } | null>(null);
   const [selection, setSelection] = useState({ start: 0, end: 0 });
 
   function syncScroll() {
@@ -63,7 +74,26 @@ export function TelopHighlightInput({
 
   useEffect(() => {
     syncScroll();
-  }, [value, rows]);
+  }, [value, compositionDraft, rows]);
+
+  const displayedText = compositionDraft?.text ?? value;
+  const displayedWords = compositionDraft && compositionRef.current
+    ? rebaseHighlightWords(compositionRef.current.text, compositionDraft.text, compositionRef.current.words)
+    : highlightWords;
+
+  function commitText(text: string) {
+    // Some IMEs send a final input after compositionend in the same event turn.
+    if (text === committedValueRef.current) return;
+    committedValueRef.current = text;
+    onChange(text);
+  }
+
+  function finishComposition(text: string) {
+    const wasComposing = Boolean(compositionRef.current);
+    compositionRef.current = null;
+    setCompositionDraft(null);
+    if (wasComposing) commitText(text);
+  }
 
   const hasSelection = selection.end > selection.start;
   const selectionIsYellow =
@@ -84,16 +114,27 @@ export function TelopHighlightInput({
     <div className="sceneTelopEditor">
       <div className="sceneTelopInputStack">
         <div aria-hidden className="sceneTelopHighlightLayer" ref={backdropRef}>
-          {renderHighlightBackdrop(value, highlightWords)}
+          {renderHighlightBackdrop(displayedText, displayedWords, compositionDraft && compositionRef.current
+            ? { start: compositionRef.current.start, end: compositionDraft.end } : undefined)}
         </div>
         <textarea
-          className={`sceneTelopInput ${edited ? "edited" : ""} ${composing ? "isComposing" : "isOverlayed"}`}
-          onBlur={() => {
+          className={`sceneTelopInput ${edited ? "edited" : ""} isOverlayed`}
+          onBlur={(event) => {
+            finishComposition(event.currentTarget.value);
             onBlur();
           }}
-          onChange={(event) => onChange(event.target.value)}
-          onCompositionEnd={() => setComposing(false)}
-          onCompositionStart={() => setComposing(true)}
+          onChange={(event) => {
+            if (compositionRef.current) {
+              setCompositionDraft({ text: event.target.value, end: event.target.selectionEnd });
+            } else {
+              commitText(event.target.value);
+            }
+          }}
+          onCompositionEnd={(event) => finishComposition(event.currentTarget.value)}
+          onCompositionStart={(event) => {
+            compositionRef.current = { text: value, words: highlightWords, start: event.currentTarget.selectionStart };
+            setCompositionDraft({ text: event.currentTarget.value, end: event.currentTarget.selectionEnd });
+          }}
           onFocus={() => {
             onFocus();
             readSelection();
@@ -106,7 +147,7 @@ export function TelopHighlightInput({
           ref={textareaRef}
           rows={rows}
           title={title}
-          value={value}
+          value={displayedText}
         />
       </div>
       {onHighlightWordsChange && (

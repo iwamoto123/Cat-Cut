@@ -66,14 +66,14 @@ class BuildOpAiTitleTests(unittest.TestCase):
         self.assertEqual(self._build("", "   ")["title"], "")
 
     def test_ai_title_passes_through_teaser_fallback(self):
-        # highlight_teaser で候補ゼロ→title_cardフォールバック時もAIタイトルを保持する
+        # highlight_teaser で候補ゼロ→保持済み映像フォールバック時もAIタイトルを保持する
         op = build_op(
             {"pattern": "highlight_teaser", "decoration": "flash_pop",
              "text_animation": "slide_left", "title": "", "catch_copy": "", "clips": None},
             load_op_patterns(), [], self._KEEP_SEGMENTS, self._CUTS,
             "/videos/元ファイル名.mp4", ai_title="AIのタイトル",
         )
-        self.assertEqual(op["pattern"], "title_card")
+        self.assertEqual(op["pattern"], "highlight_teaser")
         self.assertEqual(op["title"], "AIのタイトル")
 
 

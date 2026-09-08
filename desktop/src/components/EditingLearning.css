@@ -1,0 +1,59 @@
+.userDictionaryModal.editingLearningModal {
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #243047;
+}
+.editingLearningScroll { min-height: 0; overflow-y: auto; display: grid; gap: 14px; padding-right: 3px; }
+.editingLearningHeader { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
+.editingLearningHeader > span { font-size: 11px; color: #667085; }
+.editingLearningStats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.editingLearningStats > div { padding: 10px 12px; border: 1px solid #e3e8ef; border-radius: 8px; background: #f7f9fc; }
+.editingLearningStats dt { font-size: 11px; color: #596579; }
+.editingLearningStats dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; color: #253958; }
+.editingLearningStats dd > small { margin-left: 4px; font-size: 11px; font-weight: 400; }
+.editingLearningSectionTitle { margin: 0 0 7px; font-size: 12px; color: #344054; font-weight: 700; }
+.editingLearningExamples { display: grid; gap: 7px; }
+.editingLearningExample { border: 1px solid #e1e7ef; border-radius: 8px; background: #fff; overflow: hidden; }
+.editingLearningExample > summary { cursor: pointer; padding: 10px 12px; font-size: 12px; color: #344054; line-height: 1.7; }
+.editingLearningKind { display: inline-block; margin: 0 8px 0 3px; padding: 0 6px; border-radius: 4px; background: #edf3fb; color: #315989; font-size: 10px; font-weight: 650; }
+.editingLearningExampleSummary { overflow-wrap: anywhere; }
+.editingLearningCompare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; padding: 0 12px 10px; }
+.editingLearningVersion { min-width: 0; border-top: 1px solid #edf0f4; padding-top: 9px; }
+.editingLearningVersionTitle { display: block; margin-bottom: 7px; color: #667085; font-size: 11px; font-weight: 600; }
+.editingLearningAfter .editingLearningVersionTitle { color: #16734c; }
+.editingLearningText { margin: 0; padding: 9px 10px; max-height: 190px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 5px; background: #f5f7fa; color: #344054; font-size: 12px; line-height: 1.7; font-family: inherit; }
+.editingLearningAfter .editingLearningText { background: #f1f8f4; }
+.editingLearningRangeTitle { margin: 10px 0 4px; font-size: 10px; color: #667085; }
+.editingLearningRanges { margin: 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; font-size: 10px; color: #526176; }
+.editingLearningRanges li { padding: 4px 0; border-bottom: 1px solid #eef1f5; }
+.editingLearningRanges time { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.editingLearningSceneText { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 3px; color: #344054; font-size: 11px; }
+.editingLearningExampleFooter { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid #edf0f4; background: #fafbfd; }
+.editingLearningExampleFooter > span { font-size: 10px; color: #667085; line-height: 1.6; }
+.editingLearningExclude { flex: 0 0 auto; border: 1px solid #e3c5c2; border-radius: 5px; padding: 5px 9px; background: #fff; color: #b42318; cursor: pointer; font-size: 11px; }
+.editingLearningExclude:disabled { opacity: .5; cursor: wait; }
+.editingLearningLegacy { border-top: 1px solid #e5eaf0; padding-top: 12px; }
+.editingLearningLegacy .userDictionaryList { margin-top: 8px; max-height: 180px; }
+.editingLearningEmpty { border: 1px dashed #d5deea; border-radius: 8px; background: #fafbfd; padding: 14px; }
+.editingLearningFeedback { margin: 0; padding: 10px 12px; border: 1px solid #d5e4f4; border-radius: 7px; color: #33577b; background: #f4f8fd; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.editingLearningError { color: #a33326; border-color: #f0d2ca; background: #fff5f2; }
+.editingLearningModal > .telopReplaceModalActions { flex: 0 0 auto; padding-top: 2px; }
+.editingLearningModal > .editingLearningFeedback { flex: 0 1 auto; max-height: 140px; overflow: auto; }
+.editingLearningExportFiles { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.editingLearningExportFiles button { font-size: 11px; border: 1px solid #cddced; border-radius: 5px; padding: 5px 9px; background: #fff; color: #315989; cursor: pointer; }
+.exportDoneModal.editingLearningExportDone { max-height: calc(100dvh - 36px); overflow-y: auto; }
+.editingLearningExportDone .exportDoneQuickActions { flex-wrap: wrap; }
+.exportDoneLearningStatus { padding: 10px 12px; border: 1px solid #cfe6d8; border-radius: 7px; background: #f3faf6; color: #216449; font-size: 12px; line-height: 1.7; }
+.exportDoneLearningStatus strong { display: block; font-size: 12px; }
+.exportDoneLearningStatus p { margin: 3px 0 0; }
+.exportDoneLearningStatus.isWarning { background: #fff9ee; border-color: #eed8ac; color: #8c5b16; }
+.exportDoneLearningHint { margin: 0; font-size: 11px; line-height: 1.7; color: #667085; }
+@media (max-width: 600px) {
+  .editingLearningStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .editingLearningCompare { grid-template-columns: minmax(0, 1fr); }
+  .editingLearningExampleFooter { align-items: flex-start; }
+  .editingLearningExportDone .exportDoneFooter { flex-wrap: wrap; }
+}

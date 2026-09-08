@@ -326,6 +326,7 @@ def build_dictionary_hint(dictionary_path: Optional[str]) -> str:
 
 # W14-2: プロンプトへ注入する「ユーザーが過去に確定した修正例」の既定件数(頻度上位)。
 CORRECTION_EXAMPLES_LIMIT = 30
+from shared.editing_learning import build_editing_examples_section, load_prompt_examples
 
 
 def build_correction_examples_section(correction_examples: Optional[list[dict[str, Any]]]) -> str:
@@ -390,6 +391,7 @@ def build_prompt(
     video_title: str = "",
     notation_variants: Optional[list[dict[str, Any]]] = None,
     correction_examples: Optional[list[dict[str, Any]]] = None,
+    editing_examples: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     cuts_json = json.dumps(cuts, ensure_ascii=False, indent=2)
     title_section = ""
@@ -424,6 +426,9 @@ def build_prompt(
 """
     # W14-2: ユーザーが過去に確定した修正例(全run横断の correction_history 由来)
     correction_examples_section = build_correction_examples_section(correction_examples)
+    correction_examples_section += build_editing_examples_section(
+        editing_examples, {"proofreading", "scene_boundary", "line_break"}, json.dumps(cuts, ensure_ascii=False),
+    )
     review_section = ""
     if review_findings:
         findings_json = json.dumps(review_findings, ensure_ascii=False, indent=2)
@@ -507,6 +512,7 @@ def build_final_pass_prompt(
     cuts: list[dict[str, Any]],
     video_title: str = "",
     notation_variants: Optional[list[dict[str, Any]]] = None,
+    editing_examples: Optional[list[dict[str, Any]]] = None,
 ) -> str:
     """最終検品パス(2周目)のプロンプト。
 
@@ -527,6 +533,7 @@ def build_final_pass_prompt(
             "\n# この動画内で表記が揺れている語 (機械抽出)。同一の語なら多数派(→の右側)に統一:\n"
             + "\n".join(notation_lines) + "\n"
         )
+    learning_section = build_editing_examples_section(editing_examples, {"proofreading"}, json.dumps(cuts, ensure_ascii=False))
     return f"""あなたは日本語トーク動画のテロップの最終検品者です。以下は校正済みの確定テロップです。
 公開前の最終チェックとして、残存しているミスだけを報告してください。
 
@@ -547,7 +554,7 @@ def build_final_pass_prompt(
 - 置換文字列は誤爆しないよう前後の文脈を含めて一意になる長さにする
 - 確信が持てないものは corrections に入れず needs_review に報告する
 - 問題がなければ両方とも空でよい
-{title_section}{notation_section}
+{title_section}{notation_section}{learning_section}
 出力は次のJSON形式のみを返してください。説明文やコードフェンスは不要です:
 {{
   "corrections": {{"誤りを含む文字列": "修正後の文字列"}},
@@ -599,6 +606,7 @@ def run_final_pass(
     caller: Callable[[ProviderName, str, str, str], dict[str, Any]],
     video_title: str = "",
     notation_variants: Optional[list[dict[str, Any]]] = None,
+    editing_examples: Optional[list[dict[str, Any]]] = None,
 ) -> tuple[list[TelopPage], dict[str, Any]]:
     """最終検品パス(2周目)。失敗しても1周目の結果を壊さない(non-fatal)。
 
@@ -615,6 +623,7 @@ def run_final_pass(
         prompt = build_final_pass_prompt(
             transcript, chunk_cuts,
             video_title=video_title, notation_variants=notation_variants,
+            editing_examples=editing_examples,
         )
         try:
             response = call_llm_json(provider, api_key, model, prompt, caller=caller)
@@ -909,6 +918,7 @@ def run_step(
     if correction_examples:
         print(f"  correction examples: {len(correction_examples)} pairs")
     cut_chunks = chunk_cuts_payload(cuts_payload)
+    editing_examples = load_prompt_examples(run_dir, telop_mode="full")
     print(f"  cuts: {len(cuts_payload)}, chunks: {len(cut_chunks)}")
 
     successful_responses: list[dict[str, Any]] = []
@@ -927,6 +937,7 @@ def run_step(
             video_title=video_title,
             notation_variants=notation_variants or None,
             correction_examples=correction_examples or None,
+            editing_examples=editing_examples,
         )
         try:
             response = call_llm_json(
@@ -1007,6 +1018,7 @@ def run_step(
             resolved_provider, resolved_key, resolved_model, caller,
             video_title=video_title,
             notation_variants=final_notation or None,
+            editing_examples=editing_examples,
         )
         if final_pass_stats["pages_changed"]:
             telop_file.write_text(render_telop(preamble, final_pages), encoding="utf-8")
