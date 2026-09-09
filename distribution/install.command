@@ -14,6 +14,12 @@ DIST_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_SRC="$DIST_DIR/app"
 TARGET="$HOME/CatCut"
 CATCUT_NPM_CACHE="$HOME/Library/Caches/CatCut/npm"
+export npm_config_cache="$CATCUT_NPM_CACHE"
+LAUNCHER_TEMP=""
+cleanup() { [ -z "$LAUNCHER_TEMP" ] || rm -f "$LAUNCHER_TEMP"; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\033[31mエラー: %s\033[0m\n' "$1"; echo "このウィンドウのスクリーンショットを岩本まで送ってください。"; read -r -p "Enterで閉じます..."; exit 1; }
@@ -26,6 +32,12 @@ fail() { printf '\033[31mエラー: %s\033[0m\n' "$1"; echo "このウィンド�
 # バージョン(YYYYMMDD-で始まるため文字列比較=日付比較)が古い場合は確認を挟む。
 NEW_VERSION="$(cat "$APP_SRC/VERSION.txt" 2>/dev/null || echo "")"
 OLD_VERSION="$(cat "$TARGET/VERSION.txt" 2>/dev/null || echo "")"
+bold "=== Cat-Cut セットアップ ==="
+echo "配布ビルド: ${NEW_VERSION:-不明}"
+echo "実行元: $DIST_DIR"
+echo "インストール先: $TARGET"
+echo "npmキャッシュ: $CATCUT_NPM_CACHE"
+echo ""
 if [ -n "$NEW_VERSION" ] && [ -n "$OLD_VERSION" ] && [ "$NEW_VERSION" \< "$OLD_VERSION" ]; then
   printf '\033[31m警告: これからインストールするビルド(%s)は、\n現在インストール済みの ~/CatCut (%s) より古いものです。\033[0m\n' "$NEW_VERSION" "$OLD_VERSION"
   echo "古いzipの展開フォルダから実行していませんか？"
@@ -73,6 +85,7 @@ rsync -a --delete \
   --exclude ".env" \
   --exclude ".venv/" \
   --exclude "node_modules/" \
+  --exclude ".node-*/" \
   "$APP_SRC/" "$TARGET/" || fail "ファイルのコピーに失敗しました"
 mkdir -p "$TARGET/runs"
 bold "[3/5] コピー OK（編集データは保持されています）"
@@ -86,6 +99,7 @@ fi
 "$TARGET/.venv/bin/pip" install -r "$TARGET/python/requirements.txt" || fail "Pythonパッケージのインストールに失敗しました"
 # 過去に別権限で作られた ~/.npm があっても、現在のユーザーの専用キャッシュで導入する。
 mkdir -p "$CATCUT_NPM_CACHE" || fail "Cat-Cut用のnpmキャッシュを作成できません: $CATCUT_NPM_CACHE"
+bold "[4/5] 編集画面のパッケージをセットアップします"
 (cd "$TARGET/desktop" && npm install --cache "$CATCUT_NPM_CACHE" --no-audit --no-fund) || fail "アプリ依存(desktop)のインストールに失敗しました"
 # npmがライフサイクルスクリプトを省略しても、Electron本体の欠落を見逃さない。
 bold "[4/5] Electron本体を確認します（初回はダウンロードします）"
@@ -101,13 +115,17 @@ bold "[4/5] Electron本体を確認します（初回はダウンロードしま
     console.log("Electron本体の起動確認 OK: " + process.versions.electron);
   '
 ) || fail "Electron本体の取得・起動確認に失敗しました。直前のエラーをご確認ください"
+bold "[4/5] 書き出し用パッケージ（Remotion）をセットアップします"
 (cd "$TARGET/remotion" && npm install --cache "$CATCUT_NPM_CACHE" --no-audit --no-fund) || fail "アプリ依存(remotion)のインストールに失敗しました"
+(cd "$TARGET/remotion" && node -e 'require("@remotion/renderer"); require("@remotion/bundler"); console.log("書き出し用パッケージの読込確認 OK");') || fail "書き出し用パッケージを読み込めません。直前のエラーをご確認ください"
 bold "[4/5] 依存セットアップ OK"
 
 # --- 5. 起動アイコン ---
 bold "[5/5] デスクトップに起動アイコンを作成します"
 LAUNCHER="$HOME/Desktop/Cat-Cut.command"
-cat > "$LAUNCHER" <<'EOF'
+mkdir -p "$(dirname "$LAUNCHER")" || fail "デスクトップフォルダを開けません"
+LAUNCHER_TEMP="$(mktemp "$(dirname "$LAUNCHER")/.Cat-Cut.XXXXXX")" || fail "起動ファイルの作成先へ書き込めません"
+if ! cat > "$LAUNCHER_TEMP" <<'EOF'
 #!/bin/bash
 # Cat-Cut 起動（このウィンドウはアプリ使用中は閉じないでください）
 if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"; fi
@@ -124,7 +142,13 @@ if [ "$EXIT_CODE" -ne 0 ]; then
 fi
 exit "$EXIT_CODE"
 EOF
-chmod +x "$LAUNCHER"
+then
+  fail "起動ファイルの書き込みに失敗しました"
+fi
+bash -n "$LAUNCHER_TEMP" || fail "起動ファイルの検証に失敗しました"
+chmod +x "$LAUNCHER_TEMP" || fail "起動ファイルに実行権限を設定できません"
+mv -f "$LAUNCHER_TEMP" "$LAUNCHER" || fail "デスクトップの起動ファイルを更新できません"
+LAUNCHER_TEMP=""
 bold "[5/5] 起動アイコン OK"
 
 if [ -f "$TARGET/VERSION.txt" ]; then
@@ -134,5 +158,7 @@ fi
 echo ""
 bold "=== インストール完了です ==="
 echo "デスクトップの「Cat-Cut.command」をダブルクリックすると起動します。"
+echo "起動ファイル: $LAUNCHER"
 echo "初回起動時にAPIキーの入力画面が出ます（キーは岩本から受け取ってください）。"
+open -R "$LAUNCHER" >/dev/null 2>&1 || true
 read -r -p "Enterで閉じます..."

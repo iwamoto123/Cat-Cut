@@ -1,31 +1,51 @@
 #!/bin/bash
 # Cat-Cut 社内配布zipの作成（岩本さんのMacで実行する）
 # 使い方: cd editor && bash distribution/make_package.sh
-# 出力: ~/Desktop/CatCut-haifu-YYYYMMDD.zip
-#       + NextCloud共有フォルダへ同じ日付付きファイル名で自動公開
+# 出力: ~/Desktop/CatCut-haifu-YYYYMMDD-HHMMSS.zip（日本時間）
+#       + NextCloud共有フォルダへ同じ日時付きファイル名で自動公開
 #         公開先は環境変数 CATCUT_PUBLISH_DIR で変更可
 
 set -eu
 
 EDITOR_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-STAMP="$(date +%Y%m%d)"
+STAMP="$(TZ=Asia/Tokyo date +%Y%m%d-%H%M%S)"
 PACKAGE_NAME="CatCut-haifu-$STAMP.zip"
+SETUP_NAME="CatCut-setup-$STAMP"
 OUT="$HOME/Desktop/$PACKAGE_NAME"
 PUBLISH_DIR="${CATCUT_PUBLISH_DIR:-$HOME/Desktop/NextCloud/CatCut-haifu}"
 WORK_ROOT=""
 ARCHIVE_DIR=""
+PUBLISH_TEMP=""
+refuse_existing_archive() {
+  if [ -e "$1" ] || [ -L "$1" ]; then
+    echo "エラー: 同名の配布zipが既にあります。上書きせず中止します: $1" >&2
+    exit 1
+  fi
+}
+move_new_archive() {
+  refuse_existing_archive "$2"
+  # -n also prevents a concurrent build from replacing the destination after the check.
+  mv -n "$1" "$2"
+  if [ -e "$1" ]; then
+    echo "エラー: 同名の配布zipが作成されました。上書きせず中止します: $2" >&2
+    exit 1
+  fi
+}
 cleanup() {
-  # Both paths are created by this process; never remove the published/archive outputs.
+  # These paths are created by this process; never remove the published/archive outputs.
   [ -z "$WORK_ROOT" ] || rm -rf "$WORK_ROOT"
   [ -z "$ARCHIVE_DIR" ] || rm -rf "$ARCHIVE_DIR"
+  [ -z "$PUBLISH_TEMP" ] || rm -f "$PUBLISH_TEMP"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+refuse_existing_archive "$OUT"
+refuse_existing_archive "$PUBLISH_DIR/$PACKAGE_NAME"
 WORK_ROOT="$(mktemp -d)"
-WORK="$WORK_ROOT/CatCut-setup"
+WORK="$WORK_ROOT/$SETUP_NAME"
 mkdir -p "$(dirname "$OUT")"
-# A new archive on the destination filesystem prevents stale entries and permits atomic replacement.
+# A new archive on the destination filesystem prevents stale entries and permits an atomic move.
 ARCHIVE_DIR="$(mktemp -d "$(dirname "$OUT")/.CatCut-package.XXXXXX")"
 TEMP_ARCHIVE="$ARCHIVE_DIR/CatCut-haifu.zip"
 
@@ -38,6 +58,7 @@ rsync -a \
   --exclude "runs/" \
   --exclude "learning_data/" \
   --exclude ".venv/" \
+  --exclude ".node-*/" \
   --exclude "node_modules/" \
   --exclude "__pycache__/" \
   --exclude "*.pyc" \
@@ -81,23 +102,26 @@ fi
 # -y: シンボリックリンクを実体化せずリンクのまま格納（runへのリンク等の巻き込み防止）
 (cd "$WORK_ROOT" && zip -ryq "$TEMP_ARCHIVE" "$(basename "$WORK")")
 unzip -tq "$TEMP_ARCHIVE"
-mv -f "$TEMP_ARCHIVE" "$OUT"
+move_new_archive "$TEMP_ARCHIVE" "$OUT"
 echo "完了: $OUT"
 du -sh "$OUT"
 
 # NextCloud共有フォルダへ最新版を公開（社員は常に同じ場所から最新版を取得できる）
 if [ -d "$(dirname "$PUBLISH_DIR")" ]; then
   mkdir -p "$PUBLISH_DIR"
-  # 一時ファイルに書いてからmvで置き換え（Nextcloud同期中の中途半端なzip配信を防ぐ）
-  cp "$OUT" "$PUBLISH_DIR/.${PACKAGE_NAME}.tmp"
-  mv "$PUBLISH_DIR/.${PACKAGE_NAME}.tmp" "$PUBLISH_DIR/$PACKAGE_NAME"
+  # 一時ファイルに書いてから同名zipを上書きせず公開（同期中の不完全なzip配信を防ぐ）
+  refuse_existing_archive "$PUBLISH_DIR/$PACKAGE_NAME"
+  PUBLISH_TEMP="$(mktemp "$PUBLISH_DIR/.${PACKAGE_NAME}.XXXXXX")"
+  cp "$OUT" "$PUBLISH_TEMP"
+  move_new_archive "$PUBLISH_TEMP" "$PUBLISH_DIR/$PACKAGE_NAME"
+  PUBLISH_TEMP=""
   cp "$EDITOR_DIR/distribution/VERSION" "$PUBLISH_DIR/VERSION.txt"
   cat > "$PUBLISH_DIR/README.txt" <<EOF
 Cat-Cut 最新版の配布フォルダ
 
 【インストール・更新の手順】
 1. $PACKAGE_NAME をダウンロードしてダブルクリックで展開する
-2. 展開されたフォルダの中の install.command を右クリック →「開く」
+2. 展開された $SETUP_NAME フォルダの中の install.command を右クリック →「開く」
 3. 画面の指示に従って完了を待つ（更新の場合も同じ手順。編集中のデータは消えません）
 4. デスクトップの Cat-Cut.command から起動する
 
@@ -106,13 +130,14 @@ Cat-Cut 最新版の配布フォルダ
 ウィンドウへドラッグして Enter を押してください。
 
 【注意】
-- zipの名前には配布日（YYYYMMDD）が入っています。最新版は上記のファイルです。
+- zipと展開フォルダの名前には配布日時（YYYYMMDD-HHMMSS、日本時間）が入っています。
+  最新版は上記のファイルです。同名のzipは上書きしません。
 - 必ず「いま展開したフォルダ」の install.command を実行してください。
   デスクトップやダウンロードに残っている古い CatCut-setup フォルダから実行すると
   古いバージョンに巻き戻ります（古い展開フォルダは削除を推奨）
 - いま入っているバージョンは ~/CatCut/VERSION.txt で確認できます
 
-現在のバージョン: VERSION.txt を参照（$(date +%Y-%m-%d) 更新）
+現在のバージョン: VERSION.txt を参照（配布日時: ${STAMP}、日本時間）
 $NOTES_GUIDANCE
 EOF
   echo "NextCloudへ公開しました: $PUBLISH_DIR/${PACKAGE_NAME}（バージョン: $(cat "$EDITOR_DIR/distribution/VERSION")）"
