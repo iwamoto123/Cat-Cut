@@ -23,6 +23,11 @@
     "vite": "^7.0.0",
     "wait-on": "^8.0.0"
   },
+  "overrides": {
+    "extract-zip": {
+      "yauzl": "3.3.1"
+    }
+  },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",

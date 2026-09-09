@@ -18,6 +18,11 @@
     "react-dom": "^18.2.0",
     "remotion": "^4.0.454"
   },
+  "overrides": {
+    "extract-zip": {
+      "yauzl": "3.3.1"
+    }
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",

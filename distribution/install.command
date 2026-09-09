@@ -84,6 +84,20 @@ fi
 "$TARGET/.venv/bin/pip" install --upgrade pip -q || true
 "$TARGET/.venv/bin/pip" install -r "$TARGET/python/requirements.txt" || fail "Pythonパッケージのインストールに失敗しました"
 (cd "$TARGET/desktop" && npm install --no-audit --no-fund) || fail "アプリ依存(desktop)のインストールに失敗しました"
+# npmがライフサイクルスクリプトを省略しても、Electron本体の欠落を見逃さない。
+bold "[4/5] Electron本体を確認します（初回はダウンロードします）"
+(
+  cd "$TARGET/desktop" &&
+  env -u ELECTRON_SKIP_BINARY_DOWNLOAD -u ELECTRON_OVERRIDE_DIST_PATH node node_modules/electron/install.js &&
+  env -u ELECTRON_OVERRIDE_DIST_PATH ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron -e '
+    const expected = require("./node_modules/electron/package.json").version;
+    if (process.versions.electron !== expected) {
+      console.error("Electron本体のバージョンが一致しません", process.versions.electron, expected);
+      process.exit(1);
+    }
+    console.log("Electron本体の起動確認 OK: " + process.versions.electron);
+  '
+) || fail "Electron本体の取得・起動確認に失敗しました。直前のエラーをご確認ください"
 (cd "$TARGET/remotion" && npm install --no-audit --no-fund) || fail "アプリ依存(remotion)のインストールに失敗しました"
 bold "[4/5] 依存セットアップ OK"
 
@@ -97,7 +111,15 @@ if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"
 if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
 cd "$HOME/CatCut/desktop" || { echo "~/CatCut が見つかりません。install.command を先に実行してください"; read -r; exit 1; }
 if [ -f ../VERSION.txt ]; then echo "Cat-Cut ビルド: $(cat ../VERSION.txt)"; fi
-npm run dev
+env -u ELECTRON_OVERRIDE_DIST_PATH npm run dev
+EXIT_CODE=$?
+if [ "$EXIT_CODE" -ne 0 ]; then
+  echo ""
+  echo "Cat-Cutがエラーで終了しました（終了コード: ${EXIT_CODE}）。"
+  echo "このウィンドウのエラー内容を岩本まで送ってください。"
+  read -r -p "Enterで閉じます..."
+fi
+exit "$EXIT_CODE"
 EOF
 chmod +x "$LAUNCHER"
 bold "[5/5] 起動アイコン OK"
@@ -108,6 +130,6 @@ fi
 
 echo ""
 bold "=== インストール完了です ==="
-echo "デスクトップの「Cat-Cut」をダブルクリックすると起動します。"
+echo "デスクトップの「Cat-Cut.command」をダブルクリックすると起動します。"
 echo "初回起動時にAPIキーの入力画面が出ます（キーは岩本から受け取ってください）。"
 read -r -p "Enterで閉じます..."

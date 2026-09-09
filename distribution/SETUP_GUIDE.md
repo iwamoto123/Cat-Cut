@@ -11,9 +11,12 @@ Macのみ対応です（Apple Silicon / Intel どちらも可。Intel Macでは�
 3. 黒い画面（ターミナル）が開いて自動で進みます。Macのパスワードを聞かれたら入力してください
 4. 初回は20〜40分かかります。「インストール完了です」と出たら終わりです
 
+「適切なアクセス権限がないために実行できません」と出る場合は、ターミナルを開き、`bash `（最後に半角スペース）と入力してから、展開した `install.command` をそのウィンドウへドラッグし、Enterを押してください。
+
 ## 起動
 
-- デスクトップにできた「Cat-Cut」をダブルクリック
+- デスクトップにできた **`Cat-Cut.command`** をダブルクリックすると、編集画面が開きます
+- `install.command` はセットアップ用です。インストール後の起動には `Cat-Cut.command` を使ってください
 - 黒い画面が一緒に開きますが、**アプリを使っている間は閉じないでください**
 - 初回起動時にAPIキーの入力画面が出ます。キーは岩本から受け取って貼り付けてください
 
@@ -38,4 +41,21 @@ Macのみ対応です（Apple Silicon / Intel どちらも可。Intel Macでは�
   3. 接続失敗の場合 → **会社Wi-Fi/VPN/ファイアウォール**で `api.elevenlabs.io` がブロックされている可能性大。スマホテザリング等の別回線で試す
   4. 最新zip（Intel Mac対応版）で `install.command` を再実行しているか確認
 - アプリが真っ白/動かない: 黒い画面ごと閉じて、もう一度「Cat-Cut」をダブルクリック
-- アプリの場所: `~/CatCut`（ホームフォルダのCatCut）に入っています
+- アプリの場所: 起動用ファイルはデスクトップの `Cat-Cut.command`、本体は `~/CatCut`（ホームフォルダのCatCut）に入っています。「アプリケーション」フォルダにCat-Cut.appが作られる方式ではありません
+
+### 「Electron failed to install correctly」と表示されて起動しない
+
+画面表示に必要なElectron本体が正しく展開されていない状態です。Node.js 26などと旧展開ライブラリの組み合わせで、エラーを出さず途中終了する場合があります。最新版のzipからインストールし直すと修正版の展開ライブラリが適用されます。
+
+すぐ修復する場合は、ターミナルに次をまとめて貼り付け、Enterを押してください。展開ライブラリを修正版へ変更し、Electron本体の動作確認後にCat-Cutを起動します。
+
+```bash
+cd "$HOME/CatCut/desktop" &&
+npm pkg set 'overrides.extract-zip.yauzl=3.3.1' &&
+npm install --no-audit --no-fund &&
+env -u ELECTRON_SKIP_BINARY_DOWNLOAD -u ELECTRON_OVERRIDE_DIST_PATH node node_modules/electron/install.js &&
+env -u ELECTRON_OVERRIDE_DIST_PATH ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron -p 'process.versions.electron' &&
+env -u ELECTRON_OVERRIDE_DIST_PATH bash "$HOME/Desktop/Cat-Cut.command"
+```
+
+ダウンロードに数分かかる場合があります。エラーで止まった場合は、その内容を岩本へ送ってください。次回からは通常どおりデスクトップの `Cat-Cut.command` から起動できます。
