@@ -51,11 +51,15 @@ Macのみ対応です（Apple Silicon / Intel どちらも可。Intel Macでは�
 
 ```bash
 cd "$HOME/CatCut/desktop" &&
-npm pkg set 'overrides.extract-zip.yauzl=3.3.1' &&
-npm install --no-audit --no-fund &&
+npm --cache "$HOME/Library/Caches/CatCut/npm" pkg set 'overrides.extract-zip.yauzl=3.3.1' &&
+npm install --cache "$HOME/Library/Caches/CatCut/npm" --no-audit --no-fund &&
 env -u ELECTRON_SKIP_BINARY_DOWNLOAD -u ELECTRON_OVERRIDE_DIST_PATH node node_modules/electron/install.js &&
 env -u ELECTRON_OVERRIDE_DIST_PATH ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron -p 'process.versions.electron' &&
-env -u ELECTRON_OVERRIDE_DIST_PATH bash "$HOME/Desktop/Cat-Cut.command"
+env -u ELECTRON_OVERRIDE_DIST_PATH npm --cache "$HOME/Library/Caches/CatCut/npm" run dev
 ```
 
 ダウンロードに数分かかる場合があります。エラーで止まった場合は、その内容を岩本へ送ってください。次回からは通常どおりデスクトップの `Cat-Cut.command` から起動できます。
+
+### npmの「EACCES」「EEXIST」で止まる
+
+エラーのパスが `~/.npm/_cacache` の場合は、npmの共通キャッシュへ書き込めない状態です。上記の修復コマンドでは `~/Library/Caches/CatCut/npm` に専用キャッシュを作成して取得します。最新版のインストーラもこの保存先を使用します。

@@ -13,6 +13,7 @@ set -u
 DIST_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_SRC="$DIST_DIR/app"
 TARGET="$HOME/CatCut"
+CATCUT_NPM_CACHE="$HOME/Library/Caches/CatCut/npm"
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
 fail() { printf '\033[31mエラー: %s\033[0m\n' "$1"; echo "このウィンドウのスクリーンショットを岩本まで送ってください。"; read -r -p "Enterで閉じます..."; exit 1; }
@@ -83,7 +84,9 @@ if [ ! -x "$TARGET/.venv/bin/python" ]; then
 fi
 "$TARGET/.venv/bin/pip" install --upgrade pip -q || true
 "$TARGET/.venv/bin/pip" install -r "$TARGET/python/requirements.txt" || fail "Pythonパッケージのインストールに失敗しました"
-(cd "$TARGET/desktop" && npm install --no-audit --no-fund) || fail "アプリ依存(desktop)のインストールに失敗しました"
+# 過去に別権限で作られた ~/.npm があっても、現在のユーザーの専用キャッシュで導入する。
+mkdir -p "$CATCUT_NPM_CACHE" || fail "Cat-Cut用のnpmキャッシュを作成できません: $CATCUT_NPM_CACHE"
+(cd "$TARGET/desktop" && npm install --cache "$CATCUT_NPM_CACHE" --no-audit --no-fund) || fail "アプリ依存(desktop)のインストールに失敗しました"
 # npmがライフサイクルスクリプトを省略しても、Electron本体の欠落を見逃さない。
 bold "[4/5] Electron本体を確認します（初回はダウンロードします）"
 (
@@ -98,7 +101,7 @@ bold "[4/5] Electron本体を確認します（初回はダウンロードしま
     console.log("Electron本体の起動確認 OK: " + process.versions.electron);
   '
 ) || fail "Electron本体の取得・起動確認に失敗しました。直前のエラーをご確認ください"
-(cd "$TARGET/remotion" && npm install --no-audit --no-fund) || fail "アプリ依存(remotion)のインストールに失敗しました"
+(cd "$TARGET/remotion" && npm install --cache "$CATCUT_NPM_CACHE" --no-audit --no-fund) || fail "アプリ依存(remotion)のインストールに失敗しました"
 bold "[4/5] 依存セットアップ OK"
 
 # --- 5. 起動アイコン ---
@@ -111,7 +114,7 @@ if [ -x /opt/homebrew/bin/brew ]; then eval "$(/opt/homebrew/bin/brew shellenv)"
 if [ -x /usr/local/bin/brew ]; then eval "$(/usr/local/bin/brew shellenv)"; fi
 cd "$HOME/CatCut/desktop" || { echo "~/CatCut が見つかりません。install.command を先に実行してください"; read -r; exit 1; }
 if [ -f ../VERSION.txt ]; then echo "Cat-Cut ビルド: $(cat ../VERSION.txt)"; fi
-env -u ELECTRON_OVERRIDE_DIST_PATH npm run dev
+env -u ELECTRON_OVERRIDE_DIST_PATH npm --cache "$HOME/Library/Caches/CatCut/npm" run dev
 EXIT_CODE=$?
 if [ "$EXIT_CODE" -ne 0 ]; then
   echo ""
