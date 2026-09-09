@@ -1,15 +1,16 @@
 #!/bin/bash
 # Cat-Cut 社内配布zipの作成（岩本さんのMacで実行する）
 # 使い方: cd editor && bash distribution/make_package.sh
-# 出力: ~/Desktop/CatCut-配布用-YYYYMMDD.zip
-#       + NextCloud共有フォルダへ最新版を自動公開（CatCut-latest.zip）
+# 出力: ~/Desktop/CatCut-haifu-YYYYMMDD.zip
+#       + NextCloud共有フォルダへ同じ日付付きファイル名で自動公開
 #         公開先は環境変数 CATCUT_PUBLISH_DIR で変更可
 
 set -eu
 
 EDITOR_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(date +%Y%m%d)"
-OUT="$HOME/Desktop/CatCut-haifu-$STAMP.zip"
+PACKAGE_NAME="CatCut-haifu-$STAMP.zip"
+OUT="$HOME/Desktop/$PACKAGE_NAME"
 PUBLISH_DIR="${CATCUT_PUBLISH_DIR:-$HOME/Desktop/NextCloud/CatCut-haifu}"
 WORK_ROOT=""
 ARCHIVE_DIR=""
@@ -88,14 +89,14 @@ du -sh "$OUT"
 if [ -d "$(dirname "$PUBLISH_DIR")" ]; then
   mkdir -p "$PUBLISH_DIR"
   # 一時ファイルに書いてからmvで置き換え（Nextcloud同期中の中途半端なzip配信を防ぐ）
-  cp "$OUT" "$PUBLISH_DIR/.CatCut-latest.zip.tmp"
-  mv "$PUBLISH_DIR/.CatCut-latest.zip.tmp" "$PUBLISH_DIR/CatCut-latest.zip"
+  cp "$OUT" "$PUBLISH_DIR/.${PACKAGE_NAME}.tmp"
+  mv "$PUBLISH_DIR/.${PACKAGE_NAME}.tmp" "$PUBLISH_DIR/$PACKAGE_NAME"
   cp "$EDITOR_DIR/distribution/VERSION" "$PUBLISH_DIR/VERSION.txt"
   cat > "$PUBLISH_DIR/README.txt" <<EOF
 Cat-Cut 最新版の配布フォルダ
 
 【インストール・更新の手順】
-1. CatCut-latest.zip をダウンロードしてダブルクリックで展開する
+1. $PACKAGE_NAME をダウンロードしてダブルクリックで展開する
 2. 展開されたフォルダの中の install.command を右クリック →「開く」
 3. 画面の指示に従って完了を待つ（更新の場合も同じ手順。編集中のデータは消えません）
 4. デスクトップの Cat-Cut.command から起動する
@@ -105,6 +106,7 @@ Cat-Cut 最新版の配布フォルダ
 ウィンドウへドラッグして Enter を押してください。
 
 【注意】
+- zipの名前には配布日（YYYYMMDD）が入っています。最新版は上記のファイルです。
 - 必ず「いま展開したフォルダ」の install.command を実行してください。
   デスクトップやダウンロードに残っている古い CatCut-setup フォルダから実行すると
   古いバージョンに巻き戻ります（古い展開フォルダは削除を推奨）
@@ -113,7 +115,7 @@ Cat-Cut 最新版の配布フォルダ
 現在のバージョン: VERSION.txt を参照（$(date +%Y-%m-%d) 更新）
 $NOTES_GUIDANCE
 EOF
-  echo "NextCloudへ公開しました: $PUBLISH_DIR/CatCut-latest.zip（バージョン: $(cat "$EDITOR_DIR/distribution/VERSION")）"
+  echo "NextCloudへ公開しました: $PUBLISH_DIR/${PACKAGE_NAME}（バージョン: $(cat "$EDITOR_DIR/distribution/VERSION")）"
 else
   echo "注意: NextCloudフォルダが見つからないため公開をスキップしました: $(dirname "$PUBLISH_DIR")"
   echo "      公開先を変える場合は CATCUT_PUBLISH_DIR を設定してください"

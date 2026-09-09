@@ -28,7 +28,7 @@ OLD_VERSION="$(cat "$TARGET/VERSION.txt" 2>/dev/null || echo "")"
 if [ -n "$NEW_VERSION" ] && [ -n "$OLD_VERSION" ] && [ "$NEW_VERSION" \< "$OLD_VERSION" ]; then
   printf '\033[31m警告: これからインストールするビルド(%s)は、\n現在インストール済みの ~/CatCut (%s) より古いものです。\033[0m\n' "$NEW_VERSION" "$OLD_VERSION"
   echo "古いzipの展開フォルダから実行していませんか？"
-  echo "最新版は NextCloud の CatCut-haifu/CatCut-latest.zip を展開し直して、その中の install.command を実行してください。"
+  echo "NextCloud の CatCut-haifu/README.txt に記載された最新の日付付きzipを展開し直して、その中の install.command を実行してください。"
   read -r -p "それでも古いビルドに戻す場合は yes と入力してください: " CONFIRM
   [ "$CONFIRM" = "yes" ] || { echo "中止しました（何も変更していません）"; read -r -p "Enterで閉じます..."; exit 1; }
 fi

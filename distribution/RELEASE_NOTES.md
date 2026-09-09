@@ -14,7 +14,7 @@
 ## 更新方法
 
 1. Cat-Cutで「保存済み」を確認し、アプリを終了してください。
-2. Nextcloudの `CatCut-haifu/CatCut-latest.zip` をダウンロードして展開します。
+2. Nextcloudの `CatCut-haifu/README.txt` に記載された最新の `CatCut-haifu-YYYYMMDD.zip` をダウンロードして展開します。
 3. **いま展開したフォルダ**の `install.command` を右クリックして「開く」を選びます。
 4. 完了後、デスクトップの `Cat-Cut.command` から起動します。
 

@@ -170,7 +170,7 @@ UIの「キャッシュ」ボタンから手動削除も可能。
 
 ### 配布・運用
 
-- `distribution/make_package.sh` → `~/Desktop/CatCut-haifu-YYYYMMDD.zip` → NextCloud `CatCut-haifu/CatCut-latest.zip` に公開
+- `distribution/make_package.sh` → `~/Desktop/CatCut-haifu-YYYYMMDD.zip` → NextCloud `CatCut-haifu/` に同じ日付付きファイル名で公開（最新版の名前は共有フォルダの `README.txt` に記載）
 - 社員側は `install.command`（右クリック→開く）。`~/CatCut` へrsync=更新しても編集データが消えない。
   インストーラにダウングレード防止ガードあり（VERSION.txt比較・古い場合は警告+yes必須）
 - バージョン確認は `~/CatCut/VERSION.txt`。Intel Mac対応（requirements環境マーカー分岐）
@@ -386,7 +386,7 @@ cd remotion && npm test && npx tsc --noEmit
 ```bash
 # 開発機で配布zipを作成（runs/.venv/node_modules/.env等は除外）
 distribution/make_package.sh
-# → ~/Desktop/CatCut-haifu-YYYYMMDD.zip を NextCloud の CatCut-haifu/CatCut-latest.zip へ公開
+# → ~/Desktop/CatCut-haifu-YYYYMMDD.zip を NextCloud の CatCut-haifu/ へ同名で公開
 ```
 
 社員は「いま展開したフォルダ」の `install.command` を右クリック→開く（古いCatCut-setupフォルダは削除推奨）。
