@@ -63,3 +63,5 @@ env -u ELECTRON_OVERRIDE_DIST_PATH npm --cache "$HOME/Library/Caches/CatCut/npm"
 ### npmの「EACCES」「EEXIST」で止まる
 
 エラーのパスが `~/.npm/_cacache` の場合は、npmの共通キャッシュへ書き込めない状態です。上記の修復コマンドでは `~/Library/Caches/CatCut/npm` に専用キャッシュを作成して取得します。最新版のインストーラもこの保存先を使用します。
+
+インストール途中で止まった場合は、最新版zipの `install.command` を再実行してください。書き出し用の依存パッケージの導入と起動用ファイルの作成まで完了できます。
