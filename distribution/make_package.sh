@@ -31,6 +31,25 @@ move_new_archive() {
     exit 1
   fi
 }
+remove_previous_archives() {
+  local publish_dir="$1" current_name="$2" current_stamp="$3"
+  local old old_name old_stamp
+  [ -f "$publish_dir/$current_name" ] && [ ! -L "$publish_dir/$current_name" ] || return 1
+  for old in "$publish_dir"/CatCut-haifu-*.zip "$publish_dir"/CatCut-latest.zip; do
+    [ -f "$old" ] && [ ! -L "$old" ] || continue
+    old_name="$(basename "$old")"
+    [ "$old_name" != "$current_name" ] || continue
+    if [[ "$old_name" =~ ^CatCut-haifu-([0-9]{8})(-([0-9]{6}))?\.zip$ ]]; then
+      old_stamp="${BASH_REMATCH[1]}-${BASH_REMATCH[3]:-000000}"
+      # 同時に公開された、より新しい配布版は削除しない。
+      [[ "$old_stamp" < "$current_stamp" ]] || continue
+    elif [ "$old_name" != "CatCut-latest.zip" ]; then
+      continue
+    fi
+    rm -- "$old"
+    echo "旧配布zipを削除しました: $old_name"
+  done
+}
 cleanup() {
   # These paths are created by this process; never remove the published/archive outputs.
   [ -z "$WORK_ROOT" ] || rm -rf "$WORK_ROOT"
@@ -140,6 +159,9 @@ Cat-Cut 最新版の配布フォルダ
 現在のバージョン: VERSION.txt を参照（配布日時: ${STAMP}、日本時間）
 $NOTES_GUIDANCE
 EOF
+  # 新しいzipのコピーと案内の更新が成功してから、共有先の旧配布zipだけを整理する。
+  cmp -s "$OUT" "$PUBLISH_DIR/$PACKAGE_NAME"
+  remove_previous_archives "$PUBLISH_DIR" "$PACKAGE_NAME" "$STAMP"
   echo "NextCloudへ公開しました: $PUBLISH_DIR/${PACKAGE_NAME}（バージョン: $(cat "$EDITOR_DIR/distribution/VERSION")）"
 else
   echo "注意: NextCloudフォルダが見つからないため公開をスキップしました: $(dirname "$PUBLISH_DIR")"
