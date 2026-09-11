@@ -5,6 +5,33 @@
   isolation: isolate;
 }
 
+.sceneWaveformStatus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 4px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  font-size: 12px;
+}
+.sceneWaveformStatus.isError { color: #9a3412; background: #fff7ed; border-color: #fed7aa; }
+.sceneWaveformStatus button {
+  padding: 5px 10px;
+  margin-left: auto;
+  border: 1px solid #e5b898;
+  border-radius: 5px;
+  color: inherit;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sceneWaveformStatus button:hover { background: #ffedd5; border-color: #c98251; }
+
 .sceneWaveformPrecision .sceneWaveformCanvas { border-radius: 6px; }
 .sceneWaveformPrecision .sceneEdgeHandle { width: 10px; border-radius: 3px; background: #b4c7e3; }
 .sceneWaveformPrecision .sceneEdgeHandle::after {

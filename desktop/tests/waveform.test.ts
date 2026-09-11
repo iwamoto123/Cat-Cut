@@ -107,6 +107,20 @@ test("scaleWaveformPeaksLocal: 全体ピークより小さい区間はローカ�
   assert.ok(Math.abs(scaled[1] - Math.pow(0.1 / 0.35, 1.2)) < 1e-9);
 });
 
+test("編集波形: 小声を空白にせず低く残し、大声・完全無音と区別する", () => {
+  const quiet = [0, 0.002, 0.015, 0.035, 0];
+  assert.deepEqual(scaleWaveformPeaksLocal(quiet, { globalMax: 1 }), quiet.map(() => 0), "従来の表示では全て消える音量");
+  const visible = scaleWaveformPeaksLocal(quiet, { globalMax: 1, preserveQuietPeaks: true });
+  assert.equal(visible[0], 0);
+  assert.equal(visible[4], 0);
+  for (const height of visible.slice(1, 4)) assert.ok(height > 0 && height <= 0.075);
+  assert.ok(visible[1] < visible[2] && visible[2] < visible[3], "小声内でも音量差を残す");
+  const loud = scaleWaveformPeaksLocal([0.4, 1], { globalMax: 1, preserveQuietPeaks: true });
+  assert.ok(loud[0] > visible[3]);
+  assert.equal(loud[1], 1);
+  assert.deepEqual(scaleWaveformPeaksLocal([0, 0], { globalMax: 1, preserveQuietPeaks: true }), [0, 0]);
+});
+
 test("scaleWaveformPeaksGlobal: 完全無音(全て0)は0のまま", () => {
   assert.deepEqual(scaleWaveformPeaksGlobal([0, 0]), [0, 0]);
 });
@@ -134,6 +148,12 @@ test("interpolateWaveformHeights: 要素数1のピークはwidthPx全体に同�
   assert.deepEqual(interpolateWaveformHeights([0.7], 4), [0.7, 0.7, 0.7, 0.7]);
 });
 
+test("interpolateWaveformHeights: 1pxまで縮小してもNaNにならず区間のピークを残す", () => {
+  for (const width of [0, 0.3, 1]) {
+    assert.deepEqual(interpolateWaveformHeights([0, 0.8, 0.2], width), [0.8]);
+  }
+});
+
 test("interpolateWaveformHeights: 両端はピーク配列の両端の値と一致する", () => {
   const result = interpolateWaveformHeights([0, 1], 5);
   assert.equal(result.length, 5);
@@ -149,11 +169,19 @@ test("interpolateWaveformHeights: ビン間を線形補間する(中間値は単
   assert.ok(Math.abs(result[2] - 0.5) < 1e-9, "ちょうど中間点は0.5に近い");
 });
 
-test("interpolateWaveformHeights: widthPxが元のビン数より少なくてもダウンサンプルできる", () => {
+test("interpolateWaveformHeights: widthPxが元のビン数より少ない場合は各px内の最大値で縮小する", () => {
   const result = interpolateWaveformHeights([0, 0.2, 0.4, 0.6, 0.8, 1], 3);
-  assert.equal(result.length, 3);
-  assert.equal(result[0], 0);
-  assert.equal(result[2], 1);
+  assert.deepEqual(result, [0.2, 0.6, 1]);
+});
+
+test("interpolateWaveformHeights: 長いシーンのどこに短い音があっても縮小で消えない", () => {
+  for (let index = 0; index < 641; index++) {
+    const peaks = new Array(641).fill(0);
+    peaks[index] = 0.8;
+    const result = interpolateWaveformHeights(peaks, 63);
+    assert.equal(Math.max(...result), 0.8, `${index}番目の短い発話が残る`);
+    assert.equal(result.filter((value) => value > 0).length, 1, "区間を広げず対応する1px内だけ残す");
+  }
 });
 
 test("smoothWaveformHeights: radius=0は元の配列をそのまま返す(コピー)", () => {

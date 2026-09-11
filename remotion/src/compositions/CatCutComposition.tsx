@@ -13,6 +13,7 @@ import { Overlays } from "../components/Overlays";
 import { Telop } from "../components/Telop";
 import { effectiveCutTelopY } from "../lib/adSafeZone";
 import { bgmVolumeAtMs, normalizeBgmTrack } from "../lib/bgmAudio";
+import { cutFrameRanges } from "../lib/cutTimeline";
 import {
   imageClipZIndex,
   imageOverlayStyle,
@@ -294,11 +295,12 @@ export const CatCutComposition: React.FC<CatCutCompositionProps> = ({
   // フェーズT3: プリセット/telop個別のアニメが無いテロップのフォールバック(従来のグローバル設定)
   const animationIn = timeline.animation_in ?? "none";
   const animationOut = timeline.animation_out ?? "none";
+  const renderCuts = cutFrameRanges(timeline.cuts, timeline.total_duration_ms, fps);
 
   // フェーズT3: テロップ効果音。表示開始フレームで<Audio>再生(最小間隔5秒のガード済み・決定的)
   const sfxVolume = sanitizeSfxVolume(timeline.sfx_volume);
   const sfxEvents = computeSfxEvents({
-    cuts: timeline.cuts,
+    cuts: renderCuts.map(({ cut }) => cut),
     voiceCuts: voice_data.cuts,
     styles: timeline.telop_styles ?? {},
     defaultStyleName: timeline.default_telop_style ?? "default",
@@ -333,14 +335,6 @@ export const CatCutComposition: React.FC<CatCutCompositionProps> = ({
     ? { framing: videoFraming, sourceWidth, sourceHeight }
     : null;
 
-  // 累積フレーム計算: 隙間ゼロ保証
-  const totalFrames = Math.round(
-    (timeline.total_duration_ms / 1000) * fps
-  );
-  const startFrames = timeline.cuts.map((c) =>
-    Math.round((c.timeline.start_ms / 1000) * fps)
-  );
-
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
       {op && (
@@ -361,12 +355,7 @@ export const CatCutComposition: React.FC<CatCutCompositionProps> = ({
           />
         </Sequence>
       )}
-      {timeline.cuts.map((cut, i) => {
-        const startFrame = startFrames[i];
-        const durationFrames =
-          i < startFrames.length - 1
-            ? startFrames[i + 1] - startFrame
-            : totalFrames - startFrame;
+      {renderCuts.map(({ cut, from: startFrame, durationInFrames: durationFrames }) => {
         const voiceCut = voiceCutMap.get(cut.cut_id);
 
         return (

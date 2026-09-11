@@ -9,9 +9,28 @@ const require = createRequire(import.meta.url);
 const {
   createPcm16PeakAccumulator,
   computeWaveformPeaks,
+  isValidWaveformData,
   runFfmpegWaveform,
   createInFlightTaskRunner,
 } = require("../main/waveformPcm.cjs");
+
+test("波形キャッシュ: 正しい小音量・全編無音・端数ビンは再利用できる", () => {
+  for (const samples of [new Array(8000).fill(0), [0, 32, -65, ...new Array(400).fill(0)], new Array(8001).fill(100)]) {
+    const accumulator = createPcm16PeakAccumulator(8000, 20);
+    accumulator.push(pcmBytes(samples));
+    assert.equal(isValidWaveformData({ ...accumulator.finish(), binMs: 20, sampleRate: 8000 }), true);
+  }
+});
+
+test("波形キャッシュ: 空や欠落・非数値を成功扱いして空欄を固定しない", () => {
+  const valid = { binMs: 20, sampleRate: 8000, durationMs: 60, peaks: [0.1, 0.001, 0] };
+  assert.equal(isValidWaveformData(valid), true);
+  for (const value of [null, {}, { ...valid, peaks: [] }, { ...valid, peaks: [0.1] },
+    { ...valid, peaks: [0, 0, 0, 0, 0] }, { ...valid, durationMs: 0 },
+    { ...valid, durationMs: NaN }, { ...valid, binMs: 0 }, { ...valid, sampleRate: -1 },
+    ...[null, "0.2", NaN, Infinity, -0.1, 1.1].map(peak => ({ ...valid, peaks: [0.1, peak, 0] })),
+  ]) assert.equal(isValidWaveformData(value), false, JSON.stringify(value));
+});
 
 function pcmBytes(samples: number[]): Buffer {
   const buffer = Buffer.alloc(samples.length * 2);

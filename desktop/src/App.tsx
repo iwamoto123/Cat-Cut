@@ -191,6 +191,7 @@ import { playheadStore, usePlayheadSourceMs } from "./lib/playheadStore";
 import { buildInspectionCopyText } from "./lib/inspectionCopyText";
 import { detectTelopWordReplacement } from "./lib/telopReplace";
 import { computePeakMax } from "./lib/waveform";
+import { loadWaveformWithRetry } from "./lib/waveformRequest";
 import {
   buildTelopStylePlan,
   clearRuntimeTheme,
@@ -1977,6 +1978,7 @@ export function App() {
   const [waveform, setWaveform] = useState<WaveformResult | null>(null);
   const [waveformLoading, setWaveformLoading] = useState(false);
   const [waveformError, setWaveformError] = useState("");
+  const [waveformReload, setWaveformReload] = useState(0);
   // 改善2(波形の縦スケール改善): 録音全体のグローバルピークをwaveform読み込み時に1回だけ計算し、
   // 各シーン行のミニ波形(SceneWaveformStrip)へpropsで配る。行ごとに毎回計算し直さないための最適化。
   const globalPeakMax = useMemo(() => computePeakMax(waveform?.peaks || []), [waveform]);
@@ -4560,8 +4562,6 @@ export function App() {
     setPlaybackRate(DEFAULT_NORMAL_RATE);
     maxReachedMsRef.current = 0;
     setSelectedBoundary(null);
-    setWaveform(null);
-    setWaveformError("");
     setFlashSceneId(null);
     // W19-A3: 再生ヘッド(sourceMs/timelineMs)はストア側をリセットする。
     playheadStore.reset();
@@ -4624,28 +4624,31 @@ export function App() {
     };
   }, [transcriptState?.runDir]);
 
-  // Phase C (C-1): runDirが変わるたびに波形データを取得する(2回目以降はmain側のキャッシュから即時返却される)。
+  // One automatic retry recovers a transient read; the visible retry action remains available after that.
   useEffect(() => {
     const runDir = transcriptState?.runDir;
-    if (!runDir) return;
-    let cancelled = false;
-    setWaveformLoading(true);
+    setWaveform(null);
     setWaveformError("");
-    window.catcut
-      .generateWaveform({ runDir })
+    if (!runDir) {
+      setWaveformLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setWaveformLoading(true);
+    loadWaveformWithRetry(() => window.catcut.generateWaveform({ runDir }), controller.signal)
       .then((result) => {
-        if (!cancelled) setWaveform(result);
+        if (!controller.signal.aborted) setWaveform(result);
       })
       .catch((err) => {
-        if (!cancelled) setWaveformError(err instanceof Error ? err.message : String(err));
+        if (!controller.signal.aborted) setWaveformError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
-        if (!cancelled) setWaveformLoading(false);
+        if (!controller.signal.aborted) setWaveformLoading(false);
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [transcriptState?.runDir]);
+  }, [transcriptState?.runDir, waveformReload]);
 
   useEffect(() => {
     if (!flashWordId) return undefined;
@@ -6807,6 +6810,18 @@ export function App() {
                 </button>
               </div>
             </div>
+            {(waveformLoading || waveformError) && (
+              <div className={`sceneWaveformStatus${waveformError ? " isError" : ""}`} role="status">
+                <span title={waveformError || undefined}>
+                  {waveformLoading ? "波形を読み込み中…" : "波形を読み込めませんでした。再読み込みしてください。"}
+                </span>
+                {waveformError && (
+                  <button type="button" onClick={() => setWaveformReload((revision) => revision + 1)}>
+                    波形を再読み込み
+                  </button>
+                )}
+              </div>
+            )}
             {reviewTab === "scenes" && (
             <details className="transcriptGuide sceneEditingGuide">
               <summary><span>B：2点クリック／ドラッグでカット · 両端をドラッグしてトリム</span><span>操作ガイド</span></summary>

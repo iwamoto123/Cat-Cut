@@ -210,7 +210,7 @@ export function SceneWaveformStrip({
     // 正規化し、非線形カーブで小音量を持ち上げる。ノイズフロアの判定だけは録音全体の
     // グローバルピーク(globalPeakMax、呼び出し側で1回だけ計算済み)を基準にすることで、
     // 録音全体で見れば無音同然の区間がローカル内で相対的に「最大」になって持ち上がるのを防ぐ。
-    const scaledPeaks = scaleWaveformPeaksLocal(slicedPeaks, { globalMax: globalPeakMax });
+    const scaledPeaks = scaleWaveformPeaksLocal(slicedPeaks, { globalMax: globalPeakMax, preserveQuietPeaks: true });
     if (scaledPeaks.length) {
       // 改善3(波形の描画改善): ビン単位(20msなど粗い間隔)の棒グラフではなく、1pxごとに
       // 補間・平滑化した高さで面グラフ的に塗る。棒同士の隙間が無いため「細く高密度」に見え、
@@ -232,6 +232,20 @@ export function SceneWaveformStrip({
       ctx.lineWidth = 1;
       ctx.strokeStyle = COLOR_BAR;
       ctx.stroke(areaPath);
+    }
+
+    if (peaks.length) {
+      // A silent interval has a visible baseline; an unloaded canvas must not look like silence.
+      ctx.fillStyle = "rgba(69, 139, 195, 0.4)";
+      ctx.fillRect(0, HEIGHT - 1, width, 1);
+      const status = !slicedPeaks.length ? "この範囲の音声がありません"
+        : slicedPeaks.every((peak) => peak === 0) ? "無音" : null;
+      if (status) {
+        ctx.font = "10px sans-serif";
+        ctx.fillStyle = "#667085";
+        ctx.textAlign = "center";
+        ctx.fillText(status, width / 2, HEIGHT / 2 + 3, Math.max(1, width - 32));
+      }
     }
 
     // The authoritative retained intervals also show wordless cuts after text boxes merge.

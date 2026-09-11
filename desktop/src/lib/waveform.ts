@@ -70,6 +70,8 @@ export function computePeakMax(values: number[]): number {
 }
 
 export type LocalWaveformCurveOptions = WaveformCurveOptions & {
+  /** 編集用は小声や息も低い波形で残す。表示だけの指定で、無音カットの判定は変更しない。 */
+  preserveQuietPeaks?: boolean;
   /**
    * ノイズフロア判定の基準にする「録音全体のグローバルピーク」。省略時はこの関数に渡された
    * peaks自身の最大値で代替する(呼び出し側で全体ピークを渡せない場合のフォールバック)。
@@ -96,9 +98,11 @@ export function scaleWaveformPeaksLocal(peaks: number[], options: LocalWaveformC
   const noiseFloor = noiseFloorReferenceMax * noiseFloorRatio;
   const normalizationMax = Math.max(localMax, noiseFloorReferenceMax * 0.35);
   return peaks.map((value) => {
-    if (value <= noiseFloor) return 0;
+    if (value <= noiseFloor && (!options.preserveQuietPeaks || value <= 0)) return 0;
     const normalized = Math.max(0, Math.min(1, value / normalizationMax));
-    return Math.pow(normalized, curveExponent);
+    const height = Math.pow(normalized, curveExponent);
+    // ノイズフロア以下は40px帯で最大約3px。小声を完全な無音と誤認させず、音量差も保つ。
+    return value <= noiseFloor ? Math.min(0.075, height) : height;
   });
 }
 
@@ -127,13 +131,25 @@ export function scaleWaveformPeaksGlobal(peaks: number[], options: WaveformCurve
  * binMs=20msなど粗い)を、canvasの実ピクセル幅ぶんの配列へ線形補間する。
  * ビンをそのまま棒として描画すると(シーンが短い/canvas幅が広い場合)棒同士の間隔が粗くなるため、
  * 1px刻みでサンプルし直すことで「棒の幅を細く高密度に」を満たしつつ、面グラフとして
- * なめらかに繋げて描画できるようにする。
+ * なめらかに繋げて描画できるようにする。縮小時は各px内の最大値を残し、短い発話を
+ * 点サンプリングの隙間へ落とさない。
  */
 export function interpolateWaveformHeights(peaks: number[], widthPx: number): number[] {
   const targetLength = Math.max(1, Math.round(widthPx));
   if (!peaks.length) return new Array(targetLength).fill(0);
+  if (targetLength === 1) return [computePeakMax(peaks)];
   if (peaks.length === 1) return new Array(targetLength).fill(peaks[0]);
   const result = new Array<number>(targetLength);
+  if (peaks.length > targetLength) {
+    for (let x = 0; x < targetLength; x += 1) {
+      const start = Math.floor(x * peaks.length / targetLength);
+      const end = Math.floor((x + 1) * peaks.length / targetLength);
+      let peak = 0;
+      for (let index = start; index < end; index += 1) peak = Math.max(peak, peaks[index]);
+      result[x] = peak;
+    }
+    return result;
+  }
   const lastIndex = peaks.length - 1;
   for (let x = 0; x < targetLength; x += 1) {
     // targetLengthが1のケースは上のガードで弾いているためtargetLength-1>=1が保証される。

@@ -18,7 +18,7 @@ const {
 } = require("./orientation.cjs");
 // W13-1: 派生キャッシュ(segments/・preview_cut_sequence等)の統計・クリーンアップ
 const { collectCacheStats, cleanCaches } = require("./cache.cjs");
-const { computeWaveformPeaks, createInFlightTaskRunner } = require("./waveformPcm.cjs");
+const { computeWaveformPeaks, createInFlightTaskRunner, isValidWaveformData } = require("./waveformPcm.cjs");
 const { createBgmWaveformService, createWaveformDecodeQueue } = require("./bgmWaveform.cjs");
 const runQueuedFfmpegWaveform = createWaveformDecodeQueue();
 const { buildPreviewPagesFromComposition } = require("./previewPages.cjs");
@@ -4440,10 +4440,12 @@ async function loadOrGenerateWaveform(resolved, binMs, audioPath, audioStat, cac
       const cached = readJson(cachePath);
       if (
         cached &&
+        cached.version === 1 &&
         cached.binMs === binMs &&
+        cached.sampleRate === WAVEFORM_SAMPLE_RATE &&
         cached.audioMtimeMs === audioStat.mtimeMs &&
         cached.audioSize === audioStat.size &&
-        Array.isArray(cached.peaks)
+        isValidWaveformData(cached)
       ) {
         return {
           binMs: cached.binMs,
@@ -4459,6 +4461,9 @@ async function loadOrGenerateWaveform(resolved, binMs, audioPath, audioStat, cac
   }
 
   const { peaks, durationMs } = await runQueuedFfmpegWaveform(audioPath, WAVEFORM_SAMPLE_RATE, binMs);
+  if (!isValidWaveformData({ binMs, sampleRate: WAVEFORM_SAMPLE_RATE, durationMs, peaks })) {
+    throw new Error("音声から波形を取得できませんでした。音声ファイルを確認して再読み込みしてください。");
+  }
   const payload = {
     version: 1,
     binMs,
@@ -4468,13 +4473,16 @@ async function loadOrGenerateWaveform(resolved, binMs, audioPath, audioStat, cac
     audioSize: audioStat.size,
     peaks,
   };
-  await fs.promises.mkdir(waveformCacheDir(resolved), { recursive: true });
   // ピーク配列が大きくなる(60分素材で約18万要素)ため、writeJsonの整形出力(pretty print)は使わずコンパクトに書き出す。
   // binMs等が異なる要求が並行しても、読者には完成したキャッシュだけを見せる。
   const temporaryPath = `${cachePath}.${crypto.randomUUID()}.tmp`;
   try {
+    await fs.promises.mkdir(waveformCacheDir(resolved), { recursive: true });
     await fs.promises.writeFile(temporaryPath, JSON.stringify(payload), "utf-8");
     await fs.promises.rename(temporaryPath, cachePath);
+  } catch (error) {
+    // キャッシュは再利用用。保存権限や空き容量の問題があっても、取得済みの波形は表示する。
+    console.warn("波形キャッシュの保存をスキップしました:", error instanceof Error ? error.message : String(error));
   } finally {
     await fs.promises.rm(temporaryPath, { force: true }).catch(() => {});
   }

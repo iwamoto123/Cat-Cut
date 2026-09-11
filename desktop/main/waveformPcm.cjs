@@ -73,6 +73,19 @@ function computeWaveformPeaks(pcmBuffer, sampleRate, binMs) {
   return accumulator.finish().peaks;
 }
 
+/** 空・途中欠落・不正値のキャッシュを再利用しない。全編無音の正しいPCMは有効。 */
+function isValidWaveformData(value) {
+  if (!value || !Number.isFinite(value.binMs) || value.binMs <= 0 ||
+      !Number.isFinite(value.sampleRate) || value.sampleRate <= 0 ||
+      !Number.isFinite(value.durationMs) || value.durationMs <= 0 ||
+      !Array.isArray(value.peaks) || value.peaks.length === 0) return false;
+  const binDurationMs = Math.max(1, Math.round(value.sampleRate * value.binMs / 1000)) / value.sampleRate * 1000;
+  // durationMsはPCM集計時に整数へ丸めるため、最大0.5msの誤差を許容する。
+  if (value.durationMs < (value.peaks.length - 1) * binDurationMs - 0.5 ||
+      value.durationMs > value.peaks.length * binDurationMs + 0.5) return false;
+  return value.peaks.every((peak) => Number.isFinite(peak) && peak >= 0 && peak <= 1);
+}
+
 /** FFmpegのstdoutをその場でピークへ縮約し、全編PCMをメモリに溜めない。 */
 function runFfmpegWaveform(audioPath, sampleRate, binMs, spawnProcess = spawn) {
   return new Promise((resolve, reject) => {
@@ -113,6 +126,7 @@ function createInFlightTaskRunner() {
 module.exports = {
   createPcm16PeakAccumulator,
   computeWaveformPeaks,
+  isValidWaveformData,
   runFfmpegWaveform,
   createInFlightTaskRunner,
 };
