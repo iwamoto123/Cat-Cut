@@ -1,3 +1,4 @@
+import { revealSceneRow } from "../lib/sceneScroll";
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Check, Focus, Link2, Moon } from "lucide-react";
 import { TelopHighlightInput } from "./TelopHighlightInput";
@@ -310,7 +311,7 @@ export const SceneRow = memo(function SceneRow({
   useEffect(() => {
     if (autoScrollDisabled) return;
     if (isCurrent && isPlaybackActive && !playbackScrollSuppressed) {
-      rowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (rowRef.current) revealSceneRow(rowRef.current, true);
     }
   }, [autoScrollDisabled, isCurrent, isPlaybackActive, playbackScrollSuppressed]);
 
@@ -321,7 +322,7 @@ export const SceneRow = memo(function SceneRow({
   // (明示的なジャンプは親側で抑制を解除してから flashSceneId を立てるため従来どおり動く)。
   const isJumpFlashing = !autoScrollDisabled && !playbackScrollSuppressed && flashSceneId === scene.id;
   useEffect(() => {
-    if (isJumpFlashing) rowRef.current?.scrollIntoView({ block: "center" });
+    if (isJumpFlashing && rowRef.current) revealSceneRow(rowRef.current);
   }, [isJumpFlashing]);
 
   // アンマウント時(行の削除・結合等)に、自分が立てたキャレット/選択が親側に残ったままにならないようにする。

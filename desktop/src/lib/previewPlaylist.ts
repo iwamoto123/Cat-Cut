@@ -319,12 +319,13 @@ export function compactRangesToKeepSegments(
   if (!ranges.length) return ranges;
   if (!keepSegments.length) return options.keepSegmentsReady ? [] : ranges;
   const sortedRanges = [...ranges].sort((a, b) => a.timelineStartMs - b.timelineStartMs);
-  const sortedKeeps = [...keepSegments].sort((a, b) => a.startMs - b.startMs);
+  const orderedKeeps = keepSegments;
+  const sourceRanges = [...ranges].sort((a, b) => a.sourceStartMs - b.sourceStartMs);
 
   let cursor = sortedRanges[0].timelineStartMs;
   const result: TimelineCutRange[] = [];
-  for (const range of sortedRanges) {
-    for (const keep of sortedKeeps) {
+  for (const keep of orderedKeeps) {
+    for (const range of sourceRanges) {
       const start = Math.max(range.sourceStartMs, keep.startMs);
       const end = Math.min(range.sourceEndMs, keep.endMs);
       if (end <= start) continue;

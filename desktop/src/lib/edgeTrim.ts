@@ -207,7 +207,8 @@ export function applyEdgeTrim(
       return { scenes: nextScenes, appliedMs, linked: true, neighborIndex: sceneIndex + 1 };
     }
     const lowerBound = scene.sourceStartMs + minDurationMs;
-    const upperBound = next ? next.sourceStartMs : sourceDurationMs;
+    const upperBound = scenes.reduce((bound, candidate) => candidate !== scene && candidate.sourceStartMs >= scene.sourceEndMs
+      ? Math.min(bound, candidate.sourceStartMs) : bound, sourceDurationMs);
     const appliedMs = clamp(snapped, lowerBound, Math.max(lowerBound, upperBound));
     if (appliedMs === scene.sourceEndMs) return { scenes, appliedMs, linked: false, neighborIndex: null };
     const updatedScene = withUpdatedBounds(scene, scene.sourceStartMs, appliedMs);
@@ -227,7 +228,8 @@ export function applyEdgeTrim(
     return { scenes: nextScenes, appliedMs, linked: true, neighborIndex: sceneIndex - 1 };
   }
   const upperBound = scene.sourceEndMs - minDurationMs;
-  const lowerBound = prev ? prev.sourceEndMs : 0;
+  const lowerBound = scenes.reduce((bound, candidate) => candidate !== scene && candidate.sourceEndMs <= scene.sourceStartMs
+    ? Math.max(bound, candidate.sourceEndMs) : bound, 0);
   const appliedMs = clamp(snapped, lowerBound, Math.max(lowerBound, upperBound));
   if (appliedMs === scene.sourceStartMs) return { scenes, appliedMs, linked: false, neighborIndex: null };
   const updatedScene = withUpdatedBounds(scene, appliedMs, scene.sourceEndMs);

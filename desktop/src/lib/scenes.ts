@@ -620,8 +620,7 @@ function initializeScenesFromPageBoundaries(
  */
 export function initializeScenes(input: InitializeScenesInput): Scene[] {
   const sortedSegments = input.keepSegments
-    .filter((segment) => Number.isFinite(segment.startMs) && Number.isFinite(segment.endMs) && segment.endMs > segment.startMs)
-    .sort((a, b) => a.startMs - b.startMs);
+    .filter((segment) => Number.isFinite(segment.startMs) && Number.isFinite(segment.endMs) && segment.endMs > segment.startMs);
   const sentenceIdByWordId = new Map<string, string>();
   for (const sentence of input.sentences || []) {
     for (const wordId of sentence.wordIds) sentenceIdByWordId.set(wordId, sentence.id);
@@ -762,7 +761,7 @@ function collectScenePieces(scenes: Scene[]): ScenePiece[] {
       pieces.push({ ...range, sceneIndex, speed: normalizeSceneSpeed(scene.speed) });
     }
   });
-  return pieces.sort((a, b) => a.startMs - b.startMs);
+  return pieces;
 }
 
 type MergedSceneGroup = { startMs: number; endMs: number; sceneIndices: number[]; speed: SceneSpeed };
@@ -772,7 +771,7 @@ function groupScenePieces(pieces: ScenePiece[]): MergedSceneGroup[] {
   const groups: MergedSceneGroup[] = [];
   for (const piece of pieces) {
     const last = groups[groups.length - 1];
-    if (last && piece.startMs <= last.endMs && piece.speed === last.speed) {
+    if (last && piece.startMs >= last.startMs && piece.startMs <= last.endMs && piece.speed === last.speed) {
       last.endMs = Math.max(last.endMs, piece.endMs);
       if (last.sceneIndices[last.sceneIndices.length - 1] !== piece.sceneIndex) {
         last.sceneIndices.push(piece.sceneIndex);
@@ -793,7 +792,7 @@ function groupScenePieces(pieces: ScenePiece[]): MergedSceneGroup[] {
  * 書き出し用keep_segmentsの導出。
  * 「各シーンの[sourceStartMs, sourceEndMs]からdeleted単語の区間を除いた区間の合併」
  * (シーン間の隙間＝カット)。main側のcut_proposal組み立て(step08のcut_id割り当て)と
- * 同じ順序(startMs昇順)になるようにソート済みで返す。
+ * 同じ編集順序で返す。元動画の時刻順へ戻さない。
  */
 export function deriveKeepSegments(scenes: Scene[]): KeepSegment[] {
   return groupScenePieces(collectScenePieces(scenes)).map((group) => ({
@@ -1390,6 +1389,11 @@ export function mergeSceneWithNext(scenes: Scene[], sceneId: string): Scene[] {
   const span = scenes.slice(sceneIndex, lastIndex + 1);
   const second = span[span.length - 1];
   const aliveSpan = span.filter((scene) => !isSceneFullyDeleted(scene));
+  // 単一シーンは元動画内を順方向に再生する。逆順結合で映像を欠落させない。
+  if (aliveSpan.some((scene, index) => index > 0 && scene.sourceStartMs < aliveSpan[index - 1].sourceEndMs)) return scenes;
+  // 他の位置に移したシーンまで結合後の外枠へ取り込まない。
+  if (scenes.some((scene, index) => (index < sceneIndex || index > lastIndex) && !isSceneFullyDeleted(scene)
+      && scene.sourceStartMs < second.sourceEndMs && scene.sourceEndMs > first.sourceStartMs)) return scenes;
   const words = span.flatMap((scene) => scene.words);
   // W13-4: 結合後のテロップは「いま表示されているテキスト同士の連結」にする。
   // 未編集シーンでも telopText はAI整形済みテキスト等で words 由来の自動生成と異なり得るため、
@@ -1529,4 +1533,14 @@ const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 export function highestSeveritySuspicion(items: SuspicionItem[] | undefined): SuspicionItem | null {
   if (!items || !items.length) return null;
   return [...items].sort((a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9))[0];
+}
+
+/** シーンの映像・カット・テロップ設定を一体で挿入移動する。null は末尾。 */
+export function reorderScene(scenes: Scene[], sceneId: string, beforeId: string | null): Scene[] {
+  const moving = scenes.find((scene) => scene.id === sceneId);
+  if (!moving || sceneId === beforeId || (beforeId !== null && !scenes.some((s) => s.id === beforeId))) return scenes;
+  const next = scenes.filter((scene) => scene.id !== sceneId);
+  const index = beforeId === null ? next.length : next.findIndex((scene) => scene.id === beforeId);
+  next.splice(index, 0, moving);
+  return next.every((scene, i) => scene === scenes[i]) ? scenes : next;
 }

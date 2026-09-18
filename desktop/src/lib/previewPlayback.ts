@@ -26,3 +26,22 @@ export function resolveKeepPlaybackAction(
   const finalEndMs = segments.reduce((endMs, segment) => Math.max(endMs, segment.endMs), 0);
   return { seekMs: currentMs === finalEndMs ? null : finalEndMs, stop: true };
 }
+
+/** 挿入移動後の再生順を追跡する。境界直後に元動画の隣接区間へ紛れ込むのを防ぐ。 */
+export function resolveOrderedKeepPlaybackAction(
+  segments: KeepSegment[], currentMs: number, playing: boolean, activeIndex: number,
+): KeepPlaybackAction & { activeIndex: number } {
+  if (!playing) return { seekMs: null, stop: false, activeIndex };
+  let index = activeIndex;
+  if (index < 0 || index >= segments.length) {
+    index = segments.findIndex((segment) => currentMs >= segment.startMs && currentMs < segment.endMs);
+    if (index < 0) return { seekMs: segments[0]?.startMs ?? null, stop: !segments.length, activeIndex: 0 };
+  }
+  const segment = segments[index];
+  if (currentMs >= segment.endMs) {
+    const next = segments[index + 1];
+    return next ? { seekMs: next.startMs, stop: false, activeIndex: index + 1 }
+      : { seekMs: segment.endMs, stop: true, activeIndex: index };
+  }
+  return { seekMs: currentMs < segment.startMs ? segment.startMs : null, stop: false, activeIndex: index };
+}

@@ -9,6 +9,7 @@ import { nearestFilmstripFrame, type SceneTimelineBlock, type TimelineOpInfo } f
 
 type Props = {
   blocks: SceneTimelineBlock[];
+  draggedSceneId?: string | null;
   pxPerMs: number;
   currentSceneId: string | null;
   selection: EditorSelection;
@@ -43,7 +44,7 @@ function circledNumber(oneBasedIndex: number): string {
  *   フェーズV3: クリック=OP区間へのシーク(プレビューでOPを再生できるようになったため)。
  *   OP編集は右上の✎ボタンまたはダブルクリック。
  */
-export function VideoTrack({ blocks, pxPerMs, currentSceneId, selection, frames, op, onSelect, onOpClick, onOpSeek, scissorsMode = false, fps = 30, timelineCutRanges = [], onBladeCut }: Props) {
+export function VideoTrack({ draggedSceneId, blocks, pxPerMs, currentSceneId, selection, frames, op, onSelect, onOpClick, onOpSeek, scissorsMode = false, fps = 30, timelineCutRanges = [], onBladeCut }: Props) {
   const [bladeHover, setBladeHover] = useState<{ sceneId: string; timelineMs: number; sourceMs: number } | null>(null);
   const bladePress = useRef<{ sceneId: string; x: number; y: number } | null>(null);
   useEffect(() => { bladePress.current = null; setBladeHover(null); }, [blocks, scissorsMode]);
@@ -124,6 +125,7 @@ export function VideoTrack({ blocks, pxPerMs, currentSceneId, selection, frames,
           <div
             className={`tlVideoBlock${selected ? " selected" : ""}${current ? " current" : ""}`}
             key={block.sceneId}
+            data-dragging={draggedSceneId === block.sceneId || undefined}
             onClick={(event) => {
               event.stopPropagation();
               event.currentTarget.focus({ preventScroll: true });

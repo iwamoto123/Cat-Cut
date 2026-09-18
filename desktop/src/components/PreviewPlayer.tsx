@@ -18,7 +18,7 @@ import { normalizePunchIn, punchInStyle } from "../lib/punchIn";
 import { parseLetterSpacingEm, resolveBlockBackground } from "../lib/previewTelop";
 import type { OverlayItem } from "../lib/overlayItems";
 import { sourceMsToTimelineEditMs, sourceMsToTimelineMs, type TimelineCutRange } from "../lib/previewTimeline";
-import { resolveKeepPlaybackAction } from "../lib/previewPlayback";
+import { resolveKeepPlaybackAction, resolveOrderedKeepPlaybackAction } from "../lib/previewPlayback";
 import {
   buildPreviewPlaylist,
   clampTimelineMsToPlaylist,
@@ -449,10 +449,16 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
   const onVideoFramingChangeRef = useRef(onVideoFramingChange);
   onVideoFramingChangeRef.current = onVideoFramingChange;
   const sortedSegments = useMemo(
-    () => [...keepSegments].sort((a, b) => a.startMs - b.startMs),
+    () => keepSegments,
     [keepSegments],
   );
+  const reorderedSegments = useMemo(() => sortedSegments.some((segment, index) =>
+    index > 0 && segment.startMs < sortedSegments[index - 1].startMs), [sortedSegments]);
+  const reorderedSegmentsRef = useRef(reorderedSegments);
+  reorderedSegmentsRef.current = reorderedSegments;
+  const mainSegmentIndexRef = useRef(-1);
   const sortedSegmentsRef = useRef(sortedSegments);
+  if (sortedSegmentsRef.current !== sortedSegments) mainSegmentIndexRef.current = -1;
   sortedSegmentsRef.current = sortedSegments;
   const keepSegmentsReadyRef = useRef(keepSegmentsReady);
   keepSegmentsReadyRef.current = keepSegmentsReady;
@@ -521,6 +527,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     const video = videoRef.current;
     if (!video) return;
     engineSeekPendingRef.current += 1;
+    mainSegmentIndexRef.current = sortedSegmentsRef.current.findIndex((segment) => sourceMs >= segment.startMs && sourceMs < segment.endMs);
     video.currentTime = Math.max(0, sourceMs / 1000);
   }
 
@@ -626,7 +633,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       setOpView(null);
       applyVideoPlaybackRate(entry.speed || 1);
       engineSeekTo(timelineMs === entry.timelineEndMs
-        ? entry.sourceEndMs
+        ? entry.sourceEndMs - (reorderedSegmentsRef.current ? 0.001 : 0)
         : Math.min(entry.sourceEndMs, entry.sourceStartMs + offsetMs * (entry.speed || 1)));
       publishTimelineMs(timelineMs);
       if (playing) video.play().catch(() => {});
@@ -725,6 +732,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         if (!videoRef.current) return;
         // 元動画msの直接シーク(シーン行再生等)は常に本編モードとして扱う
         exitOpToMain();
+        mainSegmentIndexRef.current = -1;
         videoRef.current.currentTime = Math.max(0, ms / 1000);
       },
       seekToSourceMs: (ms: number) => {
@@ -732,6 +740,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
         // W19-A2: ホバースクラブ用。seekMs prop消化時(seekMs effect)と同じ経路
         // (OPモード解除+currentTime設定)をstateを介さず直接実行する。
         exitOpToMain();
+        mainSegmentIndexRef.current = -1;
         videoRef.current.currentTime = Math.max(0, ms / 1000);
       },
     }),
@@ -744,6 +753,7 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
     if (seekMs == null || !videoRef.current) return;
     // 元動画ms基準のシーク(既存UI: シーン行・波形ナビ・単語クリック)は本編モードへ
     exitOpToMain();
+    mainSegmentIndexRef.current = -1;
     videoRef.current.currentTime = Math.max(0, seekMs / 1000);
     onSeekConsumed();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1320,12 +1330,16 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       }
 
       const segments = sortedSegmentsRef.current;
-      const action = resolveKeepPlaybackAction(segments, currentMs, !video.paused && !video.seeking, {
-        keepSegmentsReady: keepSegmentsReadyRef.current,
-      });
+      const reordered = reorderedSegmentsRef.current;
+      const playing = !video.paused && !video.seeking;
+      const action = reordered
+        ? resolveOrderedKeepPlaybackAction(segments, currentMs, playing, mainSegmentIndexRef.current)
+        : resolveKeepPlaybackAction(segments, currentMs, playing, { keepSegmentsReady: keepSegmentsReadyRef.current });
+      if ("activeIndex" in action) mainSegmentIndexRef.current = action.activeIndex as number;
       if (action.seekMs !== null) {
-        engineSeekTo(action.seekMs);
-        currentMs = action.seekMs;
+        const targetMs = reordered && action.stop ? Math.max(0, action.seekMs - 0.001) : action.seekMs;
+        engineSeekTo(targetMs);
+        currentMs = targetMs;
       }
       if (action.stop) video.pause();
       const activeSegment = segments.find(
@@ -1382,6 +1396,15 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       publishPlaying(!video.paused);
     }
     function handlePauseOrEnded() {
+      if (video.ended && virtualRef.current.mode === "main") {
+        const segments = sortedSegmentsRef.current;
+        const index = mainSegmentIndexRef.current;
+        if (reorderedSegmentsRef.current && index >= 0 && segments[index + 1]) {
+          engineSeekTo(segments[index + 1].startMs);
+          video.play().catch(() => {});
+          return;
+        }
+      }
       stopLoop();
       update();
       const virtual = virtualRef.current;
@@ -1818,14 +1841,13 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           )}
         </div>
       )}
-      {/* W9: モードボタン(ステージ左下)と編集中アクション(ステージ右上)。FCP風のダークオーバーレイ */}
+      </div>
+      </div>
+      <div className="previewFramingToolbar">
+      {/* 変形操作は映像の外へ配置し、テロップ確認を妨げない */}
       {framingEditable && containedBox.width > 0 && !telopPositionEditing && (
         <div
           className="previewFramingModeButtons"
-          style={{
-            left: `${containedBox.offsetX + 8}px`,
-            top: `${containedBox.offsetY + containedBox.height - 8}px`,
-          }}
         >
           <button
             className={`previewFramingModeButton${framingEditMode === "transform" ? " isActive" : ""}`}
@@ -1852,10 +1874,6 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
       {framingEditMode && framingEditable && (
         <div
           className="previewFramingEditActions"
-          style={{
-            left: `${containedBox.offsetX + containedBox.width - 8}px`,
-            top: `${containedBox.offsetY + 8}px`,
-          }}
         >
           <button
             className="previewFramingModeButton"
@@ -1877,7 +1895,6 @@ export const PreviewPlayer = forwardRef<PreviewPlayerHandle, Props>(function Pre
           </button>
         </div>
       )}
-      </div>
       </div>
       {/* フェーズW9: カスタムトランスポートバー(ネイティブcontrolsの代替)。
           シークバーはタイムラインms基準(OP込み。composition未生成runは元動画ms)。

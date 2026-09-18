@@ -10123,3 +10123,17 @@ input[type="range"]::-moz-range-thumb {
     column-gap: 4px;
   }
 }
+
+/* 映像・テロップを隠さない編集操作帯。縦型でも折り返せる。 */
+.previewFramingToolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-shrink: 0; }
+.previewFramingToolbar:has(button) { padding: 4px 8px; background: #151922; border-top: 1px solid #303744; }
+.previewFramingToolbar .previewFramingModeButtons,
+.previewFramingToolbar .previewFramingEditActions { position: static; transform: none; opacity: 1; }
+.previewFramingToolbar .previewFramingEditActions { margin-left: auto; }
+
+.tlTelopBlock[draggable="true"] { cursor: grab; }
+.tlTelopBlock[data-dragging] { opacity: .4; }
+.tlSceneInsertion { position: absolute; top: 0; bottom: 0; width: 3px; background: #a78bfa; z-index: 20; pointer-events: none; }
+.tlSceneInsertion span { position: absolute; top: 0; left: 4px; background: #382761; color: white; border-radius: 3px; padding: 3px 6px; white-space: nowrap; font-size: 11px; }
+
+.tlVideoBlock[data-dragging] { opacity: .4; outline: 2px solid #a78bfa; }

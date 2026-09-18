@@ -169,6 +169,7 @@ type Props = {
   runOpConfig?: RunOpConfig | null;
   /** ブロッククリックのシーク先(元動画ms)を親へ渡す(プレビューと双方向連動)。 */
   onSeekSource: (ms: number) => void;
+  onReorderScene?: (sceneId: string, beforeId: string | null) => void;
   /**
    * フェーズV3: ルーラー/空白部/OPブロッククリックのシーク先(タイムラインms)。
    * OP区間へのシークができる(未指定は従来どおり最寄りカット端の元動画msへ丸める)。
@@ -225,6 +226,7 @@ export function TimelineView({
   timelineOp,
   runOpConfig,
   onSeekSource,
+  onReorderScene,
   onSeekTimeline,
   resolveSceneStyle,
   onEditSceneStyle,
@@ -239,6 +241,7 @@ export function TimelineView({
   onSetSceneSpeed,
   onSetAllScenesSpeed,
 }: Props) {
+  const [draggedSceneId, setDraggedSceneId] = useState<string | null>(null);
   const latestBgmStateRef = useRef(bgmState);
   latestBgmStateRef.current = bgmState;
   function changeBgmState(state: BgmState, phase?: MediaEditPhase) {
@@ -791,6 +794,9 @@ export function TimelineView({
             <TimelineRuler pxPerMs={pxPerMs} totalMs={totalMs} />
             <div style={{ height: TELOP_LANE_HEIGHT, position: "relative" }}>
               <TelopTrack
+                onReorder={onReorderScene}
+                onDragSceneChange={setDraggedSceneId}
+                onDragStart={onScrubStart}
                 blocks={blocks}
                 colorBySceneId={colorBySceneId}
                 currentSceneId={currentSceneId}
@@ -822,6 +828,7 @@ export function TimelineView({
             </div>
             <div style={{ height: VIDEO_LANE_HEIGHT, position: "relative" }}>
               <VideoTrack
+                draggedSceneId={draggedSceneId}
                 scissorsMode={scissorsMode}
                 onBladeCut={onBladeCut}
                 fps={fps}

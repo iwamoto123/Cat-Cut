@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { isEditorSelection, type EditorSelection } from "../../lib/editorSelection";
 import { Pencil } from "lucide-react";
 import type { SceneTimelineBlock } from "../../lib/timelineLayout";
@@ -13,6 +13,9 @@ type Props = {
   onSelect: (block: SceneTimelineBlock) => void;
   /** U6のテロップスタイル詳細エディタを開く(directedモードのみ)。 */
   onEdit?: (sceneId: string) => void;
+  onReorder?: (sceneId: string, beforeId: string | null) => void;
+  onDragStart?: () => void;
+  onDragSceneChange?: (id: string | null) => void;
 };
 
 /**
@@ -21,9 +24,33 @@ type Props = {
  * - クリックで選択(=再生ヘッド移動でシーン検品のシーン選択と連動)
  * - ダブルクリック or 選択中ブロックの編集ボタンで詳細エディタを開く
  */
-export function TelopTrack({ blocks, pxPerMs, currentSceneId, selection, colorBySceneId, onSelect, onEdit }: Props) {
+export function TelopTrack({ blocks, pxPerMs, currentSceneId, selection, colorBySceneId, onSelect, onEdit, onReorder, onDragStart, onDragSceneChange }: Props) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [insertion, setInsertion] = useState<{ beforeId: string | null; ms: number } | null>(null);
   return (
-    <div className="tlLane tlTelopLane">
+    <div className={`tlLane tlTelopLane${dragId ? " isReordering" : ""}`}
+      onDragOver={(event) => {
+        if (!dragId) return;
+        event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move";
+        const rect = event.currentTarget.getBoundingClientRect();
+        const ms = (event.clientX - rect.left) / pxPerMs;
+        const other = blocks.filter((block) => block.sceneId !== dragId);
+        const next = other.find((block) => ms < (block.timelineStartMs + block.timelineEndMs) / 2);
+        setInsertion({ beforeId: next?.sceneId ?? null, ms: next?.timelineStartMs ?? blocks.at(-1)?.timelineEndMs ?? 0 });
+        const viewport = event.currentTarget.closest<HTMLElement>(".timelineViewport");
+        if (viewport) {
+          const bounds = viewport.getBoundingClientRect();
+          if (event.clientX > bounds.right - 48) viewport.scrollLeft += 32;
+          else if (event.clientX < bounds.left + 48) viewport.scrollLeft -= 32;
+        }
+      }}
+      onDrop={(event) => {
+        if (!dragId) return;
+        event.preventDefault(); event.stopPropagation();
+        if (insertion) onReorder?.(dragId, insertion.beforeId);
+        setDragId(null); setInsertion(null); onDragSceneChange?.(null);
+      }}
+    >
       {blocks.map((block) => {
         const widthPx = (block.timelineEndMs - block.timelineStartMs) * pxPerMs;
         const color = colorBySceneId.get(block.sceneId) ?? "#94a3b8";
@@ -33,6 +60,15 @@ export function TelopTrack({ blocks, pxPerMs, currentSceneId, selection, colorBy
           <div
             className={`tlTelopBlock${selected ? " selected" : ""}${current ? " current" : ""}`}
             key={block.sceneId}
+            draggable={Boolean(onReorder)}
+            onDragStart={(event) => {
+              event.stopPropagation();
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("application/x-catcut-scene", block.sceneId);
+              setDragId(block.sceneId); setInsertion(null); onDragStart?.(); onDragSceneChange?.(block.sceneId);
+            }}
+            onDragEnd={() => { setDragId(null); setInsertion(null); onDragSceneChange?.(null); }}
+            data-dragging={dragId === block.sceneId || undefined}
             onClick={(event) => {
               event.stopPropagation();
               event.currentTarget.focus({ preventScroll: true });
@@ -55,7 +91,8 @@ export function TelopTrack({ blocks, pxPerMs, currentSceneId, selection, colorBy
               width: `${Math.max(4, widthPx)}px`,
               "--clip-telop-color": color,
             } as CSSProperties}
-            title={block.telopText}
+            title={`${block.telopText}
+ドラッグで映像とテロップを一緒に並べ替え`}
           >
             {widthPx >= 28 && <span className={`tlTelopBlockText${block.telopText ? "" : " empty"}`}>{block.telopText || "テロップなし"}</span>}
             {selected && onEdit && widthPx >= 48 && (
@@ -74,6 +111,9 @@ export function TelopTrack({ blocks, pxPerMs, currentSceneId, selection, colorBy
           </div>
         );
       })}
+      {dragId && insertion && <div className="tlSceneInsertion" style={{ left: insertion.ms * pxPerMs }}>
+        <span>映像＋テロップをここに挿入</span>
+      </div>}
     </div>
   );
 }

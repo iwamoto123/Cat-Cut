@@ -1,3 +1,5 @@
+import { reorderScene, isSceneFullyDeleted } from "./lib/scenes";
+import { revealSceneRow } from "./lib/sceneScroll";
 import { type CSSProperties, type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -3575,9 +3577,24 @@ export function App() {
    * 一時停止した瞬間の位置をアンカーとして確定する。
    */
   const isPlaybackActiveRef = useRef(false);
+  const revealPlaybackScene = useCallback(() => {
+    requestAnimationFrame(() => {
+      const pane = sceneListPaneRef.current;
+      if (!pane) return;
+      const scenes = project.editor.getSnapshot().document.scenes;
+      const index = findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
+      const scene = scenes[index];
+      if (!scene) return;
+      const row = Array.from(pane.querySelectorAll<HTMLElement>(".sceneRow[data-scene-id]"))
+        .find((element) => element.dataset.sceneId === scene.id);
+      if (row) revealSceneRow(row);
+    });
+  }, [project.editor]);
+
   const handlePreviewPlayingChange = useCallback((playing: boolean) => {
     if (isPlaybackActiveRef.current && !playing) {
       deleteAnchorMsRef.current = playheadStore.getSourceMs();
+      if (!playbackScrollSuppressed) revealPlaybackScene();
     }
     if (playing) {
       // W21: 再生が始まったら(トランスポート▶含む)ホバー行Space再生の発動権を消費する。
@@ -3593,7 +3610,7 @@ export function App() {
     }
     isPlaybackActiveRef.current = playing;
     setIsPreviewPlaying(playing);
-  }, []);
+  }, [playbackScrollSuppressed, revealPlaybackScene]);
 
   // scissorsMode/chipSelectionもキーボードeffectからrefミラー越しに読む(previewCurrentMsRefと同じ方針)。
   const scissorsModeRef = useRef(scissorsMode);
@@ -3943,7 +3960,13 @@ export function App() {
     const preferredIndex = preferredId ? scenes.findIndex((scene) => scene.id === preferredId) : -1;
     const sceneIndex =
       preferredIndex !== -1 ? preferredIndex : findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
-    if (sceneIndex !== -1) sceneActionsRef.current.mergeWithNext(scenes[sceneIndex].id);
+    if (sceneIndex !== -1) {
+      const before = project.editor.getSnapshot().document.scenes;
+      sceneActionsRef.current.mergeWithNext(scenes[sceneIndex].id);
+      if (before === project.editor.getSnapshot().document.scenes && scenes.filter((scene) => !isSceneFullyDeleted(scene)).length > 1) {
+        setError("元動画の順序が逆転している、または間のシーンを別の位置へ移動しているため結合できません。並び順を戻してから結合してください。");
+      }
+    }
     // W16-4: 行結合でグループ境界が変わるため確定キャレットは解除する。
     setConfirmedCaret(null);
   }
@@ -4101,7 +4124,8 @@ export function App() {
             player.pause();
             hoverPlayArmedRef.current = false;
             playheadStore.setSourceMs(player.getCurrentTimeMs());
-            setPlaybackScrollSuppressed(true);
+            setPlaybackScrollSuppressed(false);
+            revealPlaybackScene();
             return;
           }
           // 改善5-9(ホバー行からSpace再生): 行に乗せ直した直後(armed)にSpaceを押した場合のみ、
@@ -7104,6 +7128,13 @@ export function App() {
                 </div>
               ) : reviewTab === "timeline" ? (
                 <TimelineView
+                  onReorderScene={(sceneId, beforeId) => {
+                    const editor = project.editor;
+                    editor.setScenes((scenes) => reorderScene(scenes, sceneId, beforeId));
+                    editor.select({ kind: "telop", id: sceneId });
+                    const scene = editor.getSnapshot().document.scenes.find((scene) => scene.id === sceneId);
+                    if (scene) seekScenePlayhead(computeSceneKeptSubRanges(scene)[0]?.startMs ?? scene.sourceStartMs);
+                  }}
                   scissorsMode={scissorsMode}
                   onBladeCut={(sceneId, ms) => {
                     handleWaveformGestureStart();
@@ -7412,7 +7443,7 @@ export function App() {
                 binMs={waveform?.binMs || 20}
                 durationMs={transcriptState.originalDurationMs}
                 flagMarkers={sceneNavFlagMarkers}
-                onSeek={seekScenePlayhead}
+                onSeek={(ms) => { setPlaybackScrollSuppressed(false); seekScenePlayhead(ms); revealPlaybackScene(); }}
                 // W11-3: ドラッグスクラブ開始で再生中なら一時停止
                 onScrubStart={handleWaveformGestureStart}
                 peaks={waveform?.peaks || []}

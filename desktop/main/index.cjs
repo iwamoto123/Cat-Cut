@@ -3175,12 +3175,11 @@ function normalizeSegmentsForProposal(segments, durationMs) {
       scene_id: segment.scene_id ?? segment.sceneId ?? null,
       ...([1.25, 1.5, 2].includes(Number(segment.speed)) ? { speed: Number(segment.speed) } : {}),
     }))
-    .filter((segment) => segment.end_ms > segment.start_ms)
-    .sort((a, b) => a.start_ms - b.start_ms);
+    .filter((segment) => segment.end_ms > segment.start_ms);
   const merged = [];
   for (const segment of normalized) {
     const last = merged[merged.length - 1];
-    if (last && segment.start_ms <= last.end_ms && (last.speed || 1) === (segment.speed || 1)) {
+    if (last && segment.start_ms >= last.start_ms && segment.start_ms <= last.end_ms && (last.speed || 1) === (segment.speed || 1)) {
       last.end_ms = Math.max(last.end_ms, segment.end_ms);
       if (segment.text) last.text = `${last.text || ""}${segment.text}`;
       continue;
@@ -3194,7 +3193,7 @@ function buildRemoveRangesFromKeepSegments(keepSegments, durationMs) {
   const safeDuration = Math.max(0, Math.round(durationMs || 0));
   const ranges = [];
   let cursor = 0;
-  for (const segment of keepSegments) {
+  for (const segment of [...keepSegments].sort((a, b) => a.start_ms - b.start_ms)) {
     if (segment.start_ms > cursor) {
       ranges.push({
         start_ms: cursor,
@@ -3203,7 +3202,7 @@ function buildRemoveRangesFromKeepSegments(keepSegments, durationMs) {
         reason: "gap",
       });
     }
-    cursor = segment.end_ms;
+    cursor = Math.max(cursor, segment.end_ms);
   }
   if (cursor < safeDuration) {
     ranges.push({
