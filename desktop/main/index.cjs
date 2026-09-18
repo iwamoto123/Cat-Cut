@@ -1,5 +1,5 @@
 // W16-6: powerMonitor はスリープ/画面ロック時にレンダラーへ再生停止を通知するために使う。
-const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell, session, net } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -42,7 +42,9 @@ const {
 // フェーズW23(改善1): 解析開始前のOP有無チェック → run正本op_config初期値の決定
 const { resolveStartOpConfig } = require("./opStart.cjs");
 
-const DEV_SERVER_URL = "http://127.0.0.1:5174";
+const { resolveDesktopOrigin, installDesktopOriginProxy } = require("./desktopOrigin.cjs");
+const DEV_SERVER_URL = resolveDesktopOrigin(process.env.CATCUT_DEV_SERVER_URL);
+let desktopPageUrl = DEV_SERVER_URL;
 const DEFAULT_OLLAMA_MODEL = "qwen2.5:7b";
 const ENABLE_GROUND_TRUTH_LEARNING = process.env.CATCUT_ENABLE_GROUND_TRUTH_LEARNING === "1";
 
@@ -933,6 +935,13 @@ const apiKeys = createApiKeysModule({
 });
 
 function createWindow() {
+  // 二重起動の通知が初回の非同期初期化中に届いても、編集画面は一つにする。
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    return;
+  }
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 780,
@@ -950,7 +959,7 @@ function createWindow() {
   if (app.isPackaged) {
     mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   } else {
-    mainWindow.loadURL(DEV_SERVER_URL);
+    mainWindow.loadURL(desktopPageUrl);
   }
 }
 
@@ -6213,6 +6222,9 @@ ipcMain.handle("job:cancel", () => {
 });
 
 app.whenReady().then(async () => {
+  if (!app.isPackaged) {
+    desktopPageUrl = installDesktopOriginProxy(session.defaultSession.protocol, net.fetch.bind(net), DEV_SERVER_URL);
+  }
   await ensurePreviewServer();
   createWindow();
   // W13-1: 古い派生キャッシュの自動クリーン(非ブロック・遅延実行)

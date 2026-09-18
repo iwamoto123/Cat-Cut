@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Cat-Cut local desktop app",
-  "main": "main/index.cjs",
+  "main": "main/bootstrap.cjs",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5174 && env -u ELECTRON_RUN_AS_NODE electron .\"",
+    "dev": "node scripts/start-desktop.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --experimental-strip-types --test \"tests/*.test.ts\""
