@@ -1,3 +1,4 @@
+import { EditorErrorNotice } from "./components/EditorErrorNotice";
 import { reorderScene, isSceneFullyDeleted } from "./lib/scenes";
 import { revealSceneRow } from "./lib/sceneScroll";
 import { type CSSProperties, type SyntheticEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -4384,27 +4385,32 @@ export function App() {
     const targetShortSide = targetShortSideForResolution(value.resolution);
     const crf = crfForQuality(value.quality);
     const renderConcurrency = concurrencyForRenderSpeed(value.renderSpeed);
-    const exportResult = await window.catcut.startExport({
-      runDir: result.transcript.runDir,
-      renderFinal: true,
-      learningSnapshot: result.learningSnapshot,
-      outputPath: buildExportOutputPath(value.directory, value.fileName, videoPath),
-      ...(targetShortSide ? { targetShortSide } : {}),
-      // W11-1b: HWエンコードON時は crf 指定不可(Remotionの制約)のため、
-      // 画質選択をビットレートへマップして渡す。OFFは従来どおりCRF指定
-      ...(value.hardwareEncode
-        ? {
-            hardwareAcceleration: "if-possible" as const,
-            videoBitrate: videoBitrateForQuality(value.quality, value.resolution),
-          }
-        : crf
-          ? { crf }
-          : {}),
-      renderConcurrency,
-    });
-    if (!exportResult.ok) {
+    try {
+      const exportResult = await window.catcut.startExport({
+        runDir: result.transcript.runDir,
+        renderFinal: true,
+        learningSnapshot: result.learningSnapshot,
+        outputPath: buildExportOutputPath(value.directory, value.fileName, videoPath),
+        ...(targetShortSide ? { targetShortSide } : {}),
+        // W11-1b: HWエンコードON時は crf 指定不可(Remotionの制約)のため、
+        // 画質選択をビットレートへマップして渡す。OFFは従来どおりCRF指定
+        ...(value.hardwareEncode
+          ? {
+              hardwareAcceleration: "if-possible" as const,
+              videoBitrate: videoBitrateForQuality(value.quality, value.resolution),
+            }
+          : crf
+            ? { crf }
+            : {}),
+        renderConcurrency,
+      });
+      if (!exportResult.ok) {
+        setRunning(false);
+        setError(exportResult.error ?? "書き出しを開始できませんでした");
+      }
+    } catch (err) {
       setRunning(false);
-      setError(exportResult.error ?? "書き出しを開始できませんでした");
+      setError(`書き出しを開始できませんでした。${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -6440,8 +6446,6 @@ export function App() {
           </section>
         )}
 
-        {error && <div className="errorBox">{error}</div>}
-
         {outputs && (
           <section className="panel outputs">
             <div className="panelTitle">
@@ -6462,6 +6466,7 @@ export function App() {
       )}
 
       <section className={`rightPane ${reviewState ? "reviewMode" : ""}`}>
+        {error && <EditorErrorNotice message={error} runDir={runDir} onDismiss={() => setError("")} />}
         {/* フェーズW23(改善2): 処理状況は解析中のみ表示する。home は前回runの残骸が不要、
             editing の書き出し進捗は検品ツールバーのコンパクトバーが担う */}
         {uiStage === "analyzing" && (

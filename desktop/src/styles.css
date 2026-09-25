@@ -10137,3 +10137,10 @@ input[type="range"]::-moz-range-thumb {
 .tlSceneInsertion span { position: absolute; top: 0; left: 4px; background: #382761; color: white; border-radius: 3px; padding: 3px 6px; white-space: nowrap; font-size: 11px; }
 
 .tlVideoBlock[data-dragging] { opacity: .4; outline: 2px solid #a78bfa; }
+
+.editorErrorNotice { border: 1px solid #e7a8a3; border-left: 4px solid #c43e35; border-radius: 8px; background: #fff3f1; color: #70271f; padding: 14px 16px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.editorErrorNotice p { margin: 6px 0; }
+.editorErrorNotice pre { white-space: pre-wrap; max-height: 220px; overflow: auto; font-size: 12px; }
+.editorErrorNotice summary { cursor: pointer; }
+.editorErrorActions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.editorErrorActions button { border: 1px solid #d4a19b; background: white; border-radius: 6px; padding: 6px 12px; color: #70271f; cursor: pointer; }

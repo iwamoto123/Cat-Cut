@@ -1,3 +1,4 @@
+const { createExportDiagnostics } = require("./exportDiagnostics.cjs");
 // W16-6: powerMonitor はスリープ/画面ロック時にレンダラーへ再生停止を通知するために使う。
 const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell, session, net } = require("electron");
 const { spawn, spawnSync } = require("child_process");
@@ -964,6 +965,7 @@ function createWindow() {
 }
 
 function sendJobEvent(event) {
+  activeJob?.exportDiagnostics?.record(event);
   appendRunLog(event);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("job:event", event);
@@ -2917,7 +2919,8 @@ function spawnCommand({ command, args, cwd, env, stepId, lowPriority }) {
       sendJobEvent({ type: "step:error", stepId });
       reject(new Error(commandFailureMessage(command, args, null, recentOutput, error.message || String(error))));
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
+      sendJobEvent({ type: "log", message: `\n[PROCESS EXIT] ${command}: code=${code}, signal=${signal || "none"}\n` });
       if (activeJob) activeJob.child = null;
       if (!activeJob || activeJob.cancelled) {
         reject(new Error("Job cancelled"));
@@ -2928,15 +2931,15 @@ function spawnCommand({ command, args, cwd, env, stepId, lowPriority }) {
         resolve();
       } else {
         sendJobEvent({ type: "step:error", stepId });
-        reject(new Error(commandFailureMessage(command, args, code, recentOutput)));
+        reject(new Error(commandFailureMessage(command, args, code, recentOutput, undefined, signal)));
       }
     });
   });
 }
 
-function commandFailureMessage(command, args, code, output, cause) {
+function commandFailureMessage(command, args, code, output, cause, signal) {
   const header =
-    code === null
+    signal ? `${command} terminated by signal ${signal}` : code === null
       ? `${command} failed to start`
       : `${command} exited with code ${code}`;
   const commandLine = `$ ${command} ${args.map(shellQuote).join(" ")}`;
@@ -6180,6 +6183,7 @@ ipcMain.handle("export:start", async (_event, options) => {
   try {
     const runDir = resolveRunDir(options?.runDir);
     activeJob = { cancelled: false, child: null, runDir };
+    activeJob.exportDiagnostics = createExportDiagnostics(runDir, options);
 
     applyTelopAndExport({
       runDir,

@@ -22,6 +22,7 @@ test("export IPC forwards the exact applied scene snapshot", async () => {
   const end = mainSource.indexOf('ipcMain.handle("job:cancel"', begin);
   let handler: any, received: any;
   const context = vm.createContext({
+    createExportDiagnostics: () => ({ record: () => {} }),
     activeJob: null, ipcMain: { handle: (_name: string, fn: any) => { handler = fn; } },
     resolveRunDir: (value: string) => value,
     applyTelopAndExport: async (options: any) => { received = options; }, sendJobEvent: () => {},

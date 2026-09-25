@@ -96,6 +96,9 @@ rsync -a \
   "$EDITOR_DIR/" "$WORK/app/"
 
 # インストーラと手順書を同梱
+if [ -f "$EDITOR_DIR/distribution/CatCut-かんたん編集マニュアル.pdf" ]; then
+  cp "$EDITOR_DIR/distribution/CatCut-かんたん編集マニュアル.pdf" "$WORK/"
+fi
 cp "$EDITOR_DIR/distribution/install.command" "$WORK/"
 cp "$EDITOR_DIR/distribution/check_network.command" "$WORK/"
 cp "$EDITOR_DIR/distribution/VERSION" "$WORK/app/VERSION.txt"
@@ -147,6 +150,8 @@ Cat-Cut 最新版の配布フォルダ
 「適切なアクセス権限がないために実行できません」と出る場合は、
 ターミナルで bash と半角スペースを入力し、展開した install.command を
 ウィンドウへドラッグして Enter を押してください。
+
+編集方法はzip内の「CatCut-かんたん編集マニュアル.pdf」をご覧ください。
 
 【注意】
 - zipと展開フォルダの名前には配布日時（YYYYMMDD-HHMMSS、日本時間）が入っています。
