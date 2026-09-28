@@ -3579,15 +3579,17 @@ export function App() {
    */
   const isPlaybackActiveRef = useRef(false);
   const revealPlaybackScene = useCallback(() => {
+    // 停止／シークを指示した時点の対象を固定する。次フレームのホバー位置は使わない。
+    const scenes = project.editor.getSnapshot().document.scenes;
+    const index = findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
+    const sceneId = scenes[index]?.id;
+    if (!sceneId) return;
     requestAnimationFrame(() => {
       const pane = sceneListPaneRef.current;
       if (!pane) return;
-      const scenes = project.editor.getSnapshot().document.scenes;
-      const index = findSceneIndexAtEditMs(scenes, playheadStore.getSourceMs());
-      const scene = scenes[index];
-      if (!scene) return;
-      const row = Array.from(pane.querySelectorAll<HTMLElement>(".sceneRow[data-scene-id]"))
-        .find((element) => element.dataset.sceneId === scene.id);
+      // 要確認パネルにも同じsceneIdの行があるため、通常一覧だけから探す。
+      const row = Array.from(pane.querySelectorAll<HTMLElement>(".sceneRowList > .sceneRow[data-scene-id]"))
+        .find((element) => element.dataset.sceneId === sceneId);
       if (row) revealSceneRow(row);
     });
   }, [project.editor]);
