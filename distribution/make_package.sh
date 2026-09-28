@@ -1,9 +1,8 @@
 #!/bin/bash
 # Cat-Cut 社内配布zipの作成（岩本さんのMacで実行する）
 # 使い方: cd editor && bash distribution/make_package.sh
-# 出力: ~/Desktop/CatCut-haifu-YYYYMMDD-HHMMSS.zip（日本時間）
-#       + NextCloud共有フォルダへ同じ日時付きファイル名で自動公開
-#         公開先は環境変数 CATCUT_PUBLISH_DIR で変更可
+# 出力: NextCloud共有フォルダの CatCut-haifu-YYYYMMDD-HHMMSS.zip（日本時間）
+#       公開先は環境変数 CATCUT_PUBLISH_DIR で変更可。作成途中のZIPは一時領域に置く。
 
 set -eu
 
@@ -11,7 +10,6 @@ EDITOR_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 STAMP="$(TZ=Asia/Tokyo date +%Y%m%d-%H%M%S)"
 PACKAGE_NAME="CatCut-haifu-$STAMP.zip"
 SETUP_NAME="CatCut-setup-$STAMP"
-OUT="$HOME/Desktop/$PACKAGE_NAME"
 PUBLISH_DIR="${CATCUT_PUBLISH_DIR:-$HOME/Desktop/NextCloud/CatCut-haifu}"
 WORK_ROOT=""
 ARCHIVE_DIR=""
@@ -59,16 +57,20 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-refuse_existing_archive "$OUT"
+if [ ! -d "$(dirname "$PUBLISH_DIR")" ]; then
+  echo "エラー: 公開先の親フォルダがありません: $(dirname "$PUBLISH_DIR")" >&2
+  echo "NextCloudの場所を確認するか、CATCUT_PUBLISH_DIRを設定してください。" >&2
+  exit 1
+fi
 refuse_existing_archive "$PUBLISH_DIR/$PACKAGE_NAME"
 WORK_ROOT="$(mktemp -d)"
 WORK="$WORK_ROOT/$SETUP_NAME"
-mkdir -p "$(dirname "$OUT")"
-# A new archive on the destination filesystem prevents stale entries and permits an atomic move.
-ARCHIVE_DIR="$(mktemp -d "$(dirname "$OUT")/.CatCut-package.XXXXXX")"
+OUT="$WORK_ROOT/$PACKAGE_NAME"
+# 完成したZIPも公開前は一時領域に置き、終了時に片付ける。
+ARCHIVE_DIR="$(mktemp -d)"
 TEMP_ARCHIVE="$ARCHIVE_DIR/CatCut-haifu.zip"
 
-echo "配布パッケージを作成します: $OUT"
+echo "配布パッケージを作成します: $PUBLISH_DIR/$PACKAGE_NAME"
 mkdir -p "$WORK/app"
 
 # アプリ本体（重い生成物・ローカルデータ・秘密情報は除外）
