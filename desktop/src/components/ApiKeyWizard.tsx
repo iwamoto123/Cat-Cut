@@ -385,7 +385,7 @@ export function ApiKeyWizard({
               </article>
             </div>
             <div className="apiWizardActions">
-              <button className="primaryButton" type="button" onClick={() => setStep(elevenConfigured ? 3 : 2)}>
+              <button className="primaryButton" type="button" onClick={() => setStep(2)}>
                 設定をはじめる
               </button>
             </div>
@@ -457,6 +457,10 @@ export function ApiKeyWizard({
 
         {step === 3 && (
           <div className="apiWizardBody">
+            <button className="secondaryButton" type="button" disabled={busy || !!aiTesting}
+              onClick={() => { setError(""); setStep(2); }}>
+              ElevenLabsの設定に戻る
+            </button>
             <p className="apiWizardLead">
               テロップの誤字修正・改行調整をAIが自動で行います。スキップしてもすべての機能が使えます（AI校正のみ無効、誤字はアプリ内で手修正可能）。
             </p>
