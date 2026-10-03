@@ -767,6 +767,37 @@ def _cleanup_segment_cache(segments_dir: str, manifest: dict, used_hashes: set, 
     return removed
 
 
+def _covering_frame_time(source_path: str, start_s: float, duration_s: float):
+    """Return the frame covering an interval with no new frame timestamp inside it.
+
+    Accurate input seeking drops that frame because its PTS precedes start_s.
+    Do not extend a cut: only recover intervals contained in one source frame.
+    """
+    if not 0 < duration_s <= 1:
+        return None
+    try:
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-read_intervals", f"{max(0, start_s - 2):.6f}%{start_s + duration_s + .1:.6f}",
+            "-show_frames", "-show_entries",
+            "frame=best_effort_timestamp_time,duration_time,pkt_duration_time", "-of", "json", source_path,
+        ], capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            return None
+        frames = json.loads(result.stdout).get("frames", [])
+        candidates = [frame for frame in frames if float(frame["best_effort_timestamp_time"]) <= start_s]
+        if not candidates:
+            return None
+        frame = max(candidates, key=lambda item: float(item["best_effort_timestamp_time"]))
+        timestamp = float(frame["best_effort_timestamp_time"])
+        following = [float(item["best_effort_timestamp_time"]) for item in frames
+                     if float(item["best_effort_timestamp_time"]) > timestamp]
+        frame_end = min(following) if following else timestamp + float(frame.get("duration_time", frame.get("pkt_duration_time", 0)))
+        return timestamp if start_s + duration_s <= frame_end + .000002 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError):
+        return None
+
+
 def _encode_segment(source_path: str, start_s: float, duration_s: float, encode_args: list, segment_path: str):
     """W11-1a/1b: セグメント1本を ffmpeg で抽出する。成功=None / 失敗=stderr文字列。
 
@@ -793,7 +824,22 @@ def _encode_segment(source_path: str, start_s: float, duration_s: float, encode_
         if result.returncode != 0:
             return result.stderr or ""
         if not _segment_cache_available(temp_path):
-            return "FFmpeg produced an empty segment or a segment without a valid video stream"
+            frame_time = _covering_frame_time(source_path, start_s, duration_s)
+            if frame_time is None:
+                return "FFmpeg produced an empty segment or a segment without a valid video stream"
+            # Video uses the image already displayed at the cut start; audio keeps
+            # the exact user-selected interval. Timeline duration is never changed.
+            print(f"    Sub-frame cut: {start_s:.6f}s + {duration_s:.6f}s; using covering frame {frame_time:.6f}s", flush=True)
+            result = subprocess.run([
+                "ffmpeg", "-y", "-ss", f"{max(0, frame_time - .000002):.6f}", "-i", source_path,
+                "-ss", str(start_s), "-i", source_path,
+                "-map", "0:v:0", "-map", "1:a:0?",
+                "-vf", "setpts=PTS-STARTPTS", "-frames:v", "1", "-t", str(duration_s),
+                "-c:v", "libx264", "-crf", "16", "-preset", "fast", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "128k", temp_path,
+            ], capture_output=True, text=True)
+            if result.returncode != 0 or not _segment_cache_available(temp_path):
+                return "Sub-frame segment recovery failed: " + (result.stderr or "")[-1500:]
         os.replace(temp_path, segment_path)
         return None
     finally:
