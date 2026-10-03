@@ -463,7 +463,7 @@ async function main() {
           ? { crf: args.crf }
           : {}),
       // W11-1c: OffthreadVideoのフレームキャッシュを2GBへ明示(フレーム再抽出を削減)
-      offthreadVideoCacheSizeInBytes: 2 * 1024 * 1024 * 1024,
+      offthreadVideoCacheSizeInBytes: (process.env.CATCUT_BACKGROUND_EXPORT === "1" ? 512 : 2048) * 1024 * 1024,
       onProgress: ({ progress }) => {
         const percent = Math.round(progress * 100);
         if (percent !== lastProgressPercent) {

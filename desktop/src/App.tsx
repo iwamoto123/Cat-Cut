@@ -1903,6 +1903,8 @@ export function App() {
   const [steps, setSteps] = useState<Step[]>(initialSteps);
   const [logs, setLogs] = useState("");
   const [running, setRunning] = useState(false);
+  const [backgroundExport, setBackgroundExport] = useState<CatCutBackgroundExport | null>(null);
+  const [exportCancelling, setExportCancelling] = useState(false);
   const [runName, setRunName] = useState("");
   const [runDir, setRunDir] = useState("");
   const [exportProgress, setExportProgress] = useState(0);
@@ -1918,7 +1920,7 @@ export function App() {
   // フェーズV1(統合タイムラインView): 右ペインの「シーン検品｜タイムライン」タブ。
   // 初期はシーン検品(従来フロー維持)。プレビュープレイヤーは両タブ共通で上部に常駐する。
   const [reviewTab, setReviewTab] = useState<"scenes" | "timeline">("scenes");
-  const workspaceViewportRef = useWorkspaceViewport(reviewTab === "timeline");
+  const workspaceViewportRef = useWorkspaceViewport(reviewTab === "timeline", Boolean(backgroundExport));
   const [transcriptState, setTranscriptState] = useState<TranscriptState | null>(null);
   const [transcriptApplying, setTranscriptApplying] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -2321,7 +2323,20 @@ export function App() {
     window.catcut.getUserRules().then(setUserRules).catch(() => {
       setUserRules(null);
     });
+    let receivedExportEvent = false;
+    window.catcut.getExportStatus?.().then((status) => {
+      if (!receivedExportEvent) setBackgroundExport(status);
+    }).catch(() => {});
     return window.catcut.onJobEvent((event) => {
+      if (event.backgroundExport) {
+        receivedExportEvent = true;
+        if (event.exportStatus) setBackgroundExport(event.exportStatus);
+        if (["job:done", "job:error", "job:cancelled"].includes(event.type)) {
+          setExportCancelling(false);
+          window.catcut.listProjects().then((result) => setProjects(result.projects)).catch(() => {});
+        }
+        return;
+      }
       if (event.type === "job:start") {
         setRunning(true);
         setRunName(event.runName);
@@ -4374,6 +4389,10 @@ export function App() {
   // フェーズW7: 「書き出し」ボタンは毎回この設定モーダルを開き、確定後に適用→書き出しへ進む
   async function startExportWithSettings(value: ExportSettingsValue) {
     if (!transcriptState) return;
+    if (backgroundExport?.status === "running") {
+      setError("別の動画を書き出し中です。完了後に書き出してください。編集は続けられます。");
+      return;
+    }
     setExportSettingsOpen(false);
     // W19-C3: 書き出し(適用含む)開始時にプレビューを一時停止してレンダラー負荷を下げる
     // (W16-6のvisibilitychangeハンドラと同じpause経路)。ユーザーの明示再生はブロックしない。
@@ -4407,7 +4426,10 @@ export function App() {
             : {}),
         renderConcurrency,
       });
-      if (!exportResult.ok) {
+      if (exportResult.ok) {
+        leaveReviewForProjects();
+        setRunning(false);
+      } else {
         setRunning(false);
         setError(exportResult.error ?? "書き出しを開始できませんでした");
       }
@@ -4435,6 +4457,10 @@ export function App() {
   /** プロジェクト一覧から選んだrunを検品段階(review:readyと同じ状態)で開き直す */
   async function openProject(project: CatCutProjectSummary) {
     if (running) return;
+    if (backgroundExport?.status === "running" && backgroundExport.runDir === project.runDir) {
+      setError("この動画は書き出し中です。別の動画を選択してください。");
+      return;
+    }
     setError("");
     setProjectOpeningRunDir(project.runDir);
     try {
@@ -4500,6 +4526,10 @@ export function App() {
       setEditorClosing(false);
       return;
     }
+    leaveReviewForProjects();
+  }
+
+  function leaveReviewForProjects() {
     setReviewState(null);
     setTranscriptState(null);
     setOutputs(null);
@@ -5596,14 +5626,21 @@ export function App() {
     if (!transcriptState) return;
     setError("");
     setRunning(true);
+    try {
     const result = await window.catcut.startExport({
       runDir: transcriptState.runDir,
       renderFinal: true,
       outputPath: outputPathFromSettings(settings, videoPath) || "",
     });
-    if (!result.ok) {
-      setRunning(false);
+    if (result.ok) {
+      leaveReviewForProjects();
+    } else {
       setError(result.error ?? "書き出しを開始できませんでした");
+    }
+    } catch (err) {
+      setError(`書き出しを開始できませんでした。${String(err)}`);
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -5969,14 +6006,21 @@ export function App() {
       if (!fontApplied) return;
     }
     setRunning(true);
+    try {
     const result = await window.catcut.startExport({
       runDir: reviewState.outputs.runDir,
       renderFinal: reviewState.renderFinal,
       outputPath: outputPathFromSettings(settings, videoPath) || "",
     });
-    if (!result.ok) {
-      setRunning(false);
+    if (result.ok) {
+      leaveReviewForProjects();
+    } else {
       setError(result.error ?? "書き出しを開始できませんでした");
+    }
+    } catch (err) {
+      setError(`書き出しを開始できませんでした。${String(err)}`);
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -6122,6 +6166,32 @@ export function App() {
   const uiStage = uiStageFor({ running, hasReview: Boolean(reviewState) });
 
   return (
+    <>
+      {backgroundExport && (
+        <div className="backgroundExportBar" data-status={backgroundExport.status}>
+          <span className="backgroundExportTitle" title={backgroundExport.runDir}>
+            {backgroundExport.runDir.split(/[\\/]/).pop()}
+          </span>
+          <span role="status">
+            {backgroundExport.status === "running"
+              ? `${initialSteps.find((step) => step.id === backgroundExport.step)?.label || "書き出し準備"} ${backgroundExport.percent}%`
+              : backgroundExport.status === "done" ? "書き出し完了" : backgroundExport.status === "error" ? "書き出しに失敗" : "書き出しを中止しました"}
+          </span>
+          <progress max={100} value={backgroundExport.percent} aria-label="書き出し進捗" />
+          {backgroundExport.status === "running" ? (
+            <button disabled={exportCancelling} onClick={async () => {
+              setExportCancelling(true);
+              try { await window.catcut.cancelExport(); }
+              catch { setExportCancelling(false); }
+            }}>{exportCancelling ? "中止中…" : "書き出しを中止"}</button>
+          ) : <>
+            {backgroundExport.finalVideo && <button onClick={() => window.catcut.revealPath(backgroundExport.finalVideo)}>保存場所</button>}
+            {backgroundExport.error && <details><summary>エラー詳細</summary><pre>{backgroundExport.error}</pre><button onClick={() => window.catcut.revealPath(backgroundExport.runDir)}>ログの保存場所</button></details>}
+            <button aria-label="書き出し状況を閉じる" onClick={() => setBackgroundExport(null)}>閉じる</button>
+          </>}
+          {backgroundExport.status === "running" && <span className="backgroundExportHint">別の動画を編集できます</span>}
+        </div>
+      )}
     <main className={`appShell${uiStage === "editing" ? " appShellEditing" : ""}${uiStage === "editing" && reviewTab === "timeline" ? " appShellTimeline" : ""}`}>
       {uiStage !== "editing" && (
       <section className="leftPane">
@@ -6726,7 +6796,8 @@ export function App() {
                 </button>
                 <button
                   className="primaryButton compactPrimary"
-                  disabled={running || sceneApplying || !sceneDraft}
+                  disabled={running || sceneApplying || !sceneDraft || backgroundExport?.status === "running"}
+                  title={backgroundExport?.status === "running" ? "書き出し完了後に実行できます。編集は続けられます。" : undefined}
                   onClick={() => setExportSettingsOpen(true)}
                   type="button"
                 >
@@ -8220,6 +8291,7 @@ export function App() {
         {logPanel}
       </section>
     </main>
+    </>
   );
 }
 

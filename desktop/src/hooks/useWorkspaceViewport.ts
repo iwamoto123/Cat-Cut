@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 
 /** Fit the editing area below its actual toolbar, without publishing resize state through App. */
-export function useWorkspaceViewport(enabled: boolean) {
+export function useWorkspaceViewport(enabled: boolean, hasTopStatus = false) {
   const dispose = useRef<(() => void) | null>(null);
   return useCallback((node: HTMLDivElement | null) => {
     dispose.current?.();
@@ -30,5 +30,5 @@ export function useWorkspaceViewport(enabled: boolean) {
       if (frame !== null) cancelAnimationFrame(frame);
       node.style.removeProperty("--workspace-height");
     };
-  }, [enabled]);
+  }, [enabled, hasTopStatus]);
 }

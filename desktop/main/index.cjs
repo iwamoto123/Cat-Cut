@@ -1,3 +1,4 @@
+const { reduceExportStatus } = require("./backgroundExport.cjs");
 const { createExportDiagnostics } = require("./exportDiagnostics.cjs");
 // W16-6: powerMonitor はスリープ/画面ロック時にレンダラーへ再生停止を通知するために使う。
 const { app, BrowserWindow, dialog, ipcMain, powerMonitor, shell, session, net } = require("electron");
@@ -51,6 +52,24 @@ const ENABLE_GROUND_TRUTH_LEARNING = process.env.CATCUT_ENABLE_GROUND_TRUTH_LEAR
 
 let mainWindow = null;
 let activeJob = null;
+let backgroundExport = null;
+const { AsyncLocalStorage } = require("node:async_hooks");
+const jobContext = new AsyncLocalStorage();
+const currentJob = () => jobContext.getStore() || activeJob;
+let backgroundExportStatus = null;
+
+function assertRunEditable(input) {
+  const runDir = typeof input === "string" ? input : input?.runDir;
+  if (backgroundExport && runDir && resolveRunDir(runDir) === backgroundExport.runDir) {
+    throw new Error("この動画は書き出し中です。完了後に編集してください。別の動画は編集できます。");
+  }
+}
+function handleEditable(channel, handler) {
+  ipcMain.handle(channel, (event, input) => {
+    assertRunEditable(input);
+    return handler(event, input);
+  });
+}
 let previewServer = null;
 let previewServerPort = null;
 const previewFiles = new Map();
@@ -965,7 +984,13 @@ function createWindow() {
 }
 
 function sendJobEvent(event) {
-  activeJob?.exportDiagnostics?.record(event);
+  const job = currentJob();
+  if (job?.kind === "background-export") {
+    event = { ...event, backgroundExport: true, exportRunDir: job.runDir };
+    backgroundExportStatus = reduceExportStatus(backgroundExportStatus, event);
+    event.exportStatus = backgroundExportStatus;
+  }
+  job?.exportDiagnostics?.record(event);
   appendRunLog(event);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("job:event", event);
@@ -993,7 +1018,7 @@ function lowerChildPriority(child) {
 }
 
 function appendRunLog(event) {
-  const runDir = activeJob?.runDir;
+  const runDir = currentJob()?.runDir;
   if (!runDir) return;
   try {
     let text = "";
@@ -2887,8 +2912,9 @@ function createRunName(videoPath) {
 }
 
 function spawnCommand({ command, args, cwd, env, stepId, lowPriority }) {
+  const job = currentJob();
   return new Promise((resolve, reject) => {
-    if (!activeJob || activeJob.cancelled) {
+    if (!job || job.cancelled) {
       reject(new Error("Job cancelled"));
       return;
     }
@@ -2900,13 +2926,16 @@ function spawnCommand({ command, args, cwd, env, stepId, lowPriority }) {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: job.kind === "background-export" && process.platform !== "win32",
     });
     // W19-C4: 書き出し経路(呼び出し側が指定)のみ優先度を下げる
     if (lowPriority) lowerChildPriority(child);
-    activeJob.child = child;
+    job.child = child;
 
+    let settled = false;
     let recentOutput = "";
     const rememberOutput = (chunk) => {
+      if (settled) return;
       const text = chunk.toString();
       recentOutput = `${recentOutput}${text}`.slice(-16000);
       handleProcessOutput(text, stepId);
@@ -2916,13 +2945,18 @@ function spawnCommand({ command, args, cwd, env, stepId, lowPriority }) {
     child.stderr.on("data", rememberOutput);
 
     child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      job.child = null;
       sendJobEvent({ type: "step:error", stepId });
       reject(new Error(commandFailureMessage(command, args, null, recentOutput, error.message || String(error))));
     });
     child.on("close", (code, signal) => {
+      if (settled) return;
+      settled = true;
       sendJobEvent({ type: "log", message: `\n[PROCESS EXIT] ${command}: code=${code}, signal=${signal || "none"}\n` });
-      if (activeJob) activeJob.child = null;
-      if (!activeJob || activeJob.cancelled) {
+      if (job) job.child = null;
+      if (!job || job.cancelled) {
         reject(new Error("Job cancelled"));
         return;
       }
@@ -4403,7 +4437,7 @@ function saveProjectMeta(input) {
 
 function deleteProject(input) {
   const runDir = resolveRunDir(input?.runDir);
-  if (activeJob && activeJob.runDir === runDir) {
+  if ((activeJob && activeJob.runDir === runDir) || backgroundExport?.runDir === runDir) {
     throw new Error("このプロジェクトはジョブ実行中のため削除できません");
   }
   fs.rmSync(runDir, { recursive: true, force: true });
@@ -5085,6 +5119,9 @@ async function applyTelopAndExport(options) {
   const renderFinal = options.renderFinal !== false;
   const env = apiKeys.buildPipelineEnv();
   const nodeEnv = apiKeys.buildPipelineEnv();
+  if (currentJob()?.kind === "background-export") {
+    nodeEnv.CATCUT_BACKGROUND_EXPORT = "1";
+  }
   let learningCapture = null;
   let learningResult;
   if (renderFinal) {
@@ -5261,7 +5298,7 @@ async function runAutoFinalCheck({ runDir, python, env, root }) {
     }
     await spawnCommand({ command: python, args, cwd: root, env, stepId });
   } catch (error) {
-    if (!activeJob || activeJob.cancelled) throw error;
+    if (!currentJob() || currentJob().cancelled) throw error;
     sendJobEvent({
       type: "log",
       message: `\n[FINAL CHECK]\nAI最終チェックをスキップしました (${error.message || error})\n`,
@@ -5481,7 +5518,7 @@ async function runPipeline(options) {
       stepId: "step05b_retranscribe",
     });
   } catch (error) {
-    if (!activeJob || activeJob.cancelled) throw error;
+    if (!currentJob() || currentJob().cancelled) throw error;
     sendJobEvent({
       type: "log",
       message: `\n[RETRANSCRIBE]\n再文字起こしをスキップしました (${error.message || error})\n`,
@@ -5729,7 +5766,7 @@ ipcMain.handle("telop-type-mapping:save", (_event, input, extras) => saveTelopTy
 ipcMain.handle("design-extras:get", () => resolveDesignExtras());
 // フェーズV2: run単位のOP設定(runs/<run>/op_config.json)。get時に無ければテーマ設定から生成する
 ipcMain.handle("op-config:get", (_event, runDir) => ensureRunOpConfig(String(runDir || "")));
-ipcMain.handle("op-config:save", (_event, input) =>
+handleEditable("op-config:save", (_event, input) =>
   writeRunOpConfig(String(input?.runDir || ""), input?.config),
 );
 // フェーズU2: 使用シーンバンドル(テンプレート)と保存済みデザインテーマ
@@ -5810,7 +5847,7 @@ ipcMain.handle("edit-learning:export", async () => {
 
 // W16-7: AI最終チェック。現在の表示テキスト全シーンをpython(step06d)でLLM再チェックする。
 // 入出力は runs/<run>/step06d_final_check/ に残す(検品可能にする)。失敗はrenderer側でnon-fatal扱い。
-ipcMain.handle("final-check:run", async (_event, input) => {
+handleEditable("final-check:run", async (_event, input) => {
   const runDir = resolveRunDir(String(input?.runDir || ""));
   const scenes = Array.isArray(input?.scenes) ? input.scenes : [];
   const root = repoRoot();
@@ -5946,7 +5983,7 @@ ipcMain.handle("ground-truth:choose", async () => {
 ipcMain.handle("ground-truth:analyze", async (_event, input) => analyzeGroundTruthRules(input || {}));
 ipcMain.handle("ground-truth:apply-rule-proposal", async (_event, input) => applyGroundTruthRuleProposal(input || {}));
 
-ipcMain.handle("ground-truth:apply", async (_event, input) => {
+handleEditable("ground-truth:apply", async (_event, input) => {
   if (!ENABLE_GROUND_TRUTH_LEARNING) {
     throw new Error("正解データ学習は現在オフです。正式ルールへの反映は行いません。");
   }
@@ -5983,13 +6020,14 @@ ipcMain.handle("projects:delete", (_event, input) => deleteProject(input || {}))
 // --- W13-1: キャッシュ管理(派生キャッシュの統計・削除。runフォルダ自体は消さない) ---
 
 ipcMain.handle("cache:stats", () => collectCacheStats(path.join(repoRoot(), "runs")));
-ipcMain.handle("cache:clean", (_event, input) =>
-  cleanCaches(path.join(repoRoot(), "runs"), {
+ipcMain.handle("cache:clean", (_event, input) => {
+  if (backgroundExport) throw new Error("書き出し中はキャッシュを削除できません");
+  return cleanCaches(path.join(repoRoot(), "runs"), {
     mode: input?.mode === "all" ? "all" : "old",
     // 実行中ジョブのrunは常にスキップする(書き出し中のsegments等を消さない)
     activeRunDir: activeJob?.runDir || null,
-  }),
-);
+  });
+});
 
 /**
  * W13-1: 起動時の自動キャッシュクリーン。最終利用が7日超のrunの派生キャッシュを削除する。
@@ -5999,6 +6037,7 @@ ipcMain.handle("cache:clean", (_event, input) =>
 function scheduleStartupCacheClean() {
   setTimeout(() => {
     try {
+      if (backgroundExport) return;
       const result = cleanCaches(path.join(repoRoot(), "runs"), {
         mode: "old",
         activeRunDir: activeJob?.runDir || null,
@@ -6078,20 +6117,20 @@ ipcMain.handle("ollama:review-telop", async (_event, input) => {
   return { findings: normalizeAiFindings(safeJsonArrayFromText(raw), input?.text || ""), raw };
 });
 
-ipcMain.handle("telop:load", (_event, runDir) => {
+handleEditable("telop:load", (_event, runDir) => {
   const resolved = resolveRunDir(runDir);
   return loadTelopReviewState(resolved);
 });
 
-ipcMain.handle("transcript:load", (_event, runDir) => loadTranscriptEditorState(runDir));
-ipcMain.handle("scene-edits:save-draft", async (_event, input) => {
+handleEditable("transcript:load", (_event, runDir) => loadTranscriptEditorState(runDir));
+handleEditable("scene-edits:save-draft", async (_event, input) => {
   const runDir = String(input?.runDir || "");
   if (!runDir) throw new Error("runDir is required");
   return saveSceneEditsDraft(runDir, input);
 });
 ipcMain.handle("scene-edits:load-draft", (_event, runDir) => loadSceneEditsDraft(String(runDir || "")));
-ipcMain.handle("transcript:apply", async (_event, input) => applyTranscriptKeepSegments(input || {}));
-ipcMain.handle("transcript:run-command", async (_event, input) => runTranscriptCommand(input || {}));
+handleEditable("transcript:apply", async (_event, input) => applyTranscriptKeepSegments(input || {}));
+handleEditable("transcript:run-command", async (_event, input) => runTranscriptCommand(input || {}));
 ipcMain.handle("transcript:waveform", async (_event, input) =>
   generateWaveformForRun(input?.runDir, { binMs: input?.binMs }),
 );
@@ -6100,34 +6139,34 @@ ipcMain.handle("transcript:waveform", async (_event, input) =>
 ipcMain.handle("transcript:filmstrip", async (_event, input) => generateFilmstripForRun(input?.runDir));
 ipcMain.handle("bgm:list", async (_event, input) => loadBgmStateForRun(input?.runDir));
 ipcMain.handle("bgm:waveform", async (_event, input) => getBgmWaveform(input));
-ipcMain.handle("bgm:add", async (_event, input) => addBgmToRun(input?.runDir, input?.startMs));
+handleEditable("bgm:add", async (_event, input) => addBgmToRun(input?.runDir, input?.startMs));
 // V6-4: ダイアログなし版(D&D)。OSからドラッグしたファイルのパス+開始msを直接受ける
-ipcMain.handle("bgm:add-file", async (_event, input) =>
+handleEditable("bgm:add-file", async (_event, input) =>
   addBgmFileToRun(input?.runDir, input?.filePath, input?.startMs),
 );
-ipcMain.handle("bgm:save", async (_event, input) => saveBgmClipsForRun(input?.runDir, input?.clips));
+handleEditable("bgm:save", async (_event, input) => saveBgmClipsForRun(input?.runDir, input?.clips));
 // フェーズV4: 画像挿入トラック
 ipcMain.handle("images:list", async (_event, input) => loadImagesStateForRun(input?.runDir));
-ipcMain.handle("images:add", async (_event, input) => addImageToRun(input?.runDir, input?.startMs));
+handleEditable("images:add", async (_event, input) => addImageToRun(input?.runDir, input?.startMs));
 // V6-4: ダイアログなし版(D&D)。OSからドラッグしたファイルのパス+開始msを直接受ける
-ipcMain.handle("images:add-file", async (_event, input) =>
+handleEditable("images:add-file", async (_event, input) =>
   addImageFileToRun(input?.runDir, input?.filePath, input?.startMs),
 );
-ipcMain.handle("images:save", async (_event, input) => saveImageClipsForRun(input?.runDir, input?.clips));
+handleEditable("images:save", async (_event, input) => saveImageClipsForRun(input?.runDir, input?.clips));
 // フェーズW9: 映像フレーミング(変形・クロップ)。保存はrun正本jsonのみ(step08再実行なし=imagesと同方針)
 ipcMain.handle("video-framing:get", async (_event, input) => loadVideoFramingForRun(input?.runDir));
-ipcMain.handle("video-framing:save", async (_event, input) =>
+handleEditable("video-framing:save", async (_event, input) =>
   saveVideoFramingForRun(input?.runDir, input?.framing),
 );
 
-ipcMain.handle("telop:save", (_event, input) => {
+handleEditable("telop:save", (_event, input) => {
   const resolved = resolveRunDir(input?.runDir);
   const outputs = buildOutputs(resolved);
   fs.writeFileSync(outputs.telop, String(input?.text || ""), "utf-8");
   return loadTelopReviewState(resolved);
 });
 
-ipcMain.handle("font:apply", async (_event, input) => {
+handleEditable("font:apply", async (_event, input) => {
   const resolved = resolveRunDir(input?.runDir);
   const outputs = buildOutputs(resolved);
   fs.writeFileSync(outputs.fontDirectives, String(input?.text || ""), "utf-8");
@@ -6135,7 +6174,7 @@ ipcMain.handle("font:apply", async (_event, input) => {
   return loadTelopReviewState(resolved);
 });
 
-ipcMain.handle("telop-style:apply", async (_event, input) => {
+handleEditable("telop-style:apply", async (_event, input) => {
   const resolved = resolveRunDir(input?.runDir);
   const outputs = buildOutputs(resolved);
   const styles = input?.styles && typeof input.styles === "object" ? input.styles : {};
@@ -6172,7 +6211,7 @@ ipcMain.handle("job:start", async (_event, options) => {
 
   activeJob = { cancelled: false, child: null, runDir: null };
 
-  runPipeline(options || {})
+  runPipeline(backgroundExport ? { ...options, reviewBeforeExport: true } : (options || {}))
     .catch((error) => {
       const message = error.message || String(error);
       sendJobEvent({ type: "log", message: `\n[ERROR]\n${message}\n` });
@@ -6185,52 +6224,57 @@ ipcMain.handle("job:start", async (_event, options) => {
   return { ok: true };
 });
 
+ipcMain.handle("export:status", () => backgroundExportStatus);
 ipcMain.handle("export:start", async (_event, options) => {
-  if (activeJob) {
-    return { ok: false, error: "別のジョブが実行中です" };
-  }
-
+  if (backgroundExport || activeJob) return { ok: false, error: "別の処理が実行中です。完了後に書き出してください。" };
   try {
     const runDir = resolveRunDir(options?.runDir);
-    activeJob = { cancelled: false, child: null, runDir };
-    activeJob.exportDiagnostics = createExportDiagnostics(runDir, options);
-
-    applyTelopAndExport({
+    const job = { kind: "background-export", cancelled: false, child: null, runDir };
+    backgroundExport = job;
+    backgroundExportStatus = null;
+    job.exportDiagnostics = createExportDiagnostics(runDir, { ...options, renderConcurrency: Math.min(2, Math.max(1, Number(options?.renderConcurrency) || 2)) });
+    jobContext.run(job, () => applyTelopAndExport({
+      ...options,
       runDir,
-      renderFinal: options?.renderFinal !== false,
-      learningSnapshot: options?.learningSnapshot,
-      outputPath: options?.outputPath || "",
-      targetShortSide: options?.targetShortSide || 0,
-      crf: options?.crf || 0,
-      renderConcurrency: options?.renderConcurrency || 0,
-      // W11-1b: HWエンコード(VideoToolbox)と画質→ビットレートのマッピング値
-      hardwareAcceleration: options?.hardwareAcceleration || "",
-      videoBitrate: options?.videoBitrate || "",
-    })
-      .catch((error) => {
+      // Leave CPU and memory available for previewing another project.
+      renderConcurrency: Math.min(2, Math.max(1, Number(options?.renderConcurrency) || 2)),
+    }).catch((error) => {
+      if (job.cancelled) sendJobEvent({ type: "job:cancelled" });
+      else {
         const message = error.message || String(error);
         sendJobEvent({ type: "log", message: `\n[ERROR]\n${message}\n` });
         sendJobEvent({ type: "job:error", error: message });
-      })
-      .finally(() => {
-        activeJob = null;
-      });
-
+      }
+    }).finally(() => {
+      if (backgroundExport === job) backgroundExport = null;
+    }));
     return { ok: true };
   } catch (error) {
-    activeJob = null;
+    backgroundExport = null;
     return { ok: false, error: error.message || String(error) };
   }
+});
+
+ipcMain.handle("export:cancel", () => {
+  if (backgroundExport) {
+    backgroundExport.cancelled = true;
+    const child = backgroundExport.child;
+    if (child) {
+      try {
+        if (process.platform !== "win32") process.kill(-child.pid, "SIGTERM");
+        else child.kill("SIGTERM");
+      } catch { child.kill("SIGTERM"); }
+    }
+  }
+  return { ok: true };
 });
 
 ipcMain.handle("job:cancel", () => {
   if (!activeJob) return { ok: true };
   activeJob.cancelled = true;
-  if (activeJob.child) {
-    activeJob.child.kill("SIGTERM");
-  }
+  activeJob.child?.kill("SIGTERM");
   sendJobEvent({ type: "job:cancelled" });
-  activeJob = null;
+  // Keep the slot until its promise settles; never redirect old process events.
   return { ok: true };
 });
 

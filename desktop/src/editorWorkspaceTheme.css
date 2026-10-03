@@ -171,3 +171,21 @@ body:has(.appShellTimeline) { background: #1b1c1e; }
 .sceneWorkspaceTimeline .selectionInspector .bgmGainControl input[type="range"] { appearance: none; -webkit-appearance: none; background: transparent; }
 .sceneWorkspaceTimeline .bgmGainControl input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: #5b6660; border-radius: 2px; }
 .sceneWorkspaceTimeline .bgmGainControl input[type="range"]::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 50%; background: #b2d7bc; border: 1px solid #d3e9d9; box-shadow: 0 1px 2px #0008; }
+
+/* Export stays visible without covering the editing controls. */
+.backgroundExportBar {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; gap: 12px;
+  min-height: 48px; padding: 8px 18px;
+  background: #182334; color: #edf3ff; border-bottom: 1px solid #40516b;
+  font-size: 12px; box-sizing: border-box;
+}
+.backgroundExportTitle { max-width: 25vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.backgroundExportBar progress { width: clamp(80px, 15vw, 220px); height: 6px; accent-color: #77aaff; }
+.backgroundExportBar button, .backgroundExportBar summary { cursor: pointer; color: #edf3ff; background: #293b53; border: 1px solid #526781; border-radius: 6px; padding: 5px 10px; white-space: nowrap; }
+.backgroundExportHint { margin-left: auto; color: #b9c9de; }
+.backgroundExportBar[data-status="error"] { background: #3a2026; border-color: #9d5866; }
+.backgroundExportBar[data-status="done"] { background: #19352e; border-color: #477969; }
+.backgroundExportBar details pre { position: absolute; right: 18px; top: 46px; max-width: min(800px, 85vw); max-height: 45vh; overflow: auto; white-space: pre-wrap; padding: 16px; background: #20232a; border: 1px solid #647084; border-radius: 8px; }
+.backgroundExportBar + .appShell { min-height: calc(100vh - 49px); }
+@media (max-width: 1100px) { .backgroundExportHint { display: none; } }

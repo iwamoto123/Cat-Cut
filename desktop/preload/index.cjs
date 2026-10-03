@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld("catcut", {
   saveOutputFile: (input) => ipcRenderer.invoke("dialog:saveOutputFile", input),
   startJob: (options) => ipcRenderer.invoke("job:start", options),
   startExport: (options) => ipcRenderer.invoke("export:start", options),
+  getExportStatus: () => ipcRenderer.invoke("export:status"),
+  cancelExport: () => ipcRenderer.invoke("export:cancel"),
   cancelJob: () => ipcRenderer.invoke("job:cancel"),
   loadTelop: (runDir) => ipcRenderer.invoke("telop:load", runDir),
   loadTranscriptEditor: (runDir) => ipcRenderer.invoke("transcript:load", runDir),

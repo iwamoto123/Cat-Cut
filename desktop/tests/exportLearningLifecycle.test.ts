@@ -23,7 +23,9 @@ test("export IPC forwards the exact applied scene snapshot", async () => {
   let handler: any, received: any;
   const context = vm.createContext({
     createExportDiagnostics: () => ({ record: () => {} }),
-    activeJob: null, ipcMain: { handle: (_name: string, fn: any) => { handler = fn; } },
+    activeJob: null, backgroundExport: null, backgroundExportStatus: null,
+    jobContext: { run: (_job: any, fn: any) => fn() },
+    ipcMain: { handle: (name: string, fn: any) => { if (name === "export:start") handler = fn; } },
     resolveRunDir: (value: string) => value,
     applyTelopAndExport: async (options: any) => { received = options; }, sendJobEvent: () => {},
   });
@@ -45,7 +47,7 @@ for (const mode of ["success", "render-failure", "apply-only"] as const) {
     try {
       learning.ensureBaseline({ runDir, transcript: { initialScenes: before, keepSegments: snapshot.keepSegments, originalDurationMs: 1000 }, provenance: "ai_original" });
       const context = vm.createContext({
-        repoRoot: () => root, resolveRunDir: () => runDir, path,
+        repoRoot: () => root, resolveRunDir: () => runDir, path, currentJob: () => null,
         apiKeys: { buildPipelineEnv: () => ({}) }, fs: { existsSync: () => true },
         prepareEditingLearningExport: (value: string, applied: any) => {
           prepared++; assert.equal(value, runDir); assert.equal(applied, snapshot);

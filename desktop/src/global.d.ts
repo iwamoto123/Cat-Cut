@@ -853,7 +853,7 @@ interface CatCutTelopState {
   previewPages: CatCutPreviewPage[];
 }
 
-type CatCutJobEvent =
+type CatCutJobEvent = { backgroundExport?: boolean; exportStatus?: CatCutBackgroundExport } & (
   | { type: "job:start"; runName: string; runDir: string; steps: Array<{ id: string; label: string }> }
   | { type: "job:done"; outputs: CatCutOutputs }
   | { type: "job:error"; error: string }
@@ -880,9 +880,18 @@ type CatCutJobEvent =
   | { type: "log"; message: string }
   | { type: "learning:done"; report: CatCutLearningReport }
   | { type: "ollama:pull:progress"; message: string }
-  | { type: "export:progress"; percent: number };
+  | { type: "export:progress"; percent: number });
 
 declare global {
+  interface CatCutBackgroundExport {
+    runDir: string;
+    status: "running" | "done" | "error" | "cancelled";
+    percent: number;
+    step: string;
+    error: string;
+    finalVideo: string;
+  }
+
   /**
    * フェーズW8: 出力キャンバスの向き(素材選択時のユーザー選択)。
    * App.tsx とコンポーネント両方から使うため(このファイルはモジュールなので)global側に置く。
@@ -1133,6 +1142,8 @@ declare global {
         /** W11-1b: 映像ビットレート(例 "10000k")。HWエンコード時はcrfの代わりにこちらを使う。 */
         videoBitrate?: string;
       }) => Promise<{ ok: boolean; error?: string }>;
+      getExportStatus: () => Promise<CatCutBackgroundExport | null>;
+      cancelExport: () => Promise<{ ok: boolean }>;
       cancelJob: () => Promise<{ ok: boolean }>;
       loadTelop: (runDir: string) => Promise<CatCutTelopState>;
       loadTranscriptEditor: (runDir: string) => Promise<CatCutTranscriptState>;
