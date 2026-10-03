@@ -1,12 +1,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+// Read at process startup: an installer update must not disguise an old running app.
+const appBuild = (() => {
+  for (const relative of ['../../VERSION.txt', '../../distribution/VERSION']) {
+    try { return fs.readFileSync(path.resolve(__dirname, relative), 'utf8').trim().slice(0, 120); }
+    catch { /* development or older package */ }
+  }
+  return 'unknown';
+})();
 
 /** APIキーや編集本文を含むoptions全体は記録しない。ログ保存失敗で書き出しを止めない。 */
 function createExportDiagnostics(runDir, options = {}) {
   const target = path.join(runDir, 'export-diagnostic.json');
   const state = {
     startedAt: new Date().toISOString(), status: 'starting',
+    appBuild,
     platform: process.platform, arch: process.arch, osRelease: os.release(),
     totalMemoryBytes: os.totalmem(), freeMemoryAtStartBytes: os.freemem(),
     node: process.versions.node, electron: process.versions.electron,

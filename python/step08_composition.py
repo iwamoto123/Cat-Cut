@@ -768,10 +768,11 @@ def _cleanup_segment_cache(segments_dir: str, manifest: dict, used_hashes: set, 
 
 
 def _covering_frame_time(source_path: str, start_s: float, duration_s: float):
-    """Return the frame covering an interval with no new frame timestamp inside it.
+    """Return the image at the start of a cut shorter than one source frame.
 
     Accurate input seeking drops that frame because its PTS precedes start_s.
-    Do not extend a cut: only recover intervals contained in one source frame.
+    Output timestamp rounding can also discard the next frame even when its
+    source PTS lies inside the interval. Such cuts may straddle a frame boundary.
     """
     if not 0 < duration_s <= 1:
         return None
@@ -793,7 +794,14 @@ def _covering_frame_time(source_path: str, start_s: float, duration_s: float):
         following = [float(item["best_effort_timestamp_time"]) for item in frames
                      if float(item["best_effort_timestamp_time"]) > timestamp]
         frame_end = min(following) if following else timestamp + float(frame.get("duration_time", frame.get("pkt_duration_time", 0)))
-        return timestamp if start_s + duration_s <= frame_end + .000002 else None
+        if not timestamp <= start_s < frame_end:
+            return None
+        if duration_s > frame_end - timestamp + .000002:
+            return None
+        # At EOF do not create an image for a range beyond the source duration.
+        if not following and start_s + duration_s > frame_end + .000002:
+            return None
+        return timestamp
     except (OSError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError):
         return None
 

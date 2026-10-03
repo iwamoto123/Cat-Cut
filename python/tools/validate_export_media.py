@@ -30,6 +30,11 @@ def has_decodable_video(path):
 
 
 def validate_export_media(run_dir):
+    app_root = Path(__file__).resolve().parents[2]
+    for version_file in (app_root / "VERSION.txt", app_root / "distribution" / "VERSION"):
+        if version_file.is_file():
+            print(f"映像検査ビルド: {version_file.read_text().strip()[:120]}", flush=True)
+            break
     run_dir = Path(run_dir).resolve()
     output = run_dir / "step08_composition"
     composition = json.loads((output / "composition.json").read_text())

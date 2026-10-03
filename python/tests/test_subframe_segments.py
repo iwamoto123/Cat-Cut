@@ -50,11 +50,18 @@ class SubFrameTests(unittest.TestCase):
         self.assertLess(sum(abs(a-b) for a,b in zip(expected,actual))/len(actual),4)
 
     def test_frame_rates_and_source_end_without_audio(self):
-        for fps,start,duration in [('24',.084,.03),('25',.081,.03),('30000/1001',.235,.03),('30',.234,.03),('60',.234,.01),('30',1.999,.001)]:
+        for fps,start,duration in [('24',.084,.03),('25',.081,.03),('30000/1001',.235,.03),('30',.234,.03),('30',.014,.03),('60',.234,.01),('30',1.999,.001)]:
             with self.subTest(fps=fps,start=start):
                 source=self.source(fps,audio=False);target=self.root/'out.mp4'
                 self.assertIsNone(_encode_segment(str(source),start,duration,['-c:v','libx264'],str(target)))
                 self.assertTrue(has_decodable_video(target))
+
+    def test_short_cut_crossing_frame_boundary_is_repaired(self):
+        source=self.source();target=self.root/'out.mp4'
+        subprocess.run(['ffmpeg','-v','error','-ss','0.014','-i',str(source),'-t','0.030','-c:v','libx264','-c:a','aac',str(target)],check=True)
+        self.assertFalse(_segment_cache_available(str(target)))
+        self.assertIsNone(_encode_segment(str(source),.014,.030,['-c:v','libx264'],str(target)))
+        self.assertTrue(has_decodable_video(target))
 
     def test_does_not_invent_video_after_source_ends(self):
         source=self.source();target=self.root/'out.mp4'
