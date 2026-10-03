@@ -45,6 +45,10 @@ def fake_ffmpeg(calls):
 
 class SegmentCacheTests(unittest.TestCase):
     def setUp(self):
+        patcher = mock.patch.object(step08_composition, "_segment_has_video", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
         # VideoToolbox 判定を固定(SW)してテストを環境非依存・決定的にする
         self._saved_vt = step08_composition._videotoolbox_available
         step08_composition._videotoolbox_available = False
@@ -227,6 +231,10 @@ class SegmentCacheTests(unittest.TestCase):
 
 class VideoToolboxDetectionTests(unittest.TestCase):
     def setUp(self):
+        patcher = mock.patch.object(step08_composition, "_segment_has_video", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
         self._saved_vt = step08_composition._videotoolbox_available
         step08_composition._videotoolbox_available = None
 

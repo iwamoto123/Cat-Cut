@@ -444,6 +444,7 @@ async function main() {
         `${args.videoBitrate ? `, bitrate: ${args.videoBitrate}` : ""})`
     );
     const startTime = Date.now();
+    let lastProgressPercent = -1;
 
     await renderMedia({
       composition,
@@ -465,7 +466,10 @@ async function main() {
       offthreadVideoCacheSizeInBytes: 2 * 1024 * 1024 * 1024,
       onProgress: ({ progress }) => {
         const percent = Math.round(progress * 100);
-        process.stdout.write(`\rProgress: ${percent}%`);
+        if (percent !== lastProgressPercent) {
+          lastProgressPercent = percent;
+          process.stdout.write(`\rProgress: ${percent}%`);
+        }
       },
     });
 

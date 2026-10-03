@@ -49,6 +49,10 @@ BOUNDARIES = [(i * 1000, i * 1000 + 800) for i in range(12)]
 
 class ParallelExtractionTests(unittest.TestCase):
     def setUp(self):
+        video_probe = mock.patch.object(step08_composition, "_segment_has_video", return_value=True)
+        video_probe.start()
+        self.addCleanup(video_probe.stop)
+
         self._saved_vt = step08_composition._videotoolbox_available
         step08_composition._videotoolbox_available = False
 

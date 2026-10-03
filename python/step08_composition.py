@@ -793,7 +793,7 @@ def _encode_segment(source_path: str, start_s: float, duration_s: float, encode_
         if result.returncode != 0:
             return result.stderr or ""
         if not _segment_cache_available(temp_path):
-            return "FFmpeg produced an empty segment"
+            return "FFmpeg produced an empty segment or a segment without a valid video stream"
         os.replace(temp_path, segment_path)
         return None
     finally:
@@ -804,14 +804,31 @@ def _encode_segment(source_path: str, start_s: float, duration_s: float, encode_
 
 
 def _segment_cache_available(segment_path: str) -> bool:
-    """旧キャッシュは維持し、少なくとも空ファイル・ディレクトリは再利用しない。
-
-    過去の版が残した非空の破損MP4までは判定しない(全件ffprobeの負荷を避ける)。
-    新規ファイルの中断対策は _encode_segment の原子的な置換で保証する。
-    """
+    """空でないだけでは音声のみのMP4も通るため、映像トラックを検証する。"""
     try:
-        return os.path.isfile(segment_path) and os.path.getsize(segment_path) > 0
+        if not os.path.isfile(segment_path) or os.path.getsize(segment_path) == 0:
+            return False
+        return _segment_has_video(segment_path)
     except OSError:
+        return False
+
+
+def _segment_has_video(segment_path: str) -> bool:
+    try:
+        result = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_type,width,height,nb_frames",
+            "-of", "json", segment_path,
+        ], capture_output=True, text=True, timeout=15)
+        if result.returncode != 0:
+            return False
+        streams = json.loads(result.stdout).get("streams", [])
+        return any(stream.get("codec_type") == "video"
+                   and int(stream.get("width", 0)) > 0
+                   and int(stream.get("height", 0)) > 0
+                   and str(stream.get("nb_frames", "N/A")) != "0"
+                   for stream in streams)
+    except (OSError, subprocess.TimeoutExpired, ValueError, TypeError):
         return False
 
 

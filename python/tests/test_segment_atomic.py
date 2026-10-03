@@ -14,6 +14,11 @@ import step08_composition as composition
 
 
 class SegmentAtomicTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(composition, "_segment_has_video", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_publishes_only_complete_segment(self):
         with tempfile.TemporaryDirectory() as tmp:
             final = Path(tmp) / "seg_complete.mp4"
@@ -97,7 +102,7 @@ class SegmentAtomicTests(unittest.TestCase):
             with mock.patch.object(composition.subprocess, "run", return_value=mock.Mock(returncode=0)):
                 self.assertEqual(
                     composition._encode_segment("source", 0, 1, [], str(final)),
-                    "FFmpeg produced an empty segment",
+                    "FFmpeg produced an empty segment or a segment without a valid video stream",
                 )
             self.assertFalse(final.exists())
             self.assertEqual(list(Path(tmp).iterdir()), [])
