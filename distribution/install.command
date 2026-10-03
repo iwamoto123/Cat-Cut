@@ -29,7 +29,20 @@ fail() { printf '\033[31mエラー: %s\033[0m\n' "$1"; echo "このウィンド�
 # --- 0. ダウングレード防止ガード(2026-09-04) ---
 # デスクトップ等に残った古いzipの展開フォルダ(CatCut-setup)から実行すると、
 # インストール済みより古いビルドへ巻き戻る事故が実際に起きたため、
-# バージョン(YYYYMMDD-で始まるため文字列比較=日付比較)が古い場合は確認を挟む。
+# 説明部分は順序を表さない。同日の旧形式(時刻なし)は新旧不明として更新を許可する。
+is_older_build() {
+  local new_date="${1%%-*}" old_date="${2%%-*}"
+  [[ "$new_date" =~ ^[0-9]{8}$ && "$old_date" =~ ^[0-9]{8}$ ]] || return 1
+  if [ "$new_date" != "$old_date" ]; then
+    [[ "$new_date" < "$old_date" ]]
+    return
+  fi
+  local new_rest="${1#*-}" old_rest="${2#*-}"
+  local new_time="${new_rest%%-*}" old_time="${old_rest%%-*}"
+  [[ "$new_time" =~ ^[0-9]{6}$ && "$old_time" =~ ^[0-9]{6}$ ]] || return 1
+  [[ "$new_time" < "$old_time" ]]
+}
+
 NEW_VERSION="$(cat "$APP_SRC/VERSION.txt" 2>/dev/null || echo "")"
 OLD_VERSION="$(cat "$TARGET/VERSION.txt" 2>/dev/null || echo "")"
 bold "=== Cat-Cut セットアップ ==="
@@ -38,7 +51,7 @@ echo "実行元: $DIST_DIR"
 echo "インストール先: $TARGET"
 echo "npmキャッシュ: $CATCUT_NPM_CACHE"
 echo ""
-if [ -n "$NEW_VERSION" ] && [ -n "$OLD_VERSION" ] && [ "$NEW_VERSION" \< "$OLD_VERSION" ]; then
+if is_older_build "$NEW_VERSION" "$OLD_VERSION"; then
   printf '\033[31m警告: これからインストールするビルド(%s)は、\n現在インストール済みの ~/CatCut (%s) より古いものです。\033[0m\n' "$NEW_VERSION" "$OLD_VERSION"
   echo "古いzipの展開フォルダから実行していませんか？"
   echo "NextCloud の CatCut-haifu/README.txt に記載された最新の日付付きzipを展開し直して、その中の install.command を実行してください。"
