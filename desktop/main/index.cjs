@@ -5113,6 +5113,16 @@ async function applyTelopAndExport(options) {
 
   if (renderFinal) {
     const preprocess = readJson(path.join(runDir, "step01_preprocess", "preprocess.json"));
+    // Export may reuse an unchanged composition, bypassing step08's cache checks.
+    // Validate its actual media here without rebuilding edited text or cut order.
+    await spawnCommand({
+      command: python,
+      args: ["python/tools/validate_export_media.py", relRunDir],
+      cwd: root,
+      env,
+      stepId: "validate_export_media",
+      lowPriority: true,
+    });
     let outputPath = resolveRenderOutputPath(runDir, options);
     // W25: 書き出し先が元動画と同じファイルを指す場合(macOSは大文字小文字を区別しないため
     // 「.MP4」の元動画に「.mp4」で書き出すと衝突する)、元動画の上書きを防いで別名へ退避する。

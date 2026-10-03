@@ -519,6 +519,7 @@ const initialSteps: Step[] = [
   // W19-B2: AI最終チェック(step06d)の自動実行(検品準備完了の直前。non-fatal)
   { id: "step06d_final_check", label: "AI最終チェック", status: "pending" },
   { id: "apply_telop", label: "テロップ反映", status: "pending" },
+  { id: "validate_export_media", label: "映像の検査・修復", status: "pending" },
   { id: "render", label: "書き出し", status: "pending" },
 ];
 
