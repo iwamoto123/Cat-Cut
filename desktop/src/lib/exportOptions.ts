@@ -78,7 +78,7 @@ export function baseNameWithoutExtension(filePath: string): string {
 
 export function defaultExportFileName(videoPath: string): string {
   const base = baseNameWithoutExtension(videoPath) || "catcut-output";
-  return `${base}_catcut.mp4`;
+  return `${base}.mp4`;
 }
 
 /** パス比較用の正規化(区切りを/へ統一し末尾の区切りを落とす)。 */
@@ -86,27 +86,21 @@ function normalizePathForCompare(filePath: string): string {
   return filePath.replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
-/**
- * W11-4a: 書き出し設定モーダルを開くたびに使う既定ファイル名。
- * 前回設定値ではなく現在runの元動画ファイル名から `<元動画名>.mp4` を毎回生成する
- * (_catcut サフィックスは付けない)。ただし保存場所(directory)と合成した出力パスが
- * 元動画そのものと一致する場合のみ `_catcut` を付けて上書き事故を防ぐ。
- */
-export function initialExportFileName(videoPath: string, directory: string): string {
-  const base = baseNameWithoutExtension(videoPath) || "catcut-output";
-  const fileName = `${base}.mp4`;
-  const resolved = buildExportOutputPath(directory, fileName, videoPath);
-  if (resolved && normalizePathForCompare(resolved) === normalizePathForCompare(videoPath)) {
-    return `${base}_catcut.mp4`;
-  }
-  return fileName;
+/** 現在の素材名を使用。保存場所が同じ場合も名前を変えず output/ に退避する。 */
+export function initialExportFileName(videoPath: string, _directory: string): string {
+  return defaultExportFileName(videoPath);
 }
 
-/** 保存場所+ファイル名→出力パス(保存場所未指定は空文字=作業フォルダ内に保存)。 */
+/** 保存場所未指定はバックエンドがプロジェクトの output/ に保存する。 */
 export function buildExportOutputPath(directory: string, fileName: string, videoPath: string): string {
   if (!directory) return "";
-  const resolvedName = ensureMp4FileName(fileName || defaultExportFileName(videoPath));
-  return `${directory.replace(/[\\/]+$/, "")}/${resolvedName}`;
+  const resolvedName = ensureMp4FileName(fileName.trim() || defaultExportFileName(videoPath));
+  const baseDirectory = directory.replace(/[\\/]+$/, "");
+  const candidate = `${baseDirectory}/${resolvedName}`;
+  if (normalizePathForCompare(candidate).normalize("NFC").toLowerCase() === normalizePathForCompare(videoPath).normalize("NFC").toLowerCase()) {
+    return `${baseDirectory}/output/${resolvedName}`;
+  }
+  return candidate;
 }
 
 /** プロジェクト一覧の日時表示(例: 2026-07-08 18:35)。 */

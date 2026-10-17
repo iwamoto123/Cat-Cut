@@ -239,6 +239,7 @@ import { useKeepSegments } from "./hooks/useKeepSegments";
 import { useScenes } from "./hooks/useScenes";
 import { useProjectAutosave } from "./hooks/useProjectAutosave";
 import { useProjectEditor } from "./hooks/useProjectEditor";
+import { WorkspaceResizeHandle } from "./components/WorkspaceResizeHandle";
 import { useWorkspaceViewport } from "./hooks/useWorkspaceViewport";
 import { deriveKeepSegments, deriveTelopOverrides } from "./lib/scenes";
 import type { EditorSelection } from "./lib/editorSelection";
@@ -953,30 +954,8 @@ function baseNameWithoutExtension(filePath: string) {
   return (dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName).trim();
 }
 
-function ensureMp4FileName(fileName: string) {
-  const trimmed = fileName.trim();
-  if (!trimmed) return "";
-  const dotIndex = trimmed.lastIndexOf(".");
-  if (dotIndex < 1) return `${trimmed}.mp4`;
-  const ext = trimmed.slice(dotIndex).toLowerCase();
-  if (ext === ".mp4") return trimmed;
-  return `${trimmed.slice(0, dotIndex)}.mp4`;
-}
-
-function defaultOutputFileName(videoPath: string) {
-  const base = baseNameWithoutExtension(videoPath) || "catcut-output";
-  return `${base}_catcut.mp4`;
-}
-
-function joinLocalPath(directory: string, fileName: string) {
-  if (!directory) return "";
-  return `${directory.replace(/[\\/]+$/, "")}/${fileName}`;
-}
-
 function outputPathFromSettings(settings: Settings | null, videoPath: string) {
-  if (!settings?.outputDirectory) return "";
-  const fileName = ensureMp4FileName(settings.outputFileName || defaultOutputFileName(videoPath));
-  return joinLocalPath(settings.outputDirectory, fileName);
+  return buildExportOutputPath(settings?.outputDirectory || "", "", videoPath);
 }
 
 function updateStep(steps: Step[], stepId: string, status: StepStatus): Step[] {
@@ -7174,6 +7153,7 @@ export function App() {
                 </div>
                 )}
               </div>
+              {reviewTab === "timeline" && <WorkspaceResizeHandle axis="width" vertical={(transcriptState.canvasHeight ?? 0) > (transcriptState.canvasWidth ?? Infinity)} />}
               {reviewTab === "timeline" && sceneDraft && (
                 <SelectionInspector
                   selection={project.selection}
@@ -7200,6 +7180,7 @@ export function App() {
                 />
               )}
               </div>
+              {reviewTab === "timeline" && <WorkspaceResizeHandle axis="height" />}
               {!sceneDraft ? (
                 <div className="editorLoadStatus" role={editorLoadError ? "alert" : "status"}>
                   <p>{editorLoadError ?? "編集データを読み込み中…"}</p>

@@ -3102,7 +3102,10 @@ function resolveRenderOutputPath(runDir, options) {
   if (options?.outputPath) {
     return ensureMp4OutputPath(options.outputPath);
   }
-  return defaultRenderOutputPath(runDir);
+  const preprocessPath = path.join(runDir, "step01_preprocess", "preprocess.json");
+  const source = fs.existsSync(preprocessPath) ? readJson(preprocessPath)?.video_path : "";
+  const name = source ? path.basename(source, path.extname(source)) : "catcut-output";
+  return path.join(runDir, "output", `${name}.mp4`);
 }
 
 /** W25: macOSの既定ファイルシステムは大文字小文字を区別しないため、パスを小文字化して同一判定する。 */
@@ -3113,20 +3116,14 @@ function isSameFileCaseInsensitive(a, b) {
 /**
  * W25: 元動画の上書き防止。書き出し先が元動画と同一ファイルを指す場合
  * (例: 元動画「〜.MP4」と同じフォルダへ同名「〜.mp4」で書き出す)、
- * 「<名前>-edited.mp4」へ自動退避する。
+ * 「output/<元の名前>.mp4」へ自動退避する。
  */
 function avoidSourceOverwrite(outputPath, sourceVideoPath) {
   if (!sourceVideoPath || !isSameFileCaseInsensitive(outputPath, sourceVideoPath)) {
     return outputPath;
   }
   const dir = path.dirname(outputPath);
-  const base = path.basename(outputPath, path.extname(outputPath));
-  let candidate = path.join(dir, `${base}-edited.mp4`);
-  let index = 2;
-  while (isSameFileCaseInsensitive(candidate, sourceVideoPath)) {
-    candidate = path.join(dir, `${base}-edited-${index}.mp4`);
-    index += 1;
-  }
+  const candidate = path.join(dir, "output", path.basename(outputPath));
   sendJobEvent({
     type: "log",
     message: `[export] 書き出し先が元動画と同じため上書きを避けて保存します: ${candidate}\n`,

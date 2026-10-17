@@ -189,3 +189,27 @@ body:has(.appShellTimeline) { background: #1b1c1e; }
 .backgroundExportBar details pre { position: absolute; right: 18px; top: 46px; max-width: min(800px, 85vw); max-height: 45vh; overflow: auto; white-space: pre-wrap; padding: 16px; background: #20232a; border: 1px solid #647084; border-radius: 8px; }
 .backgroundExportBar + .appShell { min-height: calc(100vh - 49px); }
 @media (max-width: 1100px) { .backgroundExportHint { display: none; } }
+
+/* プレビューを大きく開始し、映像確認とタイムラインの配分を直接調整する。 */
+.sceneMainAreaTimeline:not(.sceneMainAreaTimelineVertical) { gap: 0; }
+.sceneMainAreaTimeline:not(.sceneMainAreaTimelineVertical) .editorPreviewDock {
+  flex-basis: clamp(180px, var(--preview-height, 55%), max(180px, calc(100% - 220px)));
+  grid-template-columns: minmax(240px, min(var(--preview-width, 65%), calc(100% - 290px))) 10px minmax(260px, 1fr);
+  gap: 0;
+}
+.workspaceResizeHandle { position: relative; touch-action: none; user-select: none; outline: none; z-index: 2; }
+.workspaceResizeHandle::after { content: ""; position: absolute; background: #555a64; border-radius: 3px; }
+.workspaceResizeHandle:hover::after, .workspaceResizeHandle:focus-visible::after { background: #80b8f7; }
+.workspaceResizeHandle-width { cursor: col-resize; min-width: 10px; }
+.workspaceResizeHandle-width::after { width: 3px; height: 38px; left: calc(50% - 1.5px); top: calc(50% - 19px); }
+.workspaceResizeHandle-height { cursor: row-resize; flex: 0 0 12px; }
+.workspaceResizeHandle-height::after { height: 3px; width: 48px; top: 4px; left: calc(50% - 24px); }
+.sceneMainAreaTimeline.sceneMainAreaTimelineVertical {
+  grid-template-columns: minmax(240px, min(var(--preview-width, 30%), calc(100% - 390px))) 10px minmax(0, 1fr);
+  column-gap: 0;
+}
+.sceneMainAreaTimelineVertical .workspaceResizeHandle-width { grid-column: 2; grid-row: 1 / -1; }
+.sceneMainAreaTimelineVertical .selectionInspector,
+.sceneMainAreaTimelineVertical > .timelineView,
+.sceneMainAreaTimelineVertical > .editorLoadStatus { grid-column: 3; }
+.sceneMainAreaTimelineVertical .workspaceResizeHandle-height { display: none; }

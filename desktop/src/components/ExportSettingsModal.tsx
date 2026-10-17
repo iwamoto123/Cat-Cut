@@ -42,7 +42,7 @@ export function ExportSettingsModal({ open, videoPath, initialDirectory, onCance
 
   // 開くたびに下書きを作り直す。保存場所は前回値を引き継ぎ、
   // W11-4a: ファイル名は前回値ではなく現在runの元動画名から毎回生成する
-  // (別プロジェクトの古い名前が残らない。元動画と同パスになる場合のみ _catcut 付き)。
+  // (元動画と同パスになる場合は output/ に保存)。
   useEffect(() => {
     if (!open) return;
     setDirectory(initialDirectory);
@@ -148,7 +148,7 @@ export function ExportSettingsModal({ open, videoPath, initialDirectory, onCance
             </label>
           </div>
           <div className="exportSettingsPathPreview" title={plannedPath || undefined}>
-            {plannedPath ? `書き出し先: ${plannedPath}` : "書き出し先: 自動(作業フォルダ内の output/final.mp4)"}
+            {plannedPath ? `書き出し先: ${plannedPath}` : `書き出し先: 作業フォルダ内の output/${fileName || placeholder}`}
           </div>
         </div>
         <div className="exportSettingsFooter">

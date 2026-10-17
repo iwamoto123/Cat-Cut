@@ -61,8 +61,8 @@ test("ensureMp4FileName: 拡張子をmp4に正規化する", () => {
 });
 
 test("defaultExportFileName: 元動画名から生成する", () => {
-  assert.equal(defaultExportFileName("/Users/a/Downloads/対談動画.m4v"), "対談動画_catcut.mp4");
-  assert.equal(defaultExportFileName(""), "catcut-output_catcut.mp4");
+  assert.equal(defaultExportFileName("/Users/a/Downloads/対談動画.m4v"), "対談動画.mp4");
+  assert.equal(defaultExportFileName(""), "catcut-output.mp4");
 });
 
 test("W11-4a initialExportFileName: 元動画名から _catcut なしで毎回生成する", () => {
@@ -71,12 +71,12 @@ test("W11-4a initialExportFileName: 元動画名から _catcut なしで毎回�
   assert.equal(initialExportFileName("", ""), "catcut-output.mp4");
 });
 
-test("W11-4a initialExportFileName: 出力パスが元動画と一致する場合のみ _catcut を付ける", () => {
-  // 保存場所=元動画のフォルダ かつ 元動画が.mp4 → そのままだと上書きになるため _catcut 付き
-  assert.equal(initialExportFileName("/Users/a/Downloads/対談動画.mp4", "/Users/a/Downloads"), "対談動画_catcut.mp4");
+test("W11-4a initialExportFileName: 同じフォルダでも素材名を保持する", () => {
+  // 名前を維持し、パス生成時に output/ に退避する
+  assert.equal(initialExportFileName("/Users/a/Downloads/対談動画.mp4", "/Users/a/Downloads"), "対談動画.mp4");
   // 末尾スラッシュの揺れも同一視する
-  assert.equal(initialExportFileName("/Users/a/Downloads/対談動画.mp4", "/Users/a/Downloads/"), "対談動画_catcut.mp4");
-  // 元動画が.mov等なら出力の.mp4とはパスが一致しないので _catcut 不要
+  assert.equal(initialExportFileName("/Users/a/Downloads/対談動画.mp4", "/Users/a/Downloads/"), "対談動画.mp4");
+  // MOVからの出力も素材名を維持する
   assert.equal(initialExportFileName("/Users/a/Downloads/対談動画.mov", "/Users/a/Downloads"), "対談動画.mp4");
   // 別フォルダなら一致しない
   assert.equal(initialExportFileName("/Users/a/Downloads/対談動画.mp4", "/Users/a/Desktop"), "対談動画.mp4");
@@ -85,7 +85,7 @@ test("W11-4a initialExportFileName: 出力パスが元動画と一致する場�
 test("buildExportOutputPath: 保存場所未指定は空(=作業フォルダ内)、指定時は結合", () => {
   assert.equal(buildExportOutputPath("", "a.mp4", "/v/video.mp4"), "");
   assert.equal(buildExportOutputPath("/out/", "a.mov", "/v/video.mp4"), "/out/a.mp4");
-  assert.equal(buildExportOutputPath("/out", "", "/v/video.mp4"), "/out/video_catcut.mp4");
+  assert.equal(buildExportOutputPath("/out", "", "/v/video.mp4"), "/out/video.mp4");
 });
 
 test("formatProjectDuration: 分秒と時分秒", () => {
@@ -99,3 +99,10 @@ test("formatProjectTimestamp: YYYY-MM-DD HH:mm(0は空文字)", () => {
   const formatted = formatProjectTimestamp(new Date(2026, 6, 8, 18, 35).getTime());
   assert.equal(formatted, "2026-07-08 18:35");
 });
+
+ test("素材と同名のMP4は output フォルダへ退避（大文字・日本語含む）", () => {
+  assert.equal(buildExportOutputPath("/v", "", "/v/物理.mp4"), "/v/output/物理.mp4");
+  assert.equal(buildExportOutputPath("/v/", "物理.mp4", "/v/物理.MP4"), "/v/output/物理.mp4");
+  assert.equal(buildExportOutputPath("/v", "", "/v/物理.MOV"), "/v/物理.mp4");
+  assert.equal(buildExportOutputPath("/out", "  ", "/v/物理 2.MOV"), "/out/物理 2.mp4");
+ });
