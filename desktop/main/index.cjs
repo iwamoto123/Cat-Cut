@@ -3938,6 +3938,11 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
     // 明示マーカーとして残す(step06cのdrop:trueと同形)。スロットごと落とすと、step08が
     // 「スロットの無いカット」としてSTTテキストからテロップを自動再生成してしまい、
     // 消したはずの文言が書き出しに復活する(実機FB「一番最後のテキストが削除しても残り続ける」)。
+    const videoEffectOverride =
+      typeof edit?.videoEffectOverride === "string" &&
+      ["none", "pinch", "zoom", "dim", "face_zoom", "slow_push"].includes(edit.videoEffectOverride)
+        ? edit.videoEffectOverride
+        : "";
     if (!text) {
       nextSlots.push({
         slot_id: existing?.slot_id || `ui_s${String(index + 1).padStart(3, "0")}`,
@@ -3950,6 +3955,7 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
         ...(typeof existing?.speaker === "string" && existing.speaker ? { speaker: existing.speaker } : {}),
         highlight_words: [],
         fallback: false,
+        ...(videoEffectOverride ? { video_effect: videoEffectOverride } : {}),
         dropped: true,
       });
       return;
@@ -3966,11 +3972,6 @@ function applyDirectedSlotEditsToDirectives(runDir, directedSlots) {
     const animationIn =
       typeof edit?.animationIn === "string" && TELOP_ANIMATION_IN_TYPES.includes(edit.animationIn)
         ? edit.animationIn
-        : "";
-    const videoEffectOverride =
-      typeof edit?.videoEffectOverride === "string" &&
-      ["none", "pinch", "zoom"].includes(edit.videoEffectOverride)
-        ? edit.videoEffectOverride
         : "";
     nextSlots.push({
       slot_id: existing?.slot_id || `ui_s${String(index + 1).padStart(3, "0")}`,

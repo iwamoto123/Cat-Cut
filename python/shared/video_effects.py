@@ -304,6 +304,7 @@ def select_video_effects(
     cut_ranges = _normalize_cut_ranges(cuts)
 
     Candidate = Tuple[Tuple[int, int, int], Dict[str, Any], Tuple[int, int]]
+    disabled_intervals: List[Tuple[int, int]] = []
     manual_effects: List[Tuple[Dict[str, Any], Tuple[int, int], str]] = []
     pinch_candidates: List[Candidate] = []
     zoom_candidates: List[Candidate] = []
@@ -316,6 +317,9 @@ def select_video_effects(
         if override in MANUAL_EFFECT_TYPES:
             # none は「自動候補からも確実に除外」の明示指定。
             if override == "none":
+                interval = _map_slot_to_timeline(slot, segment_timelines)
+                if interval is not None:
+                    disabled_intervals.append(interval)
                 continue
             interval = _map_slot_to_timeline(slot, segment_timelines)
             # 手動指定は自動の最小尺・件数上限・間隔・全体ON/OFF・OP除外より優先する。
@@ -435,6 +439,18 @@ def select_video_effects(
         entries.append((interval, "face_zoom", slot))
     for slot, interval in slow_push_picks:
         entries.append((interval, "slow_push", slot))
+    # 「なし」の区間へ、隣接スロットやカット全長の自動演出を侵入させない。
+    for disabled_start, disabled_end in disabled_intervals:
+        remaining = []
+        for (start, end), effect_type, slot in entries:
+            if end <= disabled_start or start >= disabled_end:
+                remaining.append(((start, end), effect_type, slot))
+            else:
+                if start < disabled_start:
+                    remaining.append(((start, disabled_start), effect_type, slot))
+                if end > disabled_end:
+                    remaining.append(((disabled_end, end), effect_type, slot))
+        entries = remaining
     entries.sort(key=lambda item: item[0])
 
     effects: List[Dict[str, Any]] = []

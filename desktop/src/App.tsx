@@ -105,7 +105,7 @@ import {
   type OverlayTextEdit,
 } from "./lib/previewTimeline";
 import { normalizeOverlays, type OverlayItem } from "./lib/overlayItems";
-import { normalizeVideoEffects } from "./lib/videoEffects";
+import { resolvePreviewVideoEffects } from "./lib/previewVideoEffects";
 import {
   compactRangesToKeepSegments,
   compactedTimelineDurationMs,
@@ -3267,18 +3267,10 @@ export function App() {
     return playheadStore.subscribe(update);
   }, [overlaysVisible, overlayItemsAll, overlayEdits, timelineCutRanges]);
 
-  // フェーズW2(シーン映像ギミック): composition timeline.video_effects を正規化し、
-  // 未適用のOP編集分(opShiftMs)だけタイムライン軸をシフトしてプレビューへ渡す
-  // (editedTimelineCutRangesと同じ「編集後タイムライン軸」に揃える)。
-  const previewVideoEffects = useMemo(() => {
-    const normalized = normalizeVideoEffects(transcriptState?.videoEffects);
-    if (!normalized.length || !opShiftMs) return normalized;
-    return normalized.map((effect) => ({
-      ...effect,
-      start_ms: effect.start_ms + opShiftMs,
-      end_ms: effect.end_ms + opShiftMs,
-    }));
-  }, [transcriptState?.videoEffects, opShiftMs]);
+  const previewVideoEffects = useMemo(
+    () => resolvePreviewVideoEffects(transcriptState?.videoEffects, timelineCutRanges, editedTimelineCutRanges, scenesHistory.scenes),
+    [transcriptState?.videoEffects, timelineCutRanges, editedTimelineCutRanges, scenesHistory.scenes],
+  );
 
   /** U1-5: プレビューのオーバーレイをクリックしたら文言編集ポップアップを開く。 */
   function handleOverlayClick(item: OverlayItem) {
